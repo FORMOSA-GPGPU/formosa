@@ -149,6 +149,7 @@ Fill in the actual image tag and any GPU/device flags for your deployment.
 
 ## Publications
 
+- L.-C. Chen, C.-E. Wu, Y.-Y. Hsiao, C.-M. Lin, and C.-H. Chen, "Improving Stack Access Locality in RISC-V-Based GPGPU via LSU-Side Address Remapping," 2026 IEEE Asia Pacific Conference on Circuits and Systems (APCCAS), 2026. (Accepted, to appear)
 - L.-C. Chen, Y.-Y. Hsiao, and C.-H. Chen, "Lunaverse: A Scriptable SoC Virtual Platform," 2025 22nd International SoC Design Conference (ISOCC), 2025. [[IEEE Xplore]](https://ieeexplore.ieee.org/document/11329791)
 - Y.-Y. Hsiao, L.-C. Chen, and C.-H. Chen, "Improve GPGPU Front-end Efficiency Via Inter-Warp Instruction Sharing," 2025 IEEE International Symposium on Circuits and Systems (ISCAS), 2025. [[IEEE Xplore]](https://ieeexplore.ieee.org/document/11043684)
 - Y.-Y. Hsiao, L.-C. Chen, and C.-H. Chen, "GPGPU Pipeline Visualization for RISC-V SIMT Architecture," CARRV, 2024. [[PDF]](https://carrv.github.io/2024/papers/CARRV_2024_paper_4.pdf)
