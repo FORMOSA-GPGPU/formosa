@@ -4,7 +4,7 @@ set -euo pipefail
 
 readonly image=$1
 readonly log=$2
-readonly transient_pattern='429|5[0-9]{2}|timeout|timed out|connection reset|unexpected EOF|temporar|service unavailable'
+readonly transient_pattern='HTTP status: (429|5[0-9]{2})|unexpected status.* (429|5[0-9]{2})|toomanyrequests|timeout|timed out|connection reset|unexpected EOF|temporar|service unavailable|internal server error|bad gateway'
 
 for delay in 0 10 20; do
   sleep "$delay"
