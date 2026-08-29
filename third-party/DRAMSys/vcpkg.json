@@ -1,0 +1,24 @@
+{
+  "name": "dramsys",
+  "version": "5.6.0",
+  "dependencies": [
+    "systemc",
+    "fmt",
+    {
+      "name": "sqlite3",
+      "features": [
+        "rtree"
+      ]
+    }
+  ],
+  "features": {
+    "dev": {
+      "description": "Development dependencies",
+      "dependencies": [
+        "benchmark",
+        "gtest"
+      ]
+    }
+  },
+  "builtin-baseline": "cd61e1e26a038e82d6550a3ebbe0fbbfe7da78e3"
+}

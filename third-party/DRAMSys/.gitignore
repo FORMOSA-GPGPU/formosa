@@ -1,0 +1,17 @@
+*.tdb
+*.*~
+build*/
+._.DS_Store
+.DS_Store
+*.pyc
+*.autosave
+*__pycache__*
+.vscode
+.idea
+.helix
+.zed
+.cache
+.env
+CMakeUserPresets.json
+extensions/
+*.code-workspace

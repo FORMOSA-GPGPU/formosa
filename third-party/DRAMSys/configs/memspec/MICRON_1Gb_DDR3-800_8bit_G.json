@@ -1,0 +1,62 @@
+{
+    "memspec": {
+        "memarchitecturespec": {
+            "burstLength": 8,
+            "dataRate": 2,
+            "nbrOfBanks": 8,
+            "nbrOfColumns": 1024,
+            "nbrOfRanks": 1,
+            "nbrOfRows": 16384,
+            "width": 8,
+            "nbrOfDevices": 8,
+            "nbrOfChannels": 1,
+            "maxBurstLength": 8
+        },
+        "memoryId": "MICRON_1Gb_DDR3-800_8bit_G",
+        "memoryType": "DDR3",
+        "mempowerspec": {
+            "idd0": 60.0e-3,
+            "idd2n": 35.0e-3,
+            "idd2p0": 12.0e-3,
+            "idd2p1": 25.0e-3,
+            "idd3n": 40.0e-3,
+            "idd3p0": 30.0e-3,
+            "idd3p1": 30.0e-3,
+            "idd4r": 105.0e-3,
+            "idd4w": 110.0e-3,
+            "idd5": 160.0e-3,
+            "idd6": 8.0e-3,
+            "vdd": 1.5
+        },
+        "memtimingspec": {
+            "AL": 0,
+            "CCD": 4,
+            "CKE": 3,
+            "CKESR": 4,
+            "CL": 5,
+            "DQSCK": 0,
+            "FAW": 16,
+            "RAS": 15,
+            "RC": 20,
+            "RCD": 5,
+            "REFI": 3120,
+            "RFC": 44,
+            "RL": 5,
+            "RP": 5,
+            "RRD": 4,
+            "RTP": 4,
+            "WL": 5,
+            "WR": 6,
+            "WTR": 4,
+            "XP": 3,
+            "XPDLL": 10,
+            "XS": 48,
+            "XSDLL": 512,
+            "ACTPDEN": 1,
+            "PRPDEN": 1,
+            "REFPDEN": 1,
+            "RTRS": 1,
+            "tCK": 2500e-12
+        }
+    }
+}

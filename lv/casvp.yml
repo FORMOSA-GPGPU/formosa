@@ -1,0 +1,29 @@
+# SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+#
+# SPDX-License-Identifier: Apache-2.0
+
+---
+base: lua51
+
+# Defined global namespaces are listed here
+globals:
+  cp:
+    any: true
+  dbg:
+    any: true
+  dramsys:
+    any: true
+  formosa:
+    any: true
+  ipc:
+    any: true
+  simple:
+    any: true
+  simtix:
+    any: true
+  sc:
+    any: true
+  trace:
+    any: true
+  workload:
+    any: true

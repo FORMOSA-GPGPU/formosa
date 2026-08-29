@@ -1,0 +1,36 @@
+# SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# FORMOSA CMake SDK target definitions.
+if(TARGET Formosa::formosa-hal.lv)
+  return()
+endif()
+
+get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_DIR}/../../.." ABSOLUTE)
+add_library(Formosa::libcomm INTERFACE IMPORTED)
+set_target_properties(Formosa::libcomm PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
+)
+
+add_library(Formosa::falloc STATIC IMPORTED)
+set_target_properties(Formosa::falloc PROPERTIES
+  IMPORTED_LOCATION "${_IMPORT_PREFIX}/lib/libfalloc.a"
+  INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
+@FORMOSA_FALLOC_COVERAGE@
+)
+
+add_library(Formosa::formosa-real.lv STATIC IMPORTED)
+set_target_properties(Formosa::formosa-real.lv PROPERTIES
+  IMPORTED_LOCATION "${_IMPORT_PREFIX}/lib/libformosa-real.lv.a"
+@FORMOSA_REAL_COVERAGE@
+  INTERFACE_LINK_LIBRARIES "$<LINK_ONLY:Formosa::falloc>;$<LINK_ONLY:Formosa::libcomm>"
+)
+
+add_library(Formosa::formosa-hal.lv STATIC IMPORTED)
+set_target_properties(Formosa::formosa-hal.lv PROPERTIES
+  IMPORTED_LOCATION "${_IMPORT_PREFIX}/lib/libformosa-hal.lv.a"
+  INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
+@FORMOSA_HAL_COVERAGE@
+  INTERFACE_LINK_LIBRARIES "$<LINK_ONLY:Formosa::formosa-real.lv>;$<LINK_ONLY:Formosa::falloc>"
+)

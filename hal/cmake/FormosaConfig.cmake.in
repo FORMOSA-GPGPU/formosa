@@ -1,0 +1,7 @@
+# SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# FORMOSA CMake SDK package configuration.
+set(Formosa_FOUND TRUE)
+include("${CMAKE_CURRENT_LIST_DIR}/FormosaTargets.cmake")

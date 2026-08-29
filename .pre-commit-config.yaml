@@ -1,0 +1,66 @@
+# SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+exclude: '^(third-party/(?![^/]+\.cmake$|stb/(?:CMakeLists\.txt|libstb\.c)$).*)|^build/'
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-added-large-files
+      - id: check-symlinks
+      - id: destroyed-symlinks
+
+  - repo: local
+    hooks:
+      - id: clang-format
+        name: clang-format
+        entry: clang-format -i
+        language: system
+        files: \.(c|cc|cpp|h|hpp|m|mm)$
+      - id: nixfmt
+        name: nixfmt
+        entry: nixfmt
+        language: system
+        files: \.(nix)$
+      - id: reuse-annotate-formosa
+        name: Add REUSE license headers
+        entry: bash scripts/reuse_annotate_formosa.sh --apply
+        language: system
+      - id: reuse-lint
+        name: REUSE license lint
+        entry: bash scripts/reuse_annotate_formosa.sh --lint
+        language: system
+
+  - repo: https://github.com/JohnnyMorganz/StyLua
+    rev: v2.2.0
+    hooks:
+      - id: stylua-system
+
+  - repo: https://github.com/pocc/pre-commit-hooks
+    rev: v1.3.5
+    hooks:
+      - id: cpplint
+        types: [c++]
+        exclude: "(portable|opencl|riscv-test|sw|cp/rv64|fw|libm)/.|(simtix/src/cores/encoding.h)*"
+        args:
+          - >
+            --filter=-legal/copyright,-build/include_order,-runtime/printf,
+            -build/include_subdir,-build/c++11,-whitespace/indent_namespace,
+            -runtime/threadsafe_fn,-build/c++17,-build/header_guard
+
+  # Using this mirror lets us use mypyc-compiled black, which is about 2x faster
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 26.1.0
+    hooks:
+      - id: black
+        # It is recommended to specify the latest version of Python
+        # supported by your project here, or alternatively use
+        # pre-commit's default_language_version, see
+        # https://pre-commit.com/#top_level-default_language_version
+        language_version: python3.13

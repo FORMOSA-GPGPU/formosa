@@ -1,0 +1,3 @@
+tests/baremetal-freertos/portable/*.c
+tests/baremetal-freertos/portable/*.h
+tests/baremetal-freertos/portable/*.S

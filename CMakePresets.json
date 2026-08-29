@@ -1,0 +1,574 @@
+{
+  "buildPresets": [
+    {
+      "configurePreset": "libcomm.unit",
+      "name": "libcomm.unit"
+    },
+    {
+      "configurePreset": "lv.unit",
+      "name": "lv.unit"
+    },
+    {
+      "configurePreset": "simtix.utils.unit",
+      "name": "simtix.utils.unit"
+    },
+    {
+      "configurePreset": "simtix.cache.unit",
+      "name": "simtix.cache.unit"
+    },
+    {
+      "configurePreset": "simtix.pipelined_core.unit",
+      "name": "simtix.pipelined_core.unit"
+    },
+    {
+      "configurePreset": "simtix.pipelined_sm",
+      "name": "simtix.pipelined_sm"
+    },
+    {
+      "configurePreset": "simtix.atomic_sm",
+      "name": "simtix.atomic_sm"
+    },
+    {
+      "configurePreset": "simtix.scalar_core",
+      "name": "simtix.scalar_core"
+    },
+    {
+      "configurePreset": "simtix.cache",
+      "name": "simtix.cache"
+    },
+    {
+      "configurePreset": "simtix.utils",
+      "name": "simtix.utils"
+    },
+    {
+      "configurePreset": "tests.opencl",
+      "name": "tests.opencl"
+    },
+    {
+      "configurePreset": "tests.kernel-sim",
+      "name": "tests.kernel-sim"
+    },
+    {
+      "configurePreset": "perf.opencl",
+      "name": "perf.opencl"
+    },
+    {
+      "configurePreset": "fw",
+      "name": "fw"
+    },
+    {
+      "configurePreset": "hal.unit",
+      "name": "hal.unit"
+    },
+    {
+      "configurePreset": "hal",
+      "name": "hal"
+    },
+    {
+      "configurePreset": "lv.bindings",
+      "name": "lv.bindings"
+    }
+  ],
+  "configurePresets": [
+    {
+      "binaryDir": "build",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      },
+      "generator": "Ninja",
+      "hidden": true,
+      "name": "common"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "libcomm",
+        "LIBCOMM_ENABLE_TESTING": "ON"
+      },
+      "displayName": "Build and test the libcomm public-header consumer",
+      "inherits": "common",
+      "name": "libcomm.unit"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "lv",
+        "LV_ENABLE_DOCGEN": "ON",
+        "LV_ENABLE_GCOV": "ON",
+        "LV_ENABLE_PERFETTO": "ON",
+        "LV_ENABLE_TESTING": "ON"
+      },
+      "displayName": "Run the LV Lua and native unit tests",
+      "inherits": "common",
+      "name": "lv.unit"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "simtix;lv",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON"
+      },
+      "displayName": "Run the simtix DelayQueue utility unit tests",
+      "inherits": "common",
+      "name": "simtix.utils.unit"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "simtix;lv",
+        "LV_ENABLE_GCOV": "ON",
+        "LV_ENABLE_TESTING": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON"
+      },
+      "displayName": "Run the simtix cache Lua and native unit tests",
+      "inherits": "common",
+      "name": "simtix.cache.unit"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "simtix;lv",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON"
+      },
+      "displayName": "Develop simtix pipelined-core Lua unit tests",
+      "inherits": "common",
+      "name": "simtix.pipelined_core.unit"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON",
+        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+      },
+      "displayName": "Develop simtix pipelined SM implementation and validate downstream OpenCL/kernel-sim workloads",
+      "inherits": "common",
+      "name": "simtix.pipelined_sm"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON",
+        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+      },
+      "displayName": "Develop simtix atomic SM implementation and validate downstream OpenCL/kernel-sim workloads",
+      "inherits": "common",
+      "name": "simtix.atomic_sm"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "TESTS_ENABLE_TESTS": "cp"
+      },
+      "displayName": "Develop simtix scalar core and validate it with the RV64 riscv-test workload",
+      "inherits": "common",
+      "name": "simtix.scalar_core"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON",
+        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+      },
+      "displayName": "Develop simtix cache and cache-backed SM/system workloads",
+      "inherits": "common",
+      "name": "simtix.cache"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON",
+        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+      },
+      "displayName": "Develop simtix utility modules such as DelayQueue",
+      "inherits": "common",
+      "name": "simtix.utils"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON",
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
+      },
+      "displayName": "OpenCL development (including all supported SMs)",
+      "inherits": "common",
+      "name": "tests.opencl"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "TESTS_ENABLE_TESTS": "kernel-sim"
+      },
+      "displayName": "Kernel-sim development (including all supported SMs)",
+      "inherits": "common",
+      "name": "tests.kernel-sim"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw;hal;simtix;lv;tests",
+        "LV_ENABLE_GCOV": "ON",
+        "SIMTIX_ENABLE_TESTING": "ON",
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
+      },
+      "displayName": "Manually run FORMOSA OpenCL performance regression on simtix.pipelined_sm",
+      "inherits": "common",
+      "name": "perf.opencl"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "fw",
+        "FW_ENABLE_TESTING": "ON"
+      },
+      "displayName": "Firmware development (without HAL)",
+      "inherits": "common",
+      "name": "fw"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "hal;fw;libcomm",
+        "HAL_ENABLE_GCOV": "ON",
+        "HAL_ENABLE_TESTING": "ON"
+      },
+      "displayName": "Build and test the HAL LV/MMIO integration",
+      "inherits": "common",
+      "name": "hal.unit"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "hal;lv;simtix;tests",
+        "HAL_ENABLE_GCOV": "ON",
+        "HAL_ENABLE_TESTING": "ON",
+        "LV_ENABLE_GCOV": "ON",
+        "TESTS_ENABLE_TESTS": "hal;formosa"
+      },
+      "displayName": "Develop FORMOSA HAL and its integration tests (including fw)",
+      "inherits": "common",
+      "name": "hal"
+    },
+    {
+      "cacheVariables": {
+        "ENABLE_PROJECTS": "lv;tests",
+        "LIBCOMM_ENABLE_GCOV": "ON",
+        "LV_ENABLE_GCOV": "ON",
+        "LV_ENABLE_PERFETTO": "ON",
+        "LV_ENABLE_TESTING": "ON",
+        "TESTS_ENABLE_TESTS": "cp;pfreader;ipc"
+      },
+      "displayName": "Develop all of the default bindings in lv (including libcomm)",
+      "inherits": "common",
+      "name": "lv.bindings"
+    }
+  ],
+  "testPresets": [
+    {
+      "configurePreset": "libcomm.unit",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "libcomm\\.unit"
+        }
+      },
+      "name": "libcomm.unit",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "lv.unit",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "lv\\.unit\\..*"
+        }
+      },
+      "name": "lv.unit",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.utils.unit",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.delay_queue.*"
+        }
+      },
+      "name": "simtix.utils.unit",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.cache.unit",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.cache(_|\\.).*"
+        }
+      },
+      "name": "simtix.cache.unit",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.pipelined_core.unit",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic"
+        }
+      },
+      "name": "simtix.pipelined_core.unit",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.pipelined_sm",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "pipelined_frontend|pipelined_scoreboard|simple_arbitrator|pipelined_arbitrator|pipelined_.*_lsu|opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "simtix.pipelined_sm",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.atomic_sm",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm"
+        }
+      },
+      "name": "simtix.atomic_sm",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.scalar_core",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "scalar_core_riscv_test"
+        }
+      },
+      "name": "simtix.scalar_core",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.cache",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.cache\\..*|opencl\\..*\\.simtix\\.|kernel-sim\\..*\\.simtix\\."
+        }
+      },
+      "name": "simtix.cache",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.utils",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.delay_queue.*"
+        }
+      },
+      "name": "simtix.utils",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "tests.opencl",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "opencl"
+        }
+      },
+      "name": "tests.opencl",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "tests.kernel-sim",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "kernel-sim"
+        }
+      },
+      "name": "tests.kernel-sim",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "perf.opencl",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "perf.opencl",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "fw",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "fw"
+        }
+      },
+      "name": "fw",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "hal.unit",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "hal\\.lv_.*"
+        }
+      },
+      "name": "hal.unit",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "hal",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": "hal|opencl"
+        }
+      },
+      "name": "hal",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "lv.bindings",
+      "execution": {
+        "repeat": {
+          "count": 3,
+          "mode": "until-pass"
+        }
+      },
+      "filter": {
+        "include": {
+          "name": ".*/.*\\.lua|lv.unit.log|cp|pfreader|ipc_test"
+        }
+      },
+      "name": "lv.bindings",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ],
+  "version": 8
+}

@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+#
+# SPDX-License-Identifier: Apache-2.0
+
+version = 1
+
+[[annotations]]
+path = [
+  ".aiexclude",
+  ".clang-format",
+  ".clang-format-ignore",
+  ".envrc",
+  ".gitignore",
+  ".luarc.json",
+  ".stylua.toml",
+  "AGENTS.md",
+  "CMakePresets.json",
+  "FormosaConfig.cmake.in",
+  "flake.lock",
+  "hal/.clang-format",
+  "hal/.gitignore",
+  "libcomm/.clang-format",
+  "libcomm/.gitignore",
+  "lv/.clang-format",
+  "lv/.clang-tidy",
+  "lv/.gitignore",
+  "lv/selene.toml",
+  "simtix/.clang-format",
+  "simtix/.clang-tidy",
+  "simtix/.gitignore",
+  "simtix/src/cores/.clang-format-ignore",
+  "simtix/src/cores/xformosa.txt",
+  "tests/formosa/apccas2026-lpddr4.json",
+  "tests/formosa/simconfig.json",
+  "tests/opencl/gemma/.gitignore",
+  "tests/pfreader/pfreader.sql",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 CASLab, National Cheng Kung University"
+SPDX-License-Identifier = "Apache-2.0"

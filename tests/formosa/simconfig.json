@@ -1,0 +1,13 @@
+{
+    "simconfig": {
+        "AddressOffset": 0,
+        "DatabaseRecording": false,
+        "Debug": false,
+        "EnableWindowing": true,
+        "PowerAnalysis": false,
+        "SimulationName": "gem5_se",
+        "SimulationProgressBar": true,
+        "StoreMode": "Store",
+        "WindowSize": 1000
+    }
+}

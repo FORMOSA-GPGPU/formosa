@@ -1,0 +1,27 @@
+name: Workflow init
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  init:
+    name: Validate exported presets
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Validate CMake presets
+        run: |
+          test -s CMakePresets.json
+          jq -e '
+            (.version | type == "number") and
+            (.testPresets | type == "array") and
+            ((.testPresets | length) == 17)
+          ' CMakePresets.json >/dev/null

@@ -1,0 +1,21 @@
+.section .bss
+.balign 8
+kernel_ret_addr:
+    .zero 8
+
+.section .text
+.global kernel
+
+#define TEST(n) \
+  .global n; \
+  jal zero, n; \
+  .global n##_ret; \
+  n##_ret:
+
+kernel:
+    la t0, kernel_ret_addr
+    sd ra, 0(t0)
+@RISCV_TEST_CALLS@
+    la t0, kernel_ret_addr
+    ld ra, 0(t0)
+    ret

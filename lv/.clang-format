@@ -1,0 +1,7 @@
+BasedOnStyle: Google
+Language: Cpp
+PointerAlignment: Right
+AllowShortLambdasOnASingleLine: Empty
+---
+BasedOnStyle: Google
+Language: Json

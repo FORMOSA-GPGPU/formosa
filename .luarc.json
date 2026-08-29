@@ -1,0 +1,6 @@
+{
+  "runtime.version": "LuaJIT",
+  "workspace.library": [
+    ".cache/lv_meta"
+  ]
+}

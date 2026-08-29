@@ -1,0 +1,5 @@
+.model/
+gemma-3-270m.bin
+vocab.dump
+__pycache__/
+*.log

@@ -1,0 +1,8 @@
+# SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+#
+# SPDX-License-Identifier: Apache-2.0
+
+# Uncomment and replace with absolute install prefixes.
+# FORMOSA_POCL_PREFIX is required whenever FORMOSA_LLVM_PREFIX is set.
+# export FORMOSA_POCL_PREFIX=/absolute/path/to/pocl-install
+# export FORMOSA_LLVM_PREFIX=/absolute/path/to/llvm-install

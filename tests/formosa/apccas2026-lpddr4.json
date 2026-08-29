@@ -1,0 +1,9 @@
+{
+    "simulation": {
+        "addressmapping": "am_lpddr4_1Gbx16_robaco.json",
+        "mcconfig": "fr_fcfs.json",
+        "memspec": "JEDEC_1Gbx16_LPDDR4-1600.json",
+        "simconfig": "simconfig.json",
+        "simulationid": "apccas2026-lpddr4"
+    }
+}
