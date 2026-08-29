@@ -33,7 +33,11 @@ jobs:
       id-token: write
     env:
       IMAGE_NAME: ghcr.io/formosa-gpgpu/formosa
+      XDG_CACHE_HOME: /tmp/formosa-xdg-cache
     steps:
+      - name: Report initial disk usage
+        run: df -h /
+
       - name: Require main
         if: github.ref != 'refs/heads/main'
         run: |
@@ -73,7 +77,7 @@ jobs:
           attic login formosa "$ATTIC_SERVER" "$ATTIC_TOKEN" >/dev/null
           attic use "formosa:$ATTIC_CACHE" >/dev/null
 
-      - name: Report initial disk usage
+      - name: Report disk usage after setup
         run: df -h / /nix
 
       - name: Build image archive
@@ -82,6 +86,7 @@ jobs:
             --print-build-logs \
             --option download-attempts 3
           test -s result
+          df -h / /nix
 
       - name: Preserve archive and reclaim Nix store
         id: archive
@@ -90,6 +95,8 @@ jobs:
           archive="$RUNNER_TEMP/formosa-docker-env.tar.gz"
           cp --dereference result "$archive"
           rm result
+          nix profile remove attic-client
+          rm -rf -- "$XDG_CACHE_HOME/nix"
           nix store gc
           test -s "$archive"
           available_kib=$(df --output=avail / | tail -n 1)
@@ -138,6 +145,12 @@ jobs:
             if docker push "$image" 2>&1 | tee "$log"; then
               break
             fi
+            if ! grep -Eqi \
+              '429|5[0-9]{2}|timeout|timed out|connection reset|unexpected EOF|temporar|service unavailable' \
+              "$log"; then
+              echo "::error::Non-transient GHCR push failure; not retrying"
+              exit 1
+            fi
           done
           digest=$(sed -nE \
             's/.*digest: (sha256:[0-9a-f]{64}).*/\1/p' "$log" | tail -n 1)
@@ -157,11 +170,18 @@ jobs:
         run: |
           set -euo pipefail
           image="$IMAGE_NAME:latest"
+          log="$RUNNER_TEMP/docker-push-latest.log"
           docker tag "$IMAGE_ID" "$image"
           for delay in 0 10 20; do
             sleep "$delay"
-            if docker push "$image"; then
+            if docker push "$image" 2>&1 | tee "$log"; then
               exit 0
+            fi
+            if ! grep -Eqi \
+              '429|5[0-9]{2}|timeout|timed out|connection reset|unexpected EOF|temporar|service unavailable' \
+              "$log"; then
+              echo "::error::Non-transient GHCR push failure; not retrying"
+              exit 1
             fi
           done
           exit 1
