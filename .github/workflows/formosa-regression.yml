@@ -50,7 +50,6 @@ jobs:
           FSA_PRESET: ${{ matrix.preset }}
         run: |
           set -euo pipefail
-          test ! -e build
           docker run --rm \
             --user "$(id -u):$(id -g)" \
             --env HOME=/tmp \
@@ -76,7 +75,7 @@ jobs:
 
               cmake -B build --preset "$1"
               cmake --build build
-              ctest --test-dir build --preset "$1" -j --timeout 3000 --output-on-failure
+              ctest --test-dir build --preset "$1" -j --timeout 3000
               gcovr -e third-party \
                 --print-summary \
                 -o build/coverage.txt \
