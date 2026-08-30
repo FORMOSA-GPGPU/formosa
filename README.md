@@ -130,22 +130,28 @@ ctest --preset tests.opencl
 
 ### No Nix? Use the Docker image
 
-A maintainer builds and exports the image:
+A public Docker image containing the default FORMOSA development environment is
+available from the
+[GitHub Container Registry](https://github.com/FORMOSA-GPGPU/formosa/pkgs/container/formosa).
+It supports Linux on AMD64 and does not require authentication to pull.
 
 ```bash
-nix build .#formosa-docker-env
-docker load < result
-docker save formosa:latest -o formosa-image.tar
+docker pull ghcr.io/formosa-gpgpu/formosa:latest
 ```
 
-You load and run it (Docker only, no Nix):
+From the repository root, start an interactive shell with the checkout mounted
+at `/workspace`:
 
 ```bash
-docker load -i formosa-image.tar
-docker run --rm -it formosa:latest
+docker run --rm -it \
+  --volume "$PWD:/workspace" \
+  --workdir /workspace \
+  ghcr.io/formosa-gpgpu/formosa:latest
 ```
 
-Fill in the actual image tag and any GPU/device flags for your deployment.
+The `latest` tag tracks the most recently published environment from `main`.
+For reproducible use, pin an immutable `sha-<full Git commit SHA>` image tag.
+Do not use the registry-generated `sha256-...` attestation tag.
 
 ## Publications
 
