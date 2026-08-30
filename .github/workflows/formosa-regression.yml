@@ -1,0 +1,211 @@
+name: FORMOSA regression
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  FORMOSA_CI_IMAGE: ghcr.io/formosa-gpgpu/formosa:latest
+
+jobs:
+  prepare:
+    name: Prepare regression matrix
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.presets.outputs.matrix }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Read functional presets
+        id: presets
+        run: |
+          set -euo pipefail
+          matrix=$(
+            jq -ce '
+              . as $root
+              | [
+                  $root.testPresets[]
+                  | select(.name != "perf.opencl")
+                  | .name as $preset
+                  | {
+                      preset: $preset,
+                      coverage: (
+                        [
+                          $root.configurePresets[]
+                          | select(.name == $preset)
+                          | (.cacheVariables // {})
+                          | to_entries[]
+                          | select(
+                              (.key | endswith("_ENABLE_GCOV")) and
+                              .value == "ON"
+                            )
+                        ]
+                        | length > 0
+                      )
+                    }
+                ]
+              | if
+                  (length == 16) and
+                  ((map(.preset) | unique | length) == 16)
+                then .
+                else error("expected 16 unique functional presets")
+                end
+            ' CMakePresets.json
+          )
+          echo "matrix=$matrix" >>"$GITHUB_OUTPUT"
+
+  regression:
+    name: Regression (${{ matrix.preset }})
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Report runner resources
+        run: |
+          nproc
+          free -h
+          df -h / /var/lib/docker
+
+      - name: Pull FORMOSA environment
+        run: docker pull "$FORMOSA_CI_IMAGE"
+
+      - name: Configure, build, and test
+        id: functional
+        env:
+          FSA_PRESET: ${{ matrix.preset }}
+        run: |
+          set -euo pipefail
+          test ! -e build
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --env TMP=/tmp \
+            --env TEMP=/tmp \
+            --env TEMPDIR=/tmp \
+            --env TMPDIR=/tmp \
+            --env NIX_BUILD_TOP=/tmp \
+            --tmpfs /tmp:rw,exec,mode=1777 \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            "$FORMOSA_CI_IMAGE" \
+            bash -c '
+              set -eo pipefail
+              set +u
+              rc=(/nix/store/*-nix-shell-rc)
+              if (( ${#rc[@]} != 1 )); then
+                printf "expected one Nix shell rc, found %d\n" "${#rc[@]}" >&2
+                exit 1
+              fi
+              source "${rc[0]}"
+              set -euo pipefail
+
+              cmake -B build --preset "$1"
+              cmake --build build
+              ctest --test-dir build --preset "$1" -j --output-on-failure
+            ' bash "$FSA_PRESET"
+
+      - name: Generate coverage
+        id: coverage
+        if: ${{ matrix.coverage }}
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --env TMP=/tmp \
+            --env TEMP=/tmp \
+            --env TEMPDIR=/tmp \
+            --env TMPDIR=/tmp \
+            --env NIX_BUILD_TOP=/tmp \
+            --tmpfs /tmp:rw,exec,mode=1777 \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            "$FORMOSA_CI_IMAGE" \
+            bash -c '
+              set -eo pipefail
+              set +u
+              rc=(/nix/store/*-nix-shell-rc)
+              if (( ${#rc[@]} != 1 )); then
+                printf "expected one Nix shell rc, found %d\n" "${#rc[@]}" >&2
+                exit 1
+              fi
+              source "${rc[0]}"
+              set -euo pipefail
+
+              gcovr -e third-party \
+                --xml-pretty \
+                --exclude-unreachable-branches \
+                --gcov-ignore-parse-errors suspicious_hits.warn \
+                --gcov-ignore-parse-errors negative_hits.warn \
+                --print-summary \
+                -o build/coverage.xml \
+                --root /workspace \
+                --object-directory build
+            '
+
+      - name: Upload regression outputs
+        id: artifacts
+        if: ${{ always() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: regression-${{ matrix.preset }}
+          path: |
+            build/testing-out/*.toml
+            build/coverage.xml
+          if-no-files-found: ignore
+          retention-days: 2
+
+      - name: Summarize lane
+        if: ${{ always() }}
+        env:
+          ARTIFACT_OUTCOME: ${{ steps.artifacts.outcome }}
+          COVERAGE_OUTCOME: ${{ steps.coverage.outcome }}
+          FUNCTIONAL_OUTCOME: ${{ steps.functional.outcome }}
+          FSA_COVERAGE: ${{ matrix.coverage }}
+          FSA_PRESET: ${{ matrix.preset }}
+        run: |
+          {
+            echo "## $FSA_PRESET"
+            echo
+            echo "| Result | Status |"
+            echo "| --- | --- |"
+            echo "| Functional | ${FUNCTIONAL_OUTCOME:-not-run} |"
+            if [[ "$FSA_COVERAGE" == "true" ]]; then
+              echo "| Coverage | ${COVERAGE_OUTCOME:-not-run} |"
+            else
+              echo "| Coverage | disabled |"
+            fi
+            echo "| Artifacts | ${ARTIFACT_OUTCOME:-not-run} |"
+          } >>"$GITHUB_STEP_SUMMARY"
+
+  aggregate:
+    name: Functional regression
+    if: ${{ always() }}
+    needs: regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require every functional lane
+        env:
+          REGRESSION_RESULT: ${{ needs.regression.result }}
+        run: |
+          if [[ "$REGRESSION_RESULT" != "success" ]]; then
+            echo "Functional regression result: $REGRESSION_RESULT" >&2
+            exit 1
+          fi
