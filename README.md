@@ -6,6 +6,10 @@ SPDX-License-Identifier: Apache-2.0
 
 # FORMOSA Monorepo
 
+The FORMOSA monorepo is an integrated RISC-V GPGPU research platform spanning
+the software stack, ESL virtual platform, performance models, and Nix-based
+toolchains and development environments.
+
 ## Project Structure
 
 ```
@@ -89,63 +93,30 @@ direnv allow
 
 After this, `cd` into the repo auto-loads the environment and leaving unloads it.
 
-### Use locally installed FORMOSA PoCL and LLVM (Linux)
-
-The default shell uses the PoCL and LLVM revisions pinned by the Nix flake. To
-test an already-installed local PoCL, copy the private configuration example:
-
-```bash
-cp .envrc.local.example .envrc.local
-```
-
-Edit `.envrc.local`, uncomment `FORMOSA_POCL_PREFIX`, and set it to the PoCL
-install prefix. To validate a local LLVM through OpenCL, also set
-`FORMOSA_LLVM_PREFIX` and use a local PoCL built against that LLVM. A local LLVM
-cannot be validated with the pinned PoCL.
-
-Reload the environment after changing either prefix:
-
-```bash
-direnv reload
-```
-
-direnv validates the ICD, `libpocl`, and LLVM shared-library resolution before
-activating the override. It fails instead of silently falling back to the Nix
-versions, and prints a `FORMOSA LOCAL OVERRIDE ACTIVE` banner with the resolved
-paths. Reinstalling into the same prefixes does not require another reload.
-
-Confirm that the Formosa OpenCL device is visible:
-
-```bash
-clinfo -l
-```
-
-Then use the existing OpenCL workflow as usual:
-
-```bash
-cmake --preset tests.opencl
-cmake --build --preset tests.opencl
-ctest --preset tests.opencl
-```
-
 ### No Nix? Use the Docker image
 
-A maintainer builds and exports the image:
+A public Docker image containing the default FORMOSA development environment is
+available from the
+[GitHub Container Registry](https://github.com/FORMOSA-GPGPU/formosa/pkgs/container/formosa).
+It supports Linux on AMD64 and does not require authentication to pull.
 
 ```bash
-nix build .#formosa-docker-env
-docker load < result
-docker save formosa:latest -o formosa-image.tar
+docker pull ghcr.io/formosa-gpgpu/formosa:latest
 ```
 
-You load and run it (Docker only, no Nix):
+From the repository root, start an interactive shell with the checkout mounted
+at `/workspace`:
 
 ```bash
-docker load -i formosa-image.tar
-docker run --rm -it formosa:latest
+docker run --rm -it \
+  --volume "$PWD:/workspace" \
+  --workdir /workspace \
+  ghcr.io/formosa-gpgpu/formosa:latest
 ```
 
-Fill in the actual image tag and any GPU/device flags for your deployment.
+The `latest` tag tracks the most recently published environment from `main`.
+For reproducible use, pin an immutable `sha-<full Git commit SHA>` image tag.
+Do not use the registry-generated `sha256-...` attestation tag.
 
 ## Publications
 
