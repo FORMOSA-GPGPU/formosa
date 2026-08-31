@@ -7,6 +7,8 @@
 #include <fmt/ostream.h>
 #include <liblv/binding.h>
 
+#include <cassert>
+
 #include "cores/exec_context.h"
 #include "cores/formosa.h"
 #include "cores/pipelined/konata_labels.h"
@@ -234,10 +236,10 @@ void Backend::Execute2() {
 
   if (HasFlag(flag, ExecFlag::BARRIER)) {
     uint32_t local_wid = get_local_wid(packet->wid);
-    pending_barrier_tmask_[local_wid] |= packet->tmask;
 
     // If there are still threads awaiting execution, arbitrate PC for them
-    if (!pending_barrier_tmask_[local_wid].and_reduce()) {
+    if (!pending_barrier_threads_.MarkReachedAndCheckAll(local_wid,
+                                                         packet->tmask)) {
       uint64_t next_pc = ArbitratePC(packet->wid);
       core_->NoteFlush(packet->wid, FlushReason::kMisc, next_pc, 0);
       core_->Redirect(packet->wid, next_pc);
@@ -249,11 +251,11 @@ void Backend::Execute2() {
 
   if (HasFlag(flag, ExecFlag::ECALL)) {
     uint32_t local_wid = get_local_wid(packet->wid);
-    pending_ecall_tmask_[local_wid] |= packet->tmask;
     pending_ecall_wpc_[local_wid] = packet->wpc;
 
     // If there are still threads awaiting execution, arbitrate PC for them
-    if (!pending_ecall_tmask_[local_wid].and_reduce()) {
+    if (!pending_ecall_threads_.MarkReachedAndCheckAll(local_wid,
+                                                       packet->tmask)) {
       uint64_t next_pc = ArbitratePC(packet->wid);
       core_->NoteFlush(packet->wid, FlushReason::kMisc, next_pc, 0);
       core_->Redirect(packet->wid, next_pc);
@@ -317,13 +319,15 @@ void Backend::Retire() {
 }
 
 void Backend::ProcessPendingEcalls() {
+  const auto &active_warps = core_->active_warps().val();
+
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
     uint32_t wid = get_wid(local_wid);
-    bool is_active = core_->active_warps().val()[wid] == 1;
+    bool is_active = active_warps[wid] == 1;
 
     if (!is_active) {
       // Ignore any pending ecall state for warps that are no longer active.
-      pending_ecall_tmask_[local_wid] = 0;
+      pending_ecall_threads_.ClearIfPending(local_wid);
       continue;
     }
 
@@ -332,11 +336,11 @@ void Backend::ProcessPendingEcalls() {
     // 2. There is not any inflight instruction for this warp
     // 3. There is not any pending non-ECALL exception for this warp, which
     // would have a higher priority than ecall
-    if (pending_ecall_tmask_[local_wid].and_reduce() &&
+    if (pending_ecall_threads_.AllReached(local_wid) &&
         inflight_counter_[local_wid] == 0 &&
         !pending_exceptions_[local_wid].valid) {
       core_->NotifyEcall(wid, pending_ecall_wpc_[local_wid]);
-      pending_ecall_tmask_[local_wid] = 0;
+      pending_ecall_threads_.ClearIfPending(local_wid);
     }
   }
 }
@@ -345,9 +349,11 @@ void Backend::ProcessPendingExceptions() {
   // Notify exceptions only when
   // 1. Any thread in this warp reaches the exception state
   // 2. There is not any inflight instruction for this warp
+  const auto &active_warps = core_->active_warps().val();
+
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
     uint32_t wid = get_wid(local_wid);
-    bool is_active = core_->active_warps().val()[wid] == 1;
+    bool is_active = active_warps[wid] == 1;
     auto &pending_exception = pending_exceptions_[local_wid];
 
     if (pending_exception.valid && inflight_counter_[local_wid] == 0) {
@@ -359,20 +365,22 @@ void Backend::ProcessPendingExceptions() {
       // Clear any lower-priority pending state after the warp's final trap is
       // resolved so later passes do not try to transition it again.
       pending_exception.valid = false;
-      pending_ecall_tmask_[local_wid] = 0;
-      pending_barrier_tmask_[local_wid] = 0;
+      pending_ecall_threads_.ClearIfPending(local_wid);
+      pending_barrier_threads_.ClearIfPending(local_wid);
     }
   }
 }
 
 void Backend::ProcessPendingBarriers() {
+  const auto &active_warps = core_->active_warps().val();
+
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
     uint32_t wid = get_wid(local_wid);
-    bool is_active = core_->active_warps().val()[wid] == 1;
+    bool is_active = active_warps[wid] == 1;
 
     if (!is_active) {
       // Ignore any pending barrier state for warps that are no longer active.
-      pending_barrier_tmask_[local_wid] = 0;
+      pending_barrier_threads_.ClearIfPending(local_wid);
       continue;
     }
 
@@ -381,11 +389,11 @@ void Backend::ProcessPendingBarriers() {
     // 2. There is not any inflight instruction for this warp
     // 3. There is not any pending non-ECALL exception for this warp, which
     // would have a higher priority than barrier
-    if (pending_barrier_tmask_[local_wid].and_reduce() &&
+    if (pending_barrier_threads_.AllReached(local_wid) &&
         inflight_counter_[local_wid] == 0 &&
         !pending_exceptions_[local_wid].valid) {
       core_->NotifyBarrier(wid);
-      pending_barrier_tmask_[local_wid] = 0;
+      pending_barrier_threads_.ClearIfPending(local_wid);
     }
   }
 }
@@ -405,6 +413,8 @@ void Backend::KonataRetire() {
 
 void Backend::UpdateReadyWarps() {
   auto *stats = core_->stats();
+  const auto &active_warps = core_->active_warps().val();
+
   ready_warps_ = 0;
   bool has_scoreboard_blocked_warp = false;
 
@@ -415,9 +425,9 @@ void Backend::UpdateReadyWarps() {
 
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
     uint32_t wid = get_wid(local_wid);
-    bool is_active = core_->active_warps().val()[wid] == 1;
-    bool is_barrier = pending_barrier_tmask_[local_wid].and_reduce();
-    bool is_ecall = pending_ecall_tmask_[local_wid].and_reduce();
+    bool is_active = active_warps[wid] == 1;
+    bool is_barrier = pending_barrier_threads_.AllReached(local_wid);
+    bool is_ecall = pending_ecall_threads_.AllReached(local_wid);
     bool is_exception = pending_exceptions_[local_wid].valid;
     bool is_suppressed = issue_suppressed_warps_[wid] == 1;
 
@@ -477,8 +487,8 @@ uint64_t Backend::ArbitratePC(uint32_t wid) {
   uint8_t *pwpri = &core_->ptpri()[wid * num_lanes_];
   for (uint32_t i = 0; i < num_lanes_; ++i) {
     // Skip this thread if it already reaches barrier or ecall state.
-    if (pending_barrier_tmask_[local_wid][i] ||
-        pending_ecall_tmask_[local_wid][i]) {
+    if (pending_barrier_threads_.LaneReached(local_wid, i) ||
+        pending_ecall_threads_.LaneReached(local_wid, i)) {
       continue;
     }
 

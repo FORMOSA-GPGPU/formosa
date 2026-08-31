@@ -10,6 +10,12 @@
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_core_ifs.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_channels/tlm_fifo/tlm_fifo.h>
 
+#include <cassert>
+#include <cstdint>
+#include <memory>
+#include <utility>
+#include <vector>
+
 #include "cores/pipelined/arbitrator/base.h"
 #include "cores/pipelined/lsu/base.h"
 #include "cores/pipelined/packet.h"
@@ -74,10 +80,8 @@ class Backend : public sc_module {
         issue_suppressed_warps_(false, p.num_warps),
         scoreboard_(num_local_warps_, pp.num_subcores),
         inflight_counter_(num_local_warps_),
-        pending_barrier_tmask_(
-            num_local_warps_, sc_bv_base{false, static_cast<int>(p.num_lanes)}),
-        pending_ecall_tmask_(num_local_warps_,
-                             sc_bv_base{false, static_cast<int>(p.num_lanes)}),
+        pending_barrier_threads_(num_local_warps_, p.num_lanes),
+        pending_ecall_threads_(num_local_warps_, p.num_lanes),
         pending_ecall_wpc_(num_local_warps_),
         pending_exceptions_(num_local_warps_),
         alu_delay_q_("alu_delay_q_", pp.alu_latency, pp.alu_ticks_per_output),
@@ -240,9 +244,59 @@ class Backend : public sc_module {
     uint64_t tval = 0;
   };
 
+  /**
+   * Track the per-warp thread masks and their reduction state in separate
+   * arrays so hot state scans do not load the full masks.
+   */
+  class PendingThreadMaskTable {
+   public:
+    PendingThreadMaskTable(uint32_t num_warps, uint32_t num_lanes)
+        : masks_(num_warps, sc_bv_base{false, static_cast<int>(num_lanes)}),
+          states_(num_warps, State::NONE) {}
+
+    bool MarkReachedAndCheckAll(uint32_t local_wid, const sc_bv_base &tmask) {
+      assert(tmask != 0);
+
+      auto &mask = masks_[local_wid];
+      mask |= tmask;
+      bool all_reached = mask.and_reduce();
+      states_[local_wid] = all_reached ? State::ALL_REACHED : State::PARTIAL;
+      return all_reached;
+    }
+
+    void ClearIfPending(uint32_t local_wid) {
+      if (states_[local_wid] == State::NONE) {
+        return;
+      }
+
+      masks_[local_wid] = 0;
+      states_[local_wid] = State::NONE;
+    }
+
+    bool AllReached(uint32_t local_wid) const {
+      return states_[local_wid] == State::ALL_REACHED;
+    }
+
+    bool LaneReached(uint32_t local_wid, uint32_t lane) const {
+      return masks_[local_wid][lane] == 1;
+    }
+
+   private:
+    enum class State : uint8_t {
+      NONE = 0,
+      PARTIAL,
+      ALL_REACHED,
+    };
+
+    static_assert(sizeof(State) == 1);
+
+    std::vector<sc_bv_base> masks_;
+    std::vector<State> states_;
+  };
+
   std::vector<uint32_t> inflight_counter_;
-  std::vector<sc_bv_base> pending_barrier_tmask_;
-  std::vector<sc_bv_base> pending_ecall_tmask_;
+  PendingThreadMaskTable pending_barrier_threads_;
+  PendingThreadMaskTable pending_ecall_threads_;
   std::vector<uint64_t> pending_ecall_wpc_;
 
   // Deferred non-ECALL trap state for each warp.
