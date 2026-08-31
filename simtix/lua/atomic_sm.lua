@@ -15,6 +15,7 @@
 ---@field protected _stub_cache formosa.StubCacheMmio
 ---@field protected _wg_init formosa.WGInitializer
 ---@field protected _core_info simple.ConstantTable
+---@field protected _stack_remap simtix.StackRemapTable
 ---@overload fun(name: string, config: formosa.system.config, clock: sc.clock, reset_n: sc.signal, id: integer): simtix.atomic_sm
 local AtomicSM = {}
 
@@ -75,17 +76,28 @@ function AtomicSM.new(name, config, clock, reset_n, id)
     },
   })
 
+  -- MMIO compatibility; AtomicCore ignores stack-remap descriptors.
+  self._stack_remap = simtix.StackRemapTable("StackRemapTable", {
+    entries = config.stack_remap_entries,
+    region_size = config.stack_size_per_thread * config.stack_remap_group_size,
+  })
+
   self._router = simple.XBar("SMRouter", 1, {
     { addr = config.wgi_csr_base, size = config.wgi_csr_size }, -- WGInit
     { addr = config.icache_csr_base, size = config.cache_csr_size }, -- StubCache (I-Cache)
     { addr = config.dcache_csr_base, size = config.cache_csr_size }, -- L1Cache (D-Cache)
     { addr = config.core_csr_base, size = config.core_csr_size }, -- Core Info Read-only
+    {
+      addr = config.stack_remap_csr_base,
+      size = config.stack_remap_csr_size,
+    }, -- Stack remap descriptors
   })
 
   self._router.mem_side[1].target = self._wg_init.port
   self._router.mem_side[2].target = self._stub_cache.mmio_port
   self._router.mem_side[3].target = self._l1cache.mmio_port
   self._router.mem_side[4].target = self._core_info.port
+  self._router.mem_side[5].target = self._stack_remap.mmio_port
 
   self._core.target = self._dmem_xbar.core_side[1].port
   self._dmem_xbar.mem_side[1].target = self._local_mem.port
