@@ -14,14 +14,110 @@ env:
 
 jobs:
   prepare:
-    name: Prepare regression matrix
+    name: Lint and prepare regression matrix
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     outputs:
       presets: ${{ steps.presets.outputs.presets }}
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Select lint range
+        id: lint-range
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_EVENT_NAME" == pull_request ]]; then
+            from=$(git merge-base "$PR_BASE_SHA" "$PR_HEAD_SHA")
+            to=$PR_HEAD_SHA
+          else
+            from=$PUSH_BASE_SHA
+            to=$GITHUB_SHA
+            if [[ "$from" =~ ^0+$ ]]; then
+              from="$to^"
+            fi
+          fi
+          git cat-file -e "$from^{commit}"
+          git cat-file -e "$to^{commit}"
+          echo "from=$from" >>"$GITHUB_OUTPUT"
+          echo "to=$to" >>"$GITHUB_OUTPUT"
+
+      - name: Check third-party changes
+        if: github.event_name == 'pull_request'
+        env:
+          LINT_FROM: ${{ steps.lint-range.outputs.from }}
+          LINT_TO: ${{ steps.lint-range.outputs.to }}
+        run: |
+          set -euo pipefail
+          submodule_re='^third-party/(systemc|sol2|DRAMSys|fmt|argparse|elfio|'
+          submodule_re+='perfetto|glm|tomlplusplus|Catch2|softfloat|FreeRTOS-Kernel|'
+          submodule_re+='riscv-opcodes|riscv-tests|quill|DRAMUtils|nlohmann_json)(/|$)'
+          blocked=()
+          warned=()
+          while IFS= read -r -d '' path; do
+            if [[ "$path" =~ $submodule_re ]]; then
+              blocked+=("$path")
+            else
+              warned+=("$path")
+            fi
+          done < <(
+            git diff --name-only -z --diff-filter=ACDMRTUXB \
+              "$LINT_FROM" "$LINT_TO" -- third-party/
+          )
+          if ((${#warned[@]})); then
+            echo '::warning title=third-party files changed::CONTRIBUTING.md asks contributors to avoid third-party changes unless requested by a maintainer.'
+            printf 'Third-party changes:\n  %s\n' "${warned[@]}"
+          fi
+          if ((${#blocked[@]})); then
+            echo '::error title=expanded submodule changed::These files are exported from internal submodules. Ask a maintainer to update the internal submodule revision instead.'
+            printf 'Expanded submodule changes:\n  %s\n' "${blocked[@]}"
+            exit 1
+          fi
+
+      - name: Pull FORMOSA environment
+        run: docker pull "$FORMOSA_CI_IMAGE"
+
+      - name: Lint changed files
+        env:
+          LINT_FROM: ${{ steps.lint-range.outputs.from }}
+          LINT_TO: ${{ steps.lint-range.outputs.to }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --env TMP=/tmp \
+            --env TEMP=/tmp \
+            --env TEMPDIR=/tmp \
+            --env TMPDIR=/tmp \
+            --env NIX_BUILD_TOP=/tmp \
+            --tmpfs /tmp:rw,exec,mode=1777 \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            "$FORMOSA_CI_IMAGE" \
+            bash -c '
+              set -eo pipefail
+              set +u
+              rc=(/nix/store/*-nix-shell-rc)
+              if (( ${#rc[@]} != 1 )); then
+                printf "expected one Nix shell rc, found %d\n" "${#rc[@]}" >&2
+                exit 1
+              fi
+              source "${rc[0]}"
+              set -euo pipefail
+
+              status=0
+              pre-commit run --from-ref "$1" --to-ref "$2" || status=$?
+              git diff --no-ext-diff
+              exit "$status"
+            ' bash "$LINT_FROM" "$LINT_TO"
 
       - name: Read regression presets
         id: presets
