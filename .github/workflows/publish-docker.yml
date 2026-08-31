@@ -12,7 +12,7 @@ on:
 
 concurrency:
   group: publish-formosa-docker-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  queue: max
 
 jobs:
   detect:
@@ -85,6 +85,7 @@ jobs:
             nixpkgs#shellcheck \
             --command bash -euo pipefail -c '
               actionlint -shellcheck shellcheck \
+                -ignore "unexpected key \"queue\" for \"concurrency\"" \
                 .github/workflows/formosa-regression.yml \
                 .github/workflows/publish-docker.yml
               shellcheck .github/scripts/push-image.sh
@@ -273,8 +274,14 @@ jobs:
         run: |
           set -euo pipefail
           docker buildx imagetools create \
+            --prefer-index=false \
             --tag "$IMAGE_NAME:latest" \
             "$IMAGE_REF"
+          latest_digest=$(docker buildx imagetools inspect \
+            --format '{{.Manifest.Digest}}' \
+            "$IMAGE_NAME:latest")
+          candidate_digest=${IMAGE_REF##*@}
+          test "$latest_digest" = "$candidate_digest"
 
   public-ci:
     name: Public CI
