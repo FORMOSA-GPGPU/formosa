@@ -178,3 +178,21 @@ jobs:
                 --root /workspace \
                 --object-directory build || true
             ' bash "$FSA_PRESET"
+
+  public-ci:
+    name: Public CI
+    if: ${{ always() }}
+    needs:
+      - prepare
+      - regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require lint and regression
+        env:
+          PREPARE_RESULT: ${{ needs.prepare.result }}
+          REGRESSION_RESULT: ${{ needs.regression.result }}
+        run: |
+          set -euo pipefail
+          test "$PREPARE_RESULT" = success
+          test "$REGRESSION_RESULT" = success
