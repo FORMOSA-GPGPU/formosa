@@ -3,14 +3,17 @@ name: FORMOSA regression
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
+  workflow_call:
+    inputs:
+      image:
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 env:
-  FORMOSA_CI_IMAGE: ghcr.io/formosa-gpgpu/formosa:latest
+  FORMOSA_CI_DEFAULT_IMAGE: ghcr.io/formosa-gpgpu/formosa:latest
 
 jobs:
   prepare:
@@ -18,6 +21,7 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     outputs:
+      image: ${{ steps.image.outputs.image }}
       presets: ${{ steps.presets.outputs.presets }}
     steps:
       - name: Check out repository
@@ -40,7 +44,7 @@ jobs:
           else
             from=$PUSH_BASE_SHA
             to=$GITHUB_SHA
-            if [[ "$from" =~ ^0+$ ]]; then
+            if [[ -z "$from" || "$from" =~ ^0+$ ]]; then
               from="$to^"
             fi
           fi
@@ -81,13 +85,24 @@ jobs:
             exit 1
           fi
 
-      - name: Pull FORMOSA environment
-        run: docker pull "$FORMOSA_CI_IMAGE"
+      - name: Resolve FORMOSA environment
+        id: image
+        env:
+          REQUESTED_IMAGE: ${{ inputs.image }}
+        run: |
+          set -euo pipefail
+          image=${REQUESTED_IMAGE:-$FORMOSA_CI_DEFAULT_IMAGE}
+          docker pull "$image"
+          image_ref=$(docker image inspect \
+            --format '{{index .RepoDigests 0}}' "$image")
+          [[ "$image_ref" =~ ^ghcr\.io/formosa-gpgpu/formosa@sha256:[0-9a-f]{64}$ ]]
+          echo "image=$image_ref" >>"$GITHUB_OUTPUT"
 
       - name: Lint changed files
         env:
           LINT_FROM: ${{ steps.lint-range.outputs.from }}
           LINT_TO: ${{ steps.lint-range.outputs.to }}
+          FORMOSA_CI_IMAGE: ${{ steps.image.outputs.image }}
         run: |
           set -euo pipefail
           docker run --rm \
@@ -130,6 +145,8 @@ jobs:
     needs: prepare
     runs-on: ubuntu-24.04
     timeout-minutes: 180
+    env:
+      FORMOSA_CI_IMAGE: ${{ needs.prepare.outputs.image }}
     strategy:
       fail-fast: false
       matrix:
@@ -181,7 +198,7 @@ jobs:
 
   public-ci:
     name: Public CI
-    if: ${{ always() }}
+    if: ${{ always() && github.event_name == 'pull_request' }}
     needs:
       - prepare
       - regression
