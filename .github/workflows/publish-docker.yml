@@ -278,8 +278,8 @@ jobs:
             --tag "$IMAGE_NAME:latest" \
             "$IMAGE_REF"
           latest_digest=$(docker buildx imagetools inspect \
-            --format '{{.Manifest.Digest}}' \
-            "$IMAGE_NAME:latest")
+            --format '{{json .Manifest.Digest}}' \
+            "$IMAGE_NAME:latest" | jq -r .)
           candidate_digest=${IMAGE_REF##*@}
           test "$latest_digest" = "$candidate_digest"
 
