@@ -4,29 +4,63 @@ on:
   pull_request:
     paths:
       - .github/scripts/push-image.sh
+      - .github/workflows/formosa-regression.yml
       - .github/workflows/publish-docker.yml
   push:
     branches: [main]
-    paths:
-      - "**/*.nix"
-      - flake.lock
-      - CMakeLists.txt
-      - FormosaConfig.cmake.in
-      - "cmake/**"
-      - "addr_map/**"
-      - "fw/**"
-      - "hal/**"
-      - "libcomm/**"
-      - third-party/FreeRTOS-Kernel.cmake
-      - .github/scripts/push-image.sh
-      - .github/workflows/publish-docker.yml
   workflow_dispatch:
 
 concurrency:
-  group: publish-formosa-docker
-  cancel-in-progress: true
+  group: publish-formosa-docker-${{ github.ref }}
+  queue: max
 
 jobs:
+  detect:
+    name: Detect image changes
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    outputs:
+      image_affecting: ${{ steps.changes.outputs.image_affecting }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify changes
+        id: changes
+        env:
+          PUSH_BASE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          from=$PUSH_BASE_SHA
+          if [[ "$from" =~ ^0+$ || -z "$from" ]]; then
+            from="$GITHUB_SHA^"
+          fi
+
+          image_affecting=true
+          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch ]] &&
+            git diff --quiet "$from" "$GITHUB_SHA" -- \
+              ':(glob)**/*.nix' \
+              flake.lock \
+              CMakeLists.txt \
+              FormosaConfig.cmake.in \
+              'cmake/**' \
+              'addr_map/**' \
+              'fw/**' \
+              'hal/**' \
+              'libcomm/**' \
+              third-party/FreeRTOS-Kernel.cmake \
+              .github/scripts/push-image.sh \
+              .github/workflows/publish-docker.yml; then
+            image_affecting=false
+          fi
+          echo "image_affecting=$image_affecting" >>"$GITHUB_OUTPUT"
+
   validate:
     name: Validate workflow
     if: github.event_name == 'pull_request'
@@ -50,15 +84,21 @@ jobs:
             nixpkgs#actionlint \
             nixpkgs#shellcheck \
             --command bash -euo pipefail -c '
-              actionlint -shellcheck shellcheck .github/workflows/publish-docker.yml
+              actionlint -shellcheck shellcheck \
+                -ignore "unexpected key \"queue\" for \"concurrency\"" \
+                .github/workflows/formosa-regression.yml \
+                .github/workflows/publish-docker.yml
               shellcheck .github/scripts/push-image.sh
             '
 
   publish:
     name: Build and publish
-    if: github.event_name != 'pull_request'
+    needs: detect
+    if: ${{ needs.detect.result == 'success' && needs.detect.outputs.image_affecting == 'true' }}
     runs-on: ${{ vars.DOCKER_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 360
+    outputs:
+      image_ref: ${{ steps.push.outputs.image_ref }}
     permissions:
       contents: read
       packages: write
@@ -149,7 +189,6 @@ jobs:
           df -h / /nix
 
       - name: Load and tag image
-        id: image
         env:
           ARCHIVE: ${{ steps.archive.outputs.archive }}
         run: |
@@ -163,7 +202,6 @@ jobs:
             --format '{{.Os}}/{{.Architecture}}' "$image_id")" = linux/amd64
           docker tag "$image_id" "$IMAGE_NAME:sha-$GITHUB_SHA"
           rm "$ARCHIVE"
-          echo "image_id=$image_id" >>"$GITHUB_OUTPUT"
           df -h / /var/lib/docker
 
       - name: Log in to GHCR
@@ -185,6 +223,7 @@ jobs:
             's/.*digest: (sha256:[0-9a-f]{64}).*/\1/p' "$log" | tail -n 1)
           test -n "$digest"
           echo "digest=$digest" >>"$GITHUB_OUTPUT"
+          echo "image_ref=$IMAGE_NAME@$digest" >>"$GITHUB_OUTPUT"
 
       - name: Attest image
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
@@ -194,12 +233,77 @@ jobs:
           push-to-registry: true
           create-storage-record: false
 
-      - name: Update latest tag
+  regression:
+    name: Regression
+    needs:
+      - detect
+      - publish
+    if: >-
+      ${{ always() &&
+          needs.detect.result == 'success' &&
+          (needs.detect.outputs.image_affecting == 'false' ||
+           needs.publish.result == 'success') }}
+    uses: ./.github/workflows/formosa-regression.yml
+    with:
+      image: ${{ needs.publish.outputs.image_ref || 'ghcr.io/formosa-gpgpu/formosa:latest' }}
+    permissions:
+      contents: read
+
+  promote:
+    name: Promote latest
+    needs:
+      - publish
+      - regression
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      packages: write
+    env:
+      IMAGE_NAME: ghcr.io/formosa-gpgpu/formosa
+      IMAGE_REF: ${{ needs.publish.outputs.image_ref }}
+    steps:
+      - name: Log in to GHCR
         env:
-          IMAGE_ID: ${{ steps.image.outputs.image_id }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" \
+            --password-stdin
+
+      - name: Update latest tag
         run: |
           set -euo pipefail
-          image="$IMAGE_NAME:latest"
-          log="$RUNNER_TEMP/docker-push-latest.log"
-          docker tag "$IMAGE_ID" "$image"
-          bash .github/scripts/push-image.sh "$image" "$log"
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --tag "$IMAGE_NAME:latest" \
+            "$IMAGE_REF"
+          latest_digest=$(docker buildx imagetools inspect \
+            --format '{{json .Manifest.Digest}}' \
+            "$IMAGE_NAME:latest" | jq -r .)
+          candidate_digest=${IMAGE_REF##*@}
+          test "$latest_digest" = "$candidate_digest"
+
+  public-ci:
+    name: Public CI
+    if: ${{ always() && needs.detect.result != 'skipped' }}
+    needs:
+      - detect
+      - publish
+      - regression
+      - promote
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Require regression
+        env:
+          IMAGE_AFFECTING: ${{ needs.detect.outputs.image_affecting }}
+          DETECT_RESULT: ${{ needs.detect.result }}
+          REGRESSION_RESULT: ${{ needs.regression.result }}
+          PROMOTE_RESULT: ${{ needs.promote.result }}
+        run: |
+          set -euo pipefail
+          test "$DETECT_RESULT" = success
+          test "$REGRESSION_RESULT" = success
+          if [[ "$IMAGE_AFFECTING" == true ]]; then
+            test "$PROMOTE_RESULT" = success
+          fi
