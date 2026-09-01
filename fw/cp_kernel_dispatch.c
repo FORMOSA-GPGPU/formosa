@@ -38,9 +38,8 @@ static int wait_for_stack_remap_slot(volatile struct sm_mmio *sm,
 }
 
 static void signal_kernel_failure(KernelDispatchPacket *packet,
-                                  enum KernelStatusCode kernel_status) {
+                                  FsaCompletionResult result) {
   KernelStatus status = {
-      .code = kernel_status,
       .mcause = 0,
       .mepc = 0,
       .mtval = 0,
@@ -48,9 +47,7 @@ static void signal_kernel_failure(KernelDispatchPacket *packet,
   if (packet->kernel_status != 0) {
     memcpy((void *)packet->kernel_status, &status, sizeof(status));
   }
-
-  cp_publish_completion(packet->completion_token,
-                        FSA_COMPLETION_RESULT_COMMAND_FAILURE_MIN);
+  cp_publish_completion(packet->completion_token, result);
 }
 
 static bool valid_kernel_dispatch_packet(const KernelDispatchPacket *packet) {
@@ -66,7 +63,7 @@ static bool valid_kernel_dispatch_packet(const KernelDispatchPacket *packet) {
 }
 
 static void signal_stack_remap_failure(KernelDispatchPacket *packet) {
-  signal_kernel_failure(packet, kKernelUnknownError);
+  signal_kernel_failure(packet, kKernelCompletionUnknownError);
 }
 
 static inline bool update_id(int num_x, int num_y, int num_z, int *x, int *y,
@@ -131,7 +128,7 @@ static bool sm_alloc(uint64_t local_mem_size, volatile struct sm_mmio **smp,
 
 void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
   if (!valid_kernel_dispatch_packet(packet)) {
-    signal_kernel_failure(packet, kKernelBadDimension);
+    signal_kernel_failure(packet, kKernelCompletionBadDimension);
     return;
   }
 
@@ -152,17 +149,7 @@ void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
   kernel_state_buf[kid].wg_left = num_x * num_y * num_z;
 
   if (kernel_state_buf[kid].wg_left == 0) {
-    KernelStatus empty = {
-        .code = kKernelBadDimension,
-        .mcause = 0,
-        .mepc = 0,
-        .mtval = 0,
-    };
-    if (packet->kernel_status != 0) {
-      memcpy((void *)packet->kernel_status, &empty, sizeof(empty));
-    }
-    cp_publish_completion(packet->completion_token,
-                          FSA_COMPLETION_RESULT_COMMAND_FAILURE_MIN);
+    signal_kernel_failure(packet, kKernelCompletionBadDimension);
     cp_kernel_state_buf_free(kid);
     return;
   }

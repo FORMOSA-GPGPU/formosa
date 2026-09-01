@@ -151,6 +151,12 @@ typedef enum {
 } MemoryCopyStatus;
 
 typedef enum {
+  kKernelCompletionBadDimension = 2,
+  kKernelCompletionException = 3,
+  kKernelCompletionUnknownError = 4,
+} KernelCompletionStatus;
+
+typedef enum {
   kFirmwareFaultNone = FSA_FIRMWARE_FAULT_NONE,
   kFirmwareFaultMemoryCopyTimeout = FSA_FIRMWARE_FAULT_MEMORY_COPY_TIMEOUT,
   kFirmwareFaultDmaProtocol = FSA_FIRMWARE_FAULT_DMA_PROTOCOL,

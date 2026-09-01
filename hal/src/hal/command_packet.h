@@ -182,6 +182,15 @@ FSA_STATIC_ASSERT((FsaCompletionResult)kMemoryCopyStatusTimeout <=
 FSA_STATIC_ASSERT((FsaCompletionResult)kMemoryCopyStatusTimeout !=
                       FSA_COMPLETION_RESULT_FIRMWARE_REBOOT,
                   "memory-copy timeout collides with FirmwareReboot");
+FSA_STATIC_ASSERT((FsaCompletionResult)kKernelCompletionBadDimension >=
+                      FSA_COMPLETION_RESULT_COMMAND_FAILURE_MIN,
+                  "kernel failure below command-failure range");
+FSA_STATIC_ASSERT((FsaCompletionResult)kKernelCompletionUnknownError <=
+                      FSA_COMPLETION_RESULT_COMMAND_FAILURE_MAX,
+                  "kernel failure above command-failure range");
+FSA_STATIC_ASSERT((FsaCompletionResult)kKernelCompletionUnknownError !=
+                      FSA_COMPLETION_RESULT_FIRMWARE_REBOOT,
+                  "kernel unknown error collides with FirmwareReboot");
 FSA_STATIC_ASSERT(sizeof(FsaCompletionToken) == FSA_COMPLETION_TOKEN_BYTES,
                   "completion token ABI size mismatch");
 FSA_STATIC_ASSERT(FSA_ALIGNOF(FsaCompletionToken) == FSA_COMPLETION_TOKEN_BYTES,

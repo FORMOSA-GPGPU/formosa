@@ -10,7 +10,7 @@ let
   crossPkgs = pkgs.pkgsCross.riscv64-embedded;
   src = builtins.fetchGit {
     url = "https://github.com/FORMOSA-GPGPU/formosa-pocl.git";
-    rev = "022acb1591d64068722cb20ce6f847726a6f0237";
+    rev = "4af82a49cf3e86ae34f680c8fbdb0849f30abb89";
     submodules = true;
   };
 in stdenv.mkDerivation {

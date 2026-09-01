@@ -102,15 +102,7 @@ int fsa_hal_reset(uint64_t timeout_ms);
  */
 int fsa_hal_cleanup();
 
-enum KernelStatusCode : uint64_t {
-  kKernelOkay = 0,
-  kKernelBadDimension = 1,
-  kKernelException = 2,
-  kKernelUnknownError = 3
-};
-
 typedef struct {
-  enum KernelStatusCode code;
   uint64_t mcause;
   uint64_t mepc;
   uint64_t mtval;

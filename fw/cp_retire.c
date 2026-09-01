@@ -25,10 +25,18 @@
 
 // WGInitializer deq status encoding:
 //   0: kWGOkay, 1: kWGException, 2: kWGInvalid, 3: kWGDispatchFailed
-// Kernel status encoding:
-//   0: kKernelOkay, 1: kKernelBadDimension, 2: kKernelException, 3: unknown
-static const enum KernelStatusCode to_kernel_status_code[] = {
-    kKernelOkay, kKernelException, kKernelBadDimension, kKernelUnknownError};
+static FsaCompletionResult to_kernel_completion_result(uint64_t deq_status) {
+  switch (deq_status) {
+    case 0:
+      return FSA_COMPLETION_RESULT_SUCCESS;
+    case 1:
+      return kKernelCompletionException;
+    case 2:
+      return kKernelCompletionBadDimension;
+    default:
+      return kKernelCompletionUnknownError;
+  }
+}
 
 // Iterate through all the SMs and see which one has DEQ_VALID awaiting
 static bool sm_free(volatile struct sm_mmio **smp) {
@@ -156,9 +164,9 @@ void cp_retire_sm(void *args) {
       continue;
     }
 
-    // Read the Kernel status and deassert the DEQ_VALID
+    const FsaCompletionResult result =
+        to_kernel_completion_result(sm->DEQ_STATUS);
     KernelStatus kstatus = {
-        .code = to_kernel_status_code[sm->DEQ_STATUS],
         .mcause = sm->DEQ_MCAUSE,
         .mepc = sm->DEQ_MEPC,
         .mtval = sm->DEQ_MTVAL,
@@ -185,16 +193,11 @@ void cp_retire_sm(void *args) {
       const FsaCompletionToken completion_token = kstate->completion_token;
 
       if (kstatus_ptr != 0) {
-        memcpy((void *)kstatus_ptr, &kstatus, sizeof(KernelStatus));
+        memcpy((void *)kstatus_ptr, &kstatus, sizeof(kstatus));
       }
-
-      const FsaCompletionResult result =
-          kstatus.code == kKernelOkay
-              ? FSA_COMPLETION_RESULT_SUCCESS
-              : FSA_COMPLETION_RESULT_COMMAND_FAILURE_MIN;
+      cp_publish_completion(completion_token, result);
       DPRINTF("[R]WriteCompletion token=0x%lx result=%u\r\n",
               (unsigned long)completion_token, (unsigned)result);
-      cp_publish_completion(completion_token, result);
       cp_kernel_state_buf_free(kid);
     }
   }
