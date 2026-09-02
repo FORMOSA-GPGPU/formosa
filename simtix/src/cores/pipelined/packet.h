@@ -50,26 +50,6 @@ struct Packet {
   // I-Buffer flush stats only count originals (!is_shared).
   bool is_shared = false;
 
-  bool is_spill_access() const {
-    bool is_load = HasFlag(flag, ExecFlag::LOAD);
-    bool is_store = HasFlag(flag, ExecFlag::STORE);
-    uint8_t rs1 = instr.rs1();
-    uint8_t rs2 = instr.rs2();
-    uint8_t rd = instr.rd();
-
-    // 3. Get the register that carries data (rd for load, rs2 for store)
-    uint8_t data_reg = is_load ? rd : rs2;
-    bool is_temp_arg_reg = (data_reg >= 5 && data_reg <= 7) ||
-                           (data_reg >= 10 && data_reg <= 17) ||
-                           (data_reg >= 28 && data_reg <= 31);
-
-    // 1. If it's a load/store instruction
-    // 2. Base register (rs1) is either sp(2) or s0/fp(8)
-    // 3. Check if the data register is a temporary or argument register
-    //    (t0-t2, a0-a7, t3-t6)
-    return (is_load || is_store) && (rs1 == 2 || rs1 == 8) && (is_temp_arg_reg);
-  }
-
  private:
   explicit Packet(const ArchParam &param)
       : tmask(false, static_cast<int>(param.num_lanes)),
