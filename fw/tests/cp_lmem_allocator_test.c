@@ -45,13 +45,11 @@ extern lmem_allocator_t g_lmem_allocators[FORMOSA_MAX_NUM_SM];
 
 // override the information in cp_hwinfo.c to avoid MMIO access in tests
 uint64_t g_num_sm = 1;
-uint64_t g_per_sm_wg_resident_limits[FORMOSA_MAX_NUM_SM] = {0};
 
-int cp_hwinfo_init() {
-  for (size_t i = 0; i < g_num_sm; ++i) {
-    g_per_sm_wg_resident_limits[i] = TEST_WG_RESIDENT_LIMIT;
-  }
-  return 0;
+void cp_hwinfo_init(void) {}
+
+uint64_t cp_hwinfo_sm_wg_resident_limit(size_t sm_id) {
+  return sm_id < g_num_sm ? TEST_WG_RESIDENT_LIMIT : 0;
 }
 // end of overrides for cp_hwinfo.c
 

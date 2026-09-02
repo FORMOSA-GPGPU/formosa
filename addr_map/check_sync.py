@@ -28,6 +28,8 @@ PAIRS = [
     ("FSA_LMEM_SIZE", "lmem_size"),
     ("FSA_SM_MMIO_STRIDE", "sm_mmio_stride"),
     ("FSA_SM_MMIO_REG_SIZE", "sm_mmio_reg_size"),
+    ("FSA_SM_STACK_REMAP_CSR_OFF", "stack_remap_csr_base"),
+    ("FSA_SM_STACK_REMAP_MAX_ENTRIES", "stack_remap_max_entries"),
 ]
 
 

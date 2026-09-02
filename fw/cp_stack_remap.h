@@ -18,7 +18,7 @@ enum CpStackRemapStatus {
   kCpStackRemapInvalid = -1,
 };
 
-bool cp_stack_remap_thread_geometry_valid(uint64_t threads_per_core);
+bool cp_stack_remap_validate_config(const volatile struct sm_mmio *sm);
 void cp_stack_remap_reset(volatile struct sm_mmio *sm);
 int cp_stack_remap_configure(volatile struct sm_mmio *sm, uint64_t stack_base,
                              int *slot);

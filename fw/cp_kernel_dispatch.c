@@ -17,6 +17,7 @@
 #include "cp_lmem_allocator.h"
 #include "cp_log.h"
 #include "cp_moving_average.h"
+#include "cp_panic.h"
 #include "cp_stack_remap.h"
 #include "cp_wgi_buffer.h"
 
@@ -60,10 +61,6 @@ static bool valid_kernel_dispatch_packet(const KernelDispatchPacket *packet) {
   return packet->local_size_x != 0 && packet->local_size_y != 0 &&
          packet->local_size_z != 0 && packet->num_groups_x != 0 &&
          packet->num_groups_y != 0 && packet->num_groups_z != 0;
-}
-
-static void signal_stack_remap_failure(KernelDispatchPacket *packet) {
-  signal_kernel_failure(packet, kKernelCompletionUnknownError);
 }
 
 static inline bool update_id(int num_x, int num_y, int num_z, int *x, int *y,
@@ -228,18 +225,11 @@ void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
       int stack_remap_status = wait_for_stack_remap_slot(
           sm, wgi_buf[wbid].wginfo.stack_base, &stack_remap_slot);
       if (stack_remap_status != kCpStackRemapOkay) {
-        fprintf(stderr,
-                "\033[31mInvalid stack remap configuration for SM %lu, "
-                "stack base 0x%lx\033[0m\r\n",
-                (unsigned long)sm_id,
-                (unsigned long)wgi_buf[wbid].wginfo.stack_base);
-        if (wginfo.local_memory_size != 0) {
-          cp_lmem_allocator_free(sm_id, local_mem_base);
-        }
-        cp_wgi_buf_free(wbid);
-        cp_kernel_state_buf_free(kid);
-        signal_stack_remap_failure(packet);
-        return;
+        cp_panic(
+            "Invalid stack remap configuration for SM %lu, "
+            "stack base 0x%lx",
+            (unsigned long)sm_id,
+            (unsigned long)wgi_buf[wbid].wginfo.stack_base);
       }
       wgi_buf[wbid].stack_remap_slot = stack_remap_slot;
     }

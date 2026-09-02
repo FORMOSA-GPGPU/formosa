@@ -54,18 +54,17 @@ local M = {
   sm_mmio_base = 0x00070000,
   sm_mmio_aperture = 0x00010000,
   sm_mmio_stride = 0x1000,
-  sm_mmio_reg_size = 0xE8,
+  sm_mmio_reg_size = 0xF8,
   wgi_csr_base = 0x00,
   wgi_csr_size = 0x60,
   icache_csr_base = 0x60,
   dcache_csr_base = 0x80,
   cache_csr_size = 0x20,
   core_csr_base = 0xA0,
-  core_csr_size = 0x08,
-  stack_remap_csr_base = 0xA8,
-  stack_remap_entries = 8,
+  core_csr_size = 0x18,
+  stack_remap_csr_base = 0xB8,
+  stack_remap_max_entries = 0x8,
   stack_remap_csr_size = 0x40,
-  stack_remap_group_size = 64,
 
   -- On-chip GMEM
   onchip_gmem_base = 0x00100000,
@@ -119,6 +118,8 @@ function M.validate()
   assert(M.cp_csr_base >= M.fsa_mmio_base)
   assert(M.scratch_base >= M.cp_csr_base + M.cp_csr_size)
   assert(M.scratch_base + M.scratch_size <= M.fsa_mmio_base + M.mmio_size)
+  assert(M.stack_remap_csr_size == M.stack_remap_max_entries * 8)
+  assert(M.sm_mmio_reg_size == M.stack_remap_csr_base + M.stack_remap_csr_size)
   assert(M.noncache_alloc_base + M.noncache_alloc_size == M.firmware_staging_base)
   assert(M.firmware_staging_base + M.firmware_staging_size == M.stack_base)
   assert(M.firmware_staging_size == M.cp_tcm_size)

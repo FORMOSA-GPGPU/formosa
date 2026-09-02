@@ -77,11 +77,11 @@
 #define configUSE_PORT_OPTIMISED_TASK_SELECTION 0
 
 /* Assert definitions. */
-void vAssertCalled(void);
+void vAssertCalled(const char *file, int line);
 #define configASSERT_DEFINED 1
-#define configASSERT(x)        \
-  do {                         \
-    if (!(x)) vAssertCalled(); \
+#define configASSERT(x)                          \
+  do {                                           \
+    if (!(x)) vAssertCalled(__FILE__, __LINE__); \
   } while (0)
 
 /* Co-routine definitions. */

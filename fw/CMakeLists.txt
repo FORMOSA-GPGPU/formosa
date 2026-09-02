@@ -62,6 +62,7 @@ add_executable(gpufw.elf
   cp_stack_remap.c
   cp_trace.c
   cp_moving_average.c
+  cp_panic.c
 )
 
 target_include_directories(gpufw.elf PRIVATE

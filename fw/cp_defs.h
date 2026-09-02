@@ -51,11 +51,6 @@
 
 #define PER_THREAD_STACK_SIZE ((size_t)FSA_PER_THREAD_STACK_SIZE)
 
-_Static_assert(FSA_STACK_BASE % FSA_STACK_REMAP_REGION_SIZE == 0,
-               "Stack pool base must be stack-remap-region aligned");
-_Static_assert(FSA_SM_STACK_REMAP_ENTRIES >= FORMOSA_MAX_WG_RESIDENT_LIMIT,
-               "Stack remap table must cover all resident workgroups");
-
 typedef enum { kCacheOpNop = 0, kCacheOpFlush, kCacheOpInvalidate } CacheOpMode;
 
 _Static_assert(sizeof(union Packet) == 64,
@@ -146,15 +141,21 @@ struct sm_mmio {
   volatile uint64_t DCACHE_CONTROL_ADDR;
   volatile uint64_t DCACHE_CONTROL_SIZE;
   volatile uint64_t DCACHE_CONTROL_MODE;
-  // Core
+  // CoreInfo
   volatile uint64_t THREADS_PER_CORE;
-  // Stack remapping table. Each entry stores an aligned region base plus
-  // FSA_STACK_REMAP_VALID_BIT.
-  volatile uint64_t STACK_REMAP_TABLE[FSA_SM_STACK_REMAP_ENTRIES];
+  volatile uint64_t STACK_REMAP_ENTRY_COUNT;
+  volatile uint64_t STACK_REMAP_GROUP_SIZE;
+  // Stack remapping table entries
+  // Each entry stores an aligned region base plus FSA_STACK_REMAP_VALID_BIT.
+  volatile uint64_t STACK_REMAP_TABLE[FSA_SM_STACK_REMAP_MAX_ENTRIES];
 };
 
 _Static_assert(offsetof(struct sm_mmio, THREADS_PER_CORE) == 0xA0,
                "THREADS_PER_CORE must be at SM offset 0xa0");
+_Static_assert(offsetof(struct sm_mmio, STACK_REMAP_ENTRY_COUNT) == 0xA8,
+               "STACK_REMAP_ENTRY_COUNT must be at SM offset 0xa8");
+_Static_assert(offsetof(struct sm_mmio, STACK_REMAP_GROUP_SIZE) == 0xB0,
+               "STACK_REMAP_GROUP_SIZE must be at SM offset 0xb0");
 _Static_assert(offsetof(struct sm_mmio, STACK_REMAP_TABLE) ==
                    FSA_SM_STACK_REMAP_CSR_OFF,
                "STACK_REMAP_TABLE offset mismatch");

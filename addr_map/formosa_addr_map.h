@@ -128,7 +128,7 @@
 #define FSA_SM_MMIO_BASE 0x00070000ull
 #define FSA_SM_MMIO_APERTURE 0x00010000ull /* 64 KiB total */
 #define FSA_SM_MMIO_STRIDE 0x1000ull       /* 4 KiB per SM */
-#define FSA_SM_MMIO_REG_SIZE 0xE8ull       /* sizeof(struct sm_mmio) */
+#define FSA_SM_MMIO_REG_SIZE 0xF8ull       /* sizeof(struct sm_mmio) */
 #define FSA_SM_MMIO_MAX_SMS (FSA_SM_MMIO_APERTURE / FSA_SM_MMIO_STRIDE)
 
 /* Per-SM CSR offsets inside the 4 KiB window (matches struct sm_mmio) */
@@ -138,15 +138,12 @@
 #define FSA_SM_DCACHE_CSR_OFF 0x80ull
 #define FSA_SM_CACHE_CSR_SIZE 0x20ull
 #define FSA_SM_CORE_CSR_OFF 0xA0ull
-#define FSA_SM_CORE_CSR_SIZE 0x08ull
-#define FSA_SM_STACK_REMAP_CSR_OFF 0xA8ull
-#define FSA_SM_STACK_REMAP_ENTRIES 8ull
-#define FSA_SM_STACK_REMAP_CSR_SIZE (FSA_SM_STACK_REMAP_ENTRIES * 8ull)
+#define FSA_SM_CORE_CSR_SIZE 0x18ull
+#define FSA_SM_STACK_REMAP_CSR_OFF 0xB8ull
+#define FSA_SM_STACK_REMAP_MAX_ENTRIES 0x8ull
+#define FSA_SM_STACK_REMAP_CSR_SIZE (FSA_SM_STACK_REMAP_MAX_ENTRIES * 8ull)
 #define FSA_STACK_REMAP_VALID_BIT 0x1ull
 #define FSA_STACK_REMAP_ADDRESS_MASK 0x0000FFFFFFFFFFFFull
-#define FSA_STACK_REMAP_GROUP_SIZE 64ull
-#define FSA_STACK_REMAP_REGION_SIZE \
-  (FSA_STACK_REMAP_GROUP_SIZE * FSA_PER_THREAD_STACK_SIZE)
 
 /* ---- On-chip global SRAM (system fabric) ---- */
 #define FSA_ONCHIP_GMEM_BASE 0x00100000ull
@@ -198,6 +195,10 @@
 #endif
 #if (FSA_SM_MMIO_REG_SIZE) > (FSA_SM_MMIO_STRIDE)
 #error "sm_mmio does not fit in SM MMIO stride"
+#endif
+#if (FSA_SM_STACK_REMAP_CSR_OFF + FSA_SM_STACK_REMAP_CSR_SIZE) != \
+    (FSA_SM_MMIO_REG_SIZE)
+#error "stack-remap CSR window must end at the SM MMIO register size"
 #endif
 #if (FSA_CP_CSR_SIZE) > (FSA_CP_CSR_BANK)
 #error "cp_mmio does not fit in CP CSR bank"

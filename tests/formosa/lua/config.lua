@@ -15,6 +15,16 @@ local threads_per_core = threads_per_warp * warps_per_core
 local wg_resident_limit = 8 -- Per SM resident work-group limit
 local cp_kernel_state_buf_size = 4
 local num_sm = 1
+local stack_remap_entries = 8
+local stack_remap_group_size = threads_per_core
+
+local function is_power_of_two(value)
+  while value > 1 and value % 2 == 0 do
+    value = value / 2
+  end
+  return value == 1
+end
+
 assert(
   num_sm and num_sm >= 1 and num_sm <= max_num_sm and num_sm % 1 == 0,
   string.format("num_sm must be an integer between 1 and %d", max_num_sm)
@@ -23,10 +33,16 @@ assert(
   max_num_sm * addr.sm_mmio_stride <= addr.sm_mmio_aperture,
   "SM MMIO aperture must fit FORMOSA_MAX_NUM_SM windows"
 )
-
--- sm_mmio_reg_size must match sizeof(struct sm_mmio) in fw/cp_defs.h.
--- Decode window per SM is sm_mmio_stride (4 KiB), independent of reg size.
-assert(addr.sm_mmio_reg_size == addr.stack_remap_csr_base + addr.stack_remap_csr_size)
+assert(is_power_of_two(stack_remap_group_size), "stack_remap_group_size must be a power of two")
+assert(
+  threads_per_core % stack_remap_group_size == 0,
+  "stack_remap_group_size must divide threads_per_core"
+)
+assert(stack_remap_entries >= wg_resident_limit, "stack_remap_entries must >= wg_resident_limit")
+assert(
+  stack_remap_entries <= addr.stack_remap_max_entries,
+  "stack_remap_entries must not exceed the MMIO ABI maximum"
+)
 
 ---@class formosa.system.config
 local Config = {
@@ -89,8 +105,6 @@ local Config = {
   core_csr_base = addr.core_csr_base,
   stack_remap_csr_base = addr.stack_remap_csr_base,
   stack_remap_csr_size = addr.stack_remap_csr_size,
-  stack_remap_entries = addr.stack_remap_entries,
-  stack_remap_group_size = addr.stack_remap_group_size,
 
   -- Caches / cores
   cache_size = 0x1000,
@@ -106,6 +120,8 @@ local Config = {
   threads_per_core = threads_per_core,
   wg_resident_limit = wg_resident_limit,
   cp_kernel_state_buf_size = cp_kernel_state_buf_size,
+  stack_remap_entries = stack_remap_entries,
+  stack_remap_group_size = stack_remap_group_size,
 
   non_cacheable_regions = {
     { addr = addr.sm_printbuf_base, size = threads_per_core },

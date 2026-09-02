@@ -126,12 +126,14 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
   self._core_info = simple.ConstantTable("CoreInfo", {
     entries = {
       { addr = 0x00, size = 8, value = config.threads_per_core }, -- Max threads per core
+      { addr = 0x08, size = 8, value = config.stack_remap_entries }, -- Stack remap entries
+      { addr = 0x10, size = 8, value = config.stack_remap_group_size }, -- Stack remap group size
     },
   })
 
   self._stack_remap = simtix.StackRemapTable("StackRemapTable", {
     entries = config.stack_remap_entries,
-    region_size = config.stack_size_per_thread * config.stack_remap_group_size,
+    region_size = config.stack_size_per_thread * config.threads_per_core,
   })
 
   self._router = simple.XBar("SMRouter", 1, {
