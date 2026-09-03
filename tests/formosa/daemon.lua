@@ -33,6 +33,7 @@ parser
   :convert(tonumber)
   :default(0)
 parser:option("--drain", "Extra drain cycles after the main run"):convert(tonumber):default(5000)
+parser:flag("--keep-alive", "Ignore client Terminate and keep the simulation running")
 
 local args = parser:parse({ ... })
 
@@ -40,7 +41,9 @@ config.pipelined_core_config = config.pipelined_core_config or {}
 config.pipelined_core_config.heartbeat_frequency = args.heartbeat_frequency
 
 local make_sm = require(args.sm)
-local system = System("System", "/tmp/formosa.sock", config, make_sm)
+local system = System("System", "/tmp/formosa.sock", config, make_sm, {
+  keep_alive = args.keep_alive,
+})
 
 config:dump(".lv-formosa-config.sh")
 

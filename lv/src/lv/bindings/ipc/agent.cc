@@ -28,6 +28,7 @@ struct Param {
   std::string socket_path = "/tmp/ipc.socket";
   uint32_t timeout_ms = 100;
   bool debug = false;
+  bool ignore_terminate = false;
   std::optional<sol::function> probe_hook;
 
   // clang-format off
@@ -35,6 +36,7 @@ struct Param {
             LV_FIELD(socket_path, "IPC socket path"),
             LV_FIELD(timeout_ms, "Socket timeout in milliseconds"),
             LV_FIELD(debug, "Enable debug-transport mode"),
+            LV_FIELD(ignore_terminate, "Ack Terminate without pausing the simulation"),
             LV_FIELD(probe_hook, "Callback invoked on probe requests"))
   // clang-format on
 };
@@ -44,7 +46,7 @@ struct Param {
 SC_MODULE(Agent) {
  public:
   SC_CTOR(Agent, std::string_view socket_path, uint32_t timeout_ms, bool debug,
-          std::function<void()> probe_hook)
+          std::function<void()> probe_hook, bool ignore_terminate)
       : timeout_({.tv_sec = timeout_ms / 1000,
                   .tv_usec = (timeout_ms % 1000) * 1000}),
         accept_thread_(libcomm::Serve(
@@ -64,7 +66,8 @@ SC_MODULE(Agent) {
               }),
         source_("source"),
         probe_hook_(probe_hook),
-        debug_(debug) {
+        debug_(debug),
+        ignore_terminate_(ignore_terminate) {
     SC_THREAD(HandleReqFw);
     SC_THREAD(HandleRespFw);
     SC_THREAD(HandleRespBw);
@@ -130,7 +133,7 @@ SC_MODULE(Agent) {
     for (;;) {
       wait(terminate_event_);
       transceiver_->Send(libcomm::Msg::Respond(terminate_msg_));
-      sc_pause();
+      if (!ignore_terminate_) sc_pause();
     }
   }
 
@@ -390,18 +393,20 @@ SC_MODULE(Agent) {
   std::function<void()> probe_hook_;
 
   bool debug_;
+  bool ignore_terminate_;
 };
 
 LV_BINDING(ipc, Agent)
     .constructor(
         [](const char *name, const Param &param) {
-          return std::make_shared<Agent>(name, param.socket_path,
-                                         param.timeout_ms, param.debug,
-                                         [probe_hook = param.probe_hook]() {
-                                           if (probe_hook.has_value()) {
-                                             (*probe_hook)();
-                                           }
-                                         });
+          return std::make_shared<Agent>(
+              name, param.socket_path, param.timeout_ms, param.debug,
+              [probe_hook = param.probe_hook]() {
+                if (probe_hook.has_value()) {
+                  (*probe_hook)();
+                }
+              },
+              param.ignore_terminate);
         },
         lv::params("name", "param"), lv::doc("Create an IPC bridge agent"))
     .property("target", &Agent::set_target, lv::doc("Outgoing memory target"))

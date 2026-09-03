@@ -11,6 +11,7 @@
 
 ---@class formosa.system.opts
 ---@field replay boolean
+---@field keep_alive boolean
 
 ---@class formosa.system
 ---@field protected _period sc.time
@@ -242,6 +243,7 @@ function System.new(name, agent_socket_path, config, make_sm, opts)
     socket_path = agent_socket_path,
     timeout_ms = 100,
     debug = false,
+    ignore_terminate = opts.keep_alive or false,
   })
   self._host_dma = dma.DMA("host_dma", { fifo_size = 2 })
   self._device_dma = dma.DMA("device_dma", { fifo_size = 2 })
