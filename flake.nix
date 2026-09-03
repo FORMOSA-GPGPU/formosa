@@ -9,9 +9,25 @@
     nixpkgs.url = "github:nixos/nixpkgs?ref=nixos-25.11";
     flake-utils.url = "github:numtide/flake-utils";
 
+    # Keep private source fetching in the flake evaluator.  Developers use
+    # their existing SSH agent; CI rewrites these URLs to its read-only HTTPS
+    # job-token URL before evaluation.  The lock file records the exact tree
+    # hash, so the source identity does not depend on a mutable timestamp.
+    formosa-llvm-src = {
+      url =
+        "git+https://github.com/FORMOSA-GPGPU/formosa-llvm.git?rev=cfd7f122277767595096114ec366c38abeffbf48&shallow=1";
+      flake = false;
+    };
+    formosa-pocl-src = {
+      url =
+        "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=ebc9805ba5ec6a1061dca2a9c3b344770c43e29a&shallow=1&submodules=1";
+      flake = false;
+    };
+
   };
 
-  outputs = { self, nixpkgs, flake-utils, ... }:
+  outputs =
+    { self, nixpkgs, flake-utils, formosa-llvm-src, formosa-pocl-src, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -26,7 +42,10 @@
           [ matplotlib numpy safetensors sentencepiece torch tqdm transformers ]
           ++ [ ps."huggingface-hub" ]);
 
-        formosaToolchain = import ./formosa-llvm/default.nix { inherit pkgs; };
+        formosaToolchain = import ./formosa-llvm/default.nix {
+          inherit pkgs;
+          src = formosa-llvm-src;
+        };
 
         softwareStacks = rec {
           formosa-llvm = formosaToolchain.llvm;
@@ -55,6 +74,7 @@
           "spirv-llvm" = spirvLlvm;
           formosa-pocl = import ./formosa-pocl/default.nix {
             inherit pkgs formosa-llvm formosa-clang-cross spirvLlvm;
+            src = formosa-pocl-src;
             hal = projectPackages.hal;
           };
         };
@@ -101,13 +121,36 @@
         #     and python (gemmaPython) on PATH. The cpplint/black hooks are
         #     language:python, installed by pre-commit into its own venv.
         #   - gcovr produces the coverage report in test jobs.
-        #   - openssh: the CI image's default before_script runs
-        #     ssh-agent/ssh-add/ssh-keyscan, so the image must ship an ssh
-        #     client. On macOS this shadows /usr/bin/ssh in the dev shell; if
+        #   - openssh: local developers use the flake's private Git sources via
+        #     their existing SSH setup.  CI uses the job-token HTTPS rewrite in
+        #     the bootstrap image, so it does not need an SSH agent there. On
+        #     macOS this package can shadow /usr/bin/ssh in the dev shell; if
         #     ~/.ssh/config uses Apple-only options (e.g. UseKeychain), either
         #     add `IgnoreUnknown UseKeychain` to it or point git at the system
         #     ssh with `git config --global core.sshCommand /usr/bin/ssh`.
         ciPackages = with pkgs; [ pre-commit clang-tools stylua gcovr openssh ];
+
+        # Container executors need a stable shell entrypoint.  Keeping it
+        # in the image means jobs can select an image by digest without having
+        # to interpolate store paths into every CI YAML file.
+        containerEntrypoint =
+          pkgs.writeShellScriptBin "formosa-container-entrypoint" ''
+            set -euo pipefail
+
+            shell=$1
+            rcfile=$2
+            shift 2
+
+            if (( $# == 0 )); then
+              exec "$shell" --rcfile "$rcfile" -i
+            fi
+            if (( $# == 1 )); then
+              exec "$shell" --rcfile "$rcfile" -ci "$1"
+            fi
+
+            printf -v command ' %q' "$@"
+            exec "$shell" --rcfile "$rcfile" -ci "exec''${command}"
+          '';
 
         toolPackages = pkgs.lib.mapAttrsToList (name: value: value) tools;
         shellToolBins = [
@@ -133,41 +176,28 @@
           '';
         };
 
-        # buildNixShellImage hardcodes the image config's `created` field to
-        # 1970-01-01 (it exposes no `created` arg). The container-registry
-        # cleanup orders tags solely by that timestamp with no tie-break, so
-        # identical timestamps make it delete tags at random. We re-stamp
-        # `created` to the flake's commit time (`self.lastModified`) by rewriting
-        # only that one field in the image config; the layers — and therefore
-        # Cmd/Env/Entrypoint — are left byte-for-byte intact. On a clean tree
-        # `self.lastModified` is HEAD's committer time, so `nix build` is
-        # reproducible (same commit -> same bytes). On a dirty tree it falls back
-        # to the working-tree file mtimes (no commit), so scripts/update-docker-env.sh
-        # refuses to publish a dirty tree — published images always map to a commit.
-        buildDockerImage = name: drv:
-          let
-            baseImage = pkgs.dockerTools.buildNixShellImage {
-              inherit name drv;
-              uid = 0;
-            };
-            # `@N` is GNU date's epoch syntax; self.lastModified is HEAD's
-            # committer time on a clean tree (file mtimes on a dirty one).
-            createdEpoch = "@${toString self.lastModified}";
-          in pkgs.runCommand "${name}-env.tar.gz" {
-            nativeBuildInputs = [ pkgs.jq ];
-          } ''
+        # A lightweight identity for preflight lookup.  Evaluating the Docker
+        # archive itself asks Nix to materialize the full shell closure; this
+        # text output only records the shell and entrypoint derivation paths,
+        # so registry hits do not download the image contents just to decide
+        # whether a rebuild is needed.  Bump the format version when the image
+        # transformation below changes independently of these paths.
+        formosaDockerEnvFingerprint =
+          pkgs.writeText "formosa-docker-env-fingerprint" ''
+            format-version = 2
+            dev-shell = ${defaultDevShell}
+            entrypoint = ${containerEntrypoint}
+          '';
+
+        rewriteImageConfig = outputName: image: transform:
+          pkgs.runCommand outputName { nativeBuildInputs = [ pkgs.jq ]; } ''
             mkdir unpacked
-            tar -xf ${baseImage} -C unpacked
+            tar -xf ${image} -C unpacked
             cd unpacked
 
-            created=$(date -u -d "${createdEpoch}" +%Y-%m-%dT%H:%M:%SZ)
             config=$(jq -r '.[0].Config' manifest.json)
-            jq --arg c "$created" '.created = $c' "$config" > config.new
+            ${transform}
 
-            # The config file is named after the sha256 of its content; rewriting
-            # `created` changes that hash, so rename the file and repoint the
-            # manifest (docker load resolves the config by the manifest's Config
-            # field). Layers are untouched, so the image is otherwise identical.
             newname="$(sha256sum config.new | cut -d' ' -f1).json"
             mv config.new "$newname"
             [ "$newname" != "$config" ] && rm -f "$config"
@@ -177,6 +207,88 @@
             tar --sort=name --owner=0 --group=0 --numeric-owner --mtime=@0 \
               -cf - . | gzip -n > $out
           '';
+
+        rawDockerImage = name: drv:
+          pkgs.dockerTools.buildNixShellImage {
+            inherit name drv;
+            uid = 0;
+          };
+
+        formosaDockerShell = defaultDevShell.overrideAttrs (old: {
+          nativeBuildInputs = (old.nativeBuildInputs or [ ])
+            ++ [ containerEntrypoint ];
+        });
+
+        # This output contains only semantically relevant environment content.
+        # buildNixShellImage's constant `created` timestamp is intentionally
+        # retained here, so its store hash is stable across commits that do not
+        # change the environment.
+        formosaDockerImageContent =
+          rewriteImageConfig "formosa-env-content.tar.gz"
+          (rawDockerImage "formosa" formosaDockerShell) ''
+            jq --arg entrypoint "${containerEntrypoint}/bin/formosa-container-entrypoint" '
+              if (.config.Cmd | length) != 3 or .config.Cmd[1] != "--rcfile" then
+                error("unexpected buildNixShellImage Cmd")
+              else
+                .config.Entrypoint = [$entrypoint, .config.Cmd[0], .config.Cmd[2]]
+                | .config.Cmd = []
+              end
+            ' "$config" > config.new
+          '';
+
+        # Registry cleanup orders tags by image `created`.  Add the commit time
+        # only to the published presentation output; the lightweight
+        # fingerprint output above remains the canonical environment identity.
+        stampDockerImage = name: baseImage:
+          let
+            createdEpoch = "@${toString self.lastModified}";
+            fingerprint = builtins.unsafeDiscardStringContext
+              (builtins.substring 0 32
+                (builtins.baseNameOf formosaDockerEnvFingerprint.drvPath));
+          in rewriteImageConfig "${name}-env.tar.gz" baseImage ''
+            created=$(date -u -d "${createdEpoch}" +%Y-%m-%dT%H:%M:%SZ)
+            jq --arg created "$created" --arg fingerprint "${fingerprint}" '
+              .created = $created
+              | .config.Labels = ((.config.Labels // {}) + {
+                  "org.formosa.nix-fingerprint": $fingerprint
+                })
+            ' "$config" > config.new
+          '';
+
+        buildDockerImage = name: drv:
+          stampDockerImage name (rawDockerImage name drv);
+
+        # Maintainer-built once and pinned in the CI configuration.  This image
+        # is deliberately separate from the product environment: it is the
+        # control plane used to evaluate, inspect and publish environments.
+        ciBootstrapPackages = with pkgs; [
+          attic-client
+          bashInteractive
+          cacert
+          coreutils
+          curl
+          git
+          gnugrep
+          gnutar
+          jq
+          nix
+          openssh
+          ripgrep
+          skopeo
+        ];
+        formosaCiBootstrap = pkgs.dockerTools.buildLayeredImage {
+          name = "formosa-ci-bootstrap";
+          tag = "bootstrap";
+          contents = ciBootstrapPackages;
+          config = {
+            Env = [
+              "PATH=${pkgs.lib.makeBinPath ciBootstrapPackages}"
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "NIX_CONFIG=experimental-features = nix-command flakes"
+            ];
+            WorkingDir = "/builds";
+          };
+        };
       in {
         devShells = {
           default = defaultDevShell;
@@ -185,7 +297,11 @@
 
         packages = {
           dev-shell = defaultDevShell;
-          formosa-docker-env = buildDockerImage "formosa" defaultDevShell;
+          formosa-docker-env-fingerprint = formosaDockerEnvFingerprint;
+          formosa-docker-env-content = formosaDockerImageContent;
+          formosa-docker-env =
+            stampDockerImage "formosa" formosaDockerImageContent;
+          formosa-ci-bootstrap = formosaCiBootstrap;
         } // projectPackages // softwareStacks // tools
           // (pkgs.lib.attrsets.mapAttrs' (name: value: {
             name = "${name}-docker-env";

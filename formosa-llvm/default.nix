@@ -2,14 +2,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-{ pkgs ? import <nixpkgs> { } }:
+{ pkgs ? import <nixpkgs> { }, src }:
 
 let
-  src = builtins.fetchGit {
-    url = "https://github.com/FORMOSA-GPGPU/formosa-llvm.git";
-    rev = "cfd7f122277767595096114ec366c38abeffbf48";
-  };
-
   # LLVM (clang/lld/lldb) is built exactly once here.
   formosa-llvm-unwrapped = pkgs.callPackage ./formosa-llvm.nix { inherit src; };
   compiler-rt = pkgs.callPackage ./compiler-rt.nix {

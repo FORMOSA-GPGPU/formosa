@@ -2,15 +2,15 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-{ stdenv, formosa-llvm, texinfo }:
+{ stdenv, formosa-llvm, texinfo, fetchFromGitHub }:
 
 stdenv.mkDerivation {
   name = "newlib";
-  src = builtins.fetchGit {
-    url = "https://github.com/cygwin/cygwin.git";
+  src = fetchFromGitHub {
+    owner = "cygwin";
+    repo = "cygwin";
     rev = "8ba4275b83ec27529f67e0d477611fa6d8d6e6bd";
-    ref = "newlib-4.6.0";
-    shallow = true;
+    hash = "sha256-mqWJFZIgz6HjuommjtpqCrEl0MKEsJhLqPlvMOZNH6o=";
   };
 
   enableParallelBuilding = true;

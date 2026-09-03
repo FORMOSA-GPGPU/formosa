@@ -174,7 +174,7 @@ is_header_file() {
 
 has_existing_notice() {
   local path="$1"
-  rg -q 'SPDX-License-Identifier|Copyright \(C\)|Copyright \(c\)|Copyright [0-9]|SPDX-FileCopyrightText' "$path"
+  grep -Eq 'SPDX-License-Identifier|Copyright \(C\)|Copyright \(c\)|Copyright [0-9]|SPDX-FileCopyrightText' "$path"
 }
 
 restore_shebangs() {

@@ -4,15 +4,9 @@
 
 { stdenv, opencl-headers, opencl-clhpp, openssh, git, cmake, ninja, python3
 , zlib, hwloc, ocl-icd, clinfo, pkg-config, formosa-llvm, hal, xxd
-, formosa-clang-cross, spirvLlvm, pkgs ? import <nixpkgs> { }, }:
+, formosa-clang-cross, spirvLlvm, src, pkgs ? import <nixpkgs> { }, }:
 
-let
-  crossPkgs = pkgs.pkgsCross.riscv64-embedded;
-  src = builtins.fetchGit {
-    url = "https://github.com/FORMOSA-GPGPU/formosa-pocl.git";
-    rev = "4af82a49cf3e86ae34f680c8fbdb0849f30abb89";
-    submodules = true;
-  };
+let crossPkgs = pkgs.pkgsCross.riscv64-embedded;
 in stdenv.mkDerivation {
   name = "formosa-pocl";
   inherit src;

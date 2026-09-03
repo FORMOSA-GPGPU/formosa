@@ -22,10 +22,13 @@ let
     ];
   };
 
-  freeRTOSKernel = builtins.fetchGit {
-    url = "https://github.com/FreeRTOS/FreeRTOS-Kernel.git";
-    ref = "refs/tags/V11.2.0";
+  # Fixed-output archive fetches keep evaluation offline.  The rev remains
+  # explicit so updating the kernel is a normal source change with a new hash.
+  freeRTOSKernel = pkgs.fetchFromGitHub {
+    owner = "FreeRTOS";
+    repo = "FreeRTOS-Kernel";
     rev = "0adc196d4bd52a2d91102b525b0aafc1e14a2386";
+    hash = "sha256-MTKNyA/nUaoX44cWEsRaPUphUgdMXzIxAfRRN7CmKPQ=";
   };
 
   crossPkgs = pkgs.pkgsCross.riscv64-embedded;

@@ -3,7 +3,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 { pkgs ? import <nixpkgs> { }, formosa-llvm, formosa-clang-cross, hal, spirvLlvm
-}:
+, src }:
 pkgs.callPackage ./formosa-pocl.nix {
-  inherit formosa-llvm formosa-clang-cross hal spirvLlvm;
+  inherit formosa-llvm formosa-clang-cross hal spirvLlvm src;
 }
