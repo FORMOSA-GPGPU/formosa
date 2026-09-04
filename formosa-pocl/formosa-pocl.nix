@@ -13,12 +13,6 @@ in stdenv.mkDerivation {
 
   # The Formosa device backend uses <elf.h>. On Darwin it is supplied by the
   # elf-header package listed in buildInputs below.
-  # When the Formosa device is built into libpocl, the imported HAL target must
-  # be GLOBAL so the parent scope can resolve FORMOSA_LIBS.
-  postPatch = ''
-    substituteInPlace lib/CL/devices/formosa/CMakeLists.txt \
-      --replace-fail 'find_package(Formosa REQUIRED)' 'find_package(Formosa REQUIRED GLOBAL)'
-  '';
 
   cmakeFlags = [
     "-D WITH_LLVM_CONFIG=${formosa-llvm}/bin/llvm-config"
