@@ -25,6 +25,26 @@ function(add_formosa_hal name)
   target_link_libraries(${target}
     PRIVATE formosa-real.${name} falloc
   )
+  if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # HAL is a C API but the static archive uses libstdc++. Darwin PoCL is
+    # clang/libc++; export the GNU runtime so the ICD can link it.
+    set(_formosa_stdcxx "")
+    foreach(_name IN ITEMS libstdc++.dylib libstdc++.so)
+      execute_process(
+        COMMAND "${CMAKE_CXX_COMPILER}" -print-file-name=${_name}
+        OUTPUT_VARIABLE _formosa_stdcxx
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+      )
+      if(EXISTS "${_formosa_stdcxx}")
+        break()
+      endif()
+    endforeach()
+    if(EXISTS "${_formosa_stdcxx}")
+      target_link_libraries(${target} INTERFACE "${_formosa_stdcxx}")
+    else()
+      target_link_libraries(${target} INTERFACE stdc++)
+    endif()
+  endif()
   set_target_properties(${target}
     PROPERTIES OUTPUT_NAME ${target}
   )

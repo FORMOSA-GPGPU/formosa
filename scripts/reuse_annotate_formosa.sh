@@ -247,6 +247,9 @@ if ((lint == 1)); then
 fi
 
 printf 'REUSE header candidates: %d files\n' "${#files[@]}"
+if ((${#files[@]} == 0)); then
+  exit 0
+fi
 printf '%s\n' "${files[@]}"
 
 if ((apply == 0)); then
@@ -262,10 +265,6 @@ The commands that will be used:
   reuse annotate --style cppsingle --year "$COPYRIGHT_YEAR" --copyright "$COPYRIGHT_HOLDER" --license "$LICENSE_ID" --skip-existing <listed .cl files>
   reuse annotate --year "$COPYRIGHT_YEAR" --copyright "$COPYRIGHT_HOLDER" --license "$LICENSE_ID" --skip-existing <listed non-.cl files>
 EOF
-  exit 0
-fi
-
-if ((${#files[@]} == 0)); then
   exit 0
 fi
 

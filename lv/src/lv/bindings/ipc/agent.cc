@@ -47,8 +47,9 @@ SC_MODULE(Agent) {
  public:
   SC_CTOR(Agent, std::string_view socket_path, uint32_t timeout_ms, bool debug,
           std::function<void()> probe_hook, bool ignore_terminate)
-      : timeout_({.tv_sec = timeout_ms / 1000,
-                  .tv_usec = (timeout_ms % 1000) * 1000}),
+      : timeout_(
+            {.tv_sec = static_cast<time_t>(timeout_ms / 1000),
+             .tv_usec = static_cast<suseconds_t>((timeout_ms % 1000) * 1000)}),
         accept_thread_(libcomm::Serve(
             socket_path.data(), &timeout_,
             [this](std::unique_ptr<libcomm::Transceiver> transceiver) {
