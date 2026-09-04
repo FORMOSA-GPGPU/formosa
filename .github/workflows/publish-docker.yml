@@ -15,51 +15,85 @@ concurrency:
   queue: max
 
 jobs:
-  detect:
-    name: Detect image changes
+  resolve:
+    name: Resolve Docker environment
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 30
     permissions:
       contents: read
+      packages: read
     outputs:
-      image_affecting: ${{ steps.changes.outputs.image_affecting }}
+      cache_hit: ${{ steps.image.outputs.cache_hit }}
+      environment_tag: ${{ steps.image.outputs.environment_tag }}
+      image_ref: ${{ steps.image.outputs.image_ref }}
     steps:
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          fetch-depth: 0
           persist-credentials: false
 
-      - name: Classify changes
-        id: changes
+      - name: Require main
+        if: github.ref != 'refs/heads/main'
+        run: |
+          echo "::error::Docker images may only be published from main"
+          exit 1
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          enable_kvm: false
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Log in to GHCR
         env:
-          PUSH_BASE_SHA: ${{ github.event.before }}
+          GHCR_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          printf '%s' "$GHCR_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" \
+            --password-stdin
+
+      - name: Resolve fingerprint image
+        id: image
+        env:
+          IMAGE_NAME: ghcr.io/formosa-gpgpu/formosa
         run: |
           set -euo pipefail
-          from=$PUSH_BASE_SHA
-          if [[ "$from" =~ ^0+$ || -z "$from" ]]; then
-            from="$GITHUB_SHA^"
+          fingerprint_path=$(nix eval \
+            --no-update-lock-file \
+            --no-write-lock-file \
+            --raw .#formosa-docker-env-fingerprint.drvPath)
+          fingerprint_name=${fingerprint_path##*/}
+          environment_id=${fingerprint_name%%-*}
+          [[ "$environment_id" =~ ^[0-9a-z]{32}$ ]]
+
+          environment_tag="nix-$environment_id"
+          environment_ref="$IMAGE_NAME:$environment_tag"
+          echo "environment_tag=$environment_tag" >>"$GITHUB_OUTPUT"
+
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch ]]; then
+            echo "Forcing a rebuild of $environment_tag"
+            echo "cache_hit=false" >>"$GITHUB_OUTPUT"
+            exit 0
           fi
 
-          image_affecting=true
-          if [[ "$GITHUB_EVENT_NAME" != workflow_dispatch ]] &&
-            git diff --quiet "$from" "$GITHUB_SHA" -- \
-              ':(glob)**/*.nix' \
-              flake.lock \
-              CMakeLists.txt \
-              FormosaConfig.cmake.in \
-              'cmake/**' \
-              'addr_map/**' \
-              'fw/**' \
-              'hal/**' \
-              'libcomm/**' \
-              third-party/FreeRTOS-Kernel.cmake \
-              .github/scripts/push-image.sh \
-              .github/workflows/publish-docker.yml; then
-            image_affecting=false
+          error_log="$RUNNER_TEMP/ghcr-inspect-error.log"
+          if digest_json=$(docker buildx imagetools inspect \
+            --format '{{json .Manifest.Digest}}' \
+            "$environment_ref" 2>"$error_log"); then
+            digest=$(jq -r . <<<"$digest_json")
+            [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]
+            echo "Reusing $environment_ref ($digest)"
+            echo "cache_hit=true" >>"$GITHUB_OUTPUT"
+            echo "image_ref=$IMAGE_NAME@$digest" >>"$GITHUB_OUTPUT"
+          elif grep -Fqi "$environment_ref: not found" "$error_log" ||
+            grep -Eqi 'manifest unknown|name unknown' "$error_log"; then
+            echo "No image for $environment_tag; a build is required"
+            echo "cache_hit=false" >>"$GITHUB_OUTPUT"
+          else
+            cat "$error_log" >&2
+            exit 1
           fi
-          echo "image_affecting=$image_affecting" >>"$GITHUB_OUTPUT"
 
   validate:
     name: Validate workflow
@@ -93,8 +127,8 @@ jobs:
 
   publish:
     name: Build and publish
-    needs: detect
-    if: ${{ needs.detect.result == 'success' && needs.detect.outputs.image_affecting == 'true' }}
+    needs: resolve
+    if: ${{ needs.resolve.result == 'success' && needs.resolve.outputs.cache_hit == 'false' }}
     runs-on: ${{ vars.DOCKER_RUNNER || 'ubuntu-24.04' }}
     timeout-minutes: 360
     outputs:
@@ -106,18 +140,13 @@ jobs:
       id-token: write
     env:
       IMAGE_NAME: ghcr.io/formosa-gpgpu/formosa
+      ENVIRONMENT_TAG: ${{ needs.resolve.outputs.environment_tag }}
     steps:
       - name: Initialize runner paths and report disk usage
         run: |
           echo "ATTIC_PROFILE=$RUNNER_TEMP/formosa-attic-profile" >>"$GITHUB_ENV"
           echo "XDG_CACHE_HOME=$RUNNER_TEMP/formosa-xdg-cache" >>"$GITHUB_ENV"
           df -h /
-
-      - name: Require main
-        if: github.ref != 'refs/heads/main'
-        run: |
-          echo "::error::Docker images may only be published from main"
-          exit 1
 
       - name: Check out repository
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -233,34 +262,56 @@ jobs:
           push-to-registry: true
           create-storage-record: false
 
+      - name: Publish fingerprint tag
+        env:
+          IMAGE_REF: ${{ steps.push.outputs.image_ref }}
+          EXPECTED_DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --prefer-index=false \
+            --tag "$IMAGE_NAME:$ENVIRONMENT_TAG" \
+            "$IMAGE_REF"
+          fingerprint_digest=$(docker buildx imagetools inspect \
+            --format '{{json .Manifest.Digest}}' \
+            "$IMAGE_NAME:$ENVIRONMENT_TAG" | jq -r .)
+          test "$fingerprint_digest" = "$EXPECTED_DIGEST"
+
   regression:
     name: Regression
     needs:
-      - detect
+      - resolve
       - publish
     if: >-
       ${{ always() &&
-          needs.detect.result == 'success' &&
-          (needs.detect.outputs.image_affecting == 'false' ||
+          needs.resolve.result == 'success' &&
+          (needs.resolve.outputs.cache_hit == 'true' ||
            needs.publish.result == 'success') }}
     uses: ./.github/workflows/formosa-regression.yml
     with:
-      image: ${{ needs.publish.outputs.image_ref || 'ghcr.io/formosa-gpgpu/formosa:latest' }}
+      image: ${{ needs.publish.outputs.image_ref || needs.resolve.outputs.image_ref }}
     permissions:
       contents: read
 
   promote:
     name: Promote latest
     needs:
+      - resolve
       - publish
       - regression
+    if: >-
+      ${{ always() &&
+          needs.resolve.result == 'success' &&
+          needs.regression.result == 'success' &&
+          (needs.resolve.outputs.cache_hit == 'true' ||
+           needs.publish.result == 'success') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       packages: write
     env:
       IMAGE_NAME: ghcr.io/formosa-gpgpu/formosa
-      IMAGE_REF: ${{ needs.publish.outputs.image_ref }}
+      IMAGE_REF: ${{ needs.publish.outputs.image_ref || needs.resolve.outputs.image_ref }}
     steps:
       - name: Log in to GHCR
         env:
@@ -285,9 +336,9 @@ jobs:
 
   public-ci:
     name: Public CI
-    if: ${{ always() && needs.detect.result != 'skipped' }}
+    if: ${{ always() && needs.resolve.result != 'skipped' }}
     needs:
-      - detect
+      - resolve
       - publish
       - regression
       - promote
@@ -296,14 +347,11 @@ jobs:
     steps:
       - name: Require regression
         env:
-          IMAGE_AFFECTING: ${{ needs.detect.outputs.image_affecting }}
-          DETECT_RESULT: ${{ needs.detect.result }}
+          RESOLVE_RESULT: ${{ needs.resolve.result }}
           REGRESSION_RESULT: ${{ needs.regression.result }}
           PROMOTE_RESULT: ${{ needs.promote.result }}
         run: |
           set -euo pipefail
-          test "$DETECT_RESULT" = success
+          test "$RESOLVE_RESULT" = success
           test "$REGRESSION_RESULT" = success
-          if [[ "$IMAGE_AFFECTING" == true ]]; then
-            test "$PROMOTE_RESULT" = success
-          fi
+          test "$PROMOTE_RESULT" = success
