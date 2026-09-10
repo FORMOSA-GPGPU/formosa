@@ -20,7 +20,7 @@ target_include_directories(cp_lmem_allocator_test PRIVATE
   ${formosa_SOURCE_DIR}/addr_map
 )
 
-if (FW_ENABLE_GCOV)
+if(ENABLE_COVERAGE)
   target_compile_options(cp_lmem_allocator_test PRIVATE --coverage)
   target_link_libraries(cp_lmem_allocator_test PRIVATE --coverage)
 endif()
@@ -40,7 +40,7 @@ target_include_directories(cp_stack_remap_test PRIVATE
   ${formosa_SOURCE_DIR}/addr_map
 )
 
-if (FW_ENABLE_GCOV)
+if(ENABLE_COVERAGE)
   target_compile_options(cp_stack_remap_test PRIVATE --coverage)
   target_link_libraries(cp_stack_remap_test PRIVATE --coverage)
 endif()

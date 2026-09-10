@@ -106,6 +106,7 @@
           tree
           black
           lua-language-server
+          xmake
           opencl-headers
           opencl-clhpp
           ocl-icd

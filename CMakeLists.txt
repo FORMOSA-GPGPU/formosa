@@ -25,6 +25,8 @@ else()
   message(STATUS "CMAKE_BUILD_TYPE=${CMAKE_BUILD_TYPE}")
 endif()
 
+option(ENABLE_COVERAGE "Enable coverage instrumentation" OFF)
+
 include(CTest)
 enable_testing()
 include(cmake/LvScript.cmake)

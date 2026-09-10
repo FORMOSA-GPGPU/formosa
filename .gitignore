@@ -3,6 +3,7 @@
 
 # Build directory
 /build*
+/CMakeUserPresets.json
 result
 
 # RISC-V toolchain

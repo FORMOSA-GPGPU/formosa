@@ -68,7 +68,9 @@ owned_roots=(
   README.md
   THIRD_PARTY_NOTICES.md
   flake.nix
-  presets.lua
+  workflows.lua
+  xmake.lua
+  xmake
   cmake
   formosa-llvm
   formosa-pocl

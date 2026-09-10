@@ -21,9 +21,8 @@ if(HAL_ENABLE_TESTING)
   add_subdirectory(tests)
 endif()
 
-option(HAL_ENABLE_GCOV "Enable gcov support for HAL" OFF)
-if(HAL_ENABLE_GCOV)
-  message(STATUS "Enabling gcov support for HAL")
+if(ENABLE_COVERAGE)
+  message(STATUS "Enabling coverage instrumentation for HAL")
 endif()
 
 # Build gpufw_elf_carr

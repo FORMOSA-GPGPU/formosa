@@ -11,7 +11,9 @@ local config = require("formosa.config")
 local System = require("formosa.system")
 
 local stdlib = require("posix.stdlib")
+local Poll = require("posix.poll")
 local S = require("posix.signal")
+local Stat = require("posix.sys.stat")
 local U = require("posix.unistd")
 local W = require("posix.sys.wait")
 
@@ -81,8 +83,20 @@ local function wait_child_nonblocking(pid, timeout_sec)
   return false, "timeout", nil
 end
 
+local function wait_for_agent_socket(ready_fd)
+  local ready, err = Poll.rpoll(ready_fd, 5000)
+  if ready == nil then return false, "failed to wait for the simulator agent socket: " .. err end
+  if ready == 0 then return false, "timed out waiting for the simulator agent socket" end
+  if U.read(ready_fd, 1) ~= "1" then
+    return false, "simulator exited before its agent socket was ready"
+  end
+  return true
+end
+
 -- Pipe used to detect parent death: parent holds w, child/watchdog holds r.
 local r, w = U.pipe()
+-- Pipe used by the simulator to tell the parent that its agent is listening.
+local ready_r, ready_w = U.pipe()
 
 local childpid = U.fork()
 
@@ -93,6 +107,7 @@ if childpid == 0 then
 
   -- Child doesn't need the write end
   U.close(w)
+  U.close(ready_r)
 
   local mainpid = U.getpid()
 
@@ -102,6 +117,7 @@ if childpid == 0 then
     -- =========================
     -- Watchdog process
     -- =========================
+    U.close(ready_w)
     -- Block until EOF. We never expect actual data; only care about parent closing w.
     while true do
       local data = U.read(r, 1) -- blocking
@@ -115,6 +131,10 @@ if childpid == 0 then
   end
 
   local system = System("System", agent_socket_path, config, make_sm)
+  local socket_info = assert(Stat.stat(agent_socket_path), "agent socket was not created")
+  assert(Stat.S_ISSOCK(socket_info.st_mode) ~= 0, "agent socket path is not a socket")
+  assert(U.write(ready_w, "1"), "failed to signal that the agent socket is ready")
+  U.close(ready_w)
 
   sc.start()
   sc.stop()
@@ -144,6 +164,16 @@ else
 
   -- Parent doesn't need the read end
   U.close(r)
+  U.close(ready_w)
+
+  local socket_ready, readiness_error = wait_for_agent_socket(ready_r)
+  U.close(ready_r)
+  if not socket_ready then
+    U.close(w)
+    S.kill(childpid, S.SIGTERM)
+    W.wait(childpid)
+    error(readiness_error)
+  end
 
   stdlib.setenv("AGENT_SOCKET_PATH", agent_socket_path)
   if args.replay_capture then stdlib.setenv("FORMOSA_HAL_CAPTURE_TRACE", args.replay_capture) end

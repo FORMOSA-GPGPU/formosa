@@ -26,10 +26,10 @@ SPDX-License-Identifier: Apache-2.0
 
   - `-D LV_ENABLE_TESTING=1`
 
-  - `-D LV_ENABLE_GCOV=1`
+  - `-D ENABLE_COVERAGE=1`
 
   ```bash
-  cmake -S . -B build -G Ninja -D ENABLE_TESTING=1 -D ENABLE_GCOV=1
+  cmake -S . -B build -G Ninja -D ENABLE_TESTING=1 -D ENABLE_COVERAGE=1
   ```
 
 - To run tests, you can use `ctest` (installed along with `cmake`)

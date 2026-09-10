@@ -63,9 +63,8 @@ if(LIBCOMM_ENABLE_TESTING)
                        PROPERTIES FIXTURES_REQUIRED libcomm.unit.install)
 endif()
 
-# Use GCOV to generate test coverages
-option(LIBCOMM_ENABLE_GCOV "Enable gcov support for libcomm" OFF)
-if(LIBCOMM_ENABLE_GCOV)
+# Use GCOV to generate test coverage.
+if(ENABLE_COVERAGE)
   target_compile_options(libcomm INTERFACE --coverage)
   target_link_libraries(libcomm INTERFACE --coverage)
 endif()

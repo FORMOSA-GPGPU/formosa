@@ -49,7 +49,7 @@ function(add_formosa_hal name)
     PROPERTIES OUTPUT_NAME ${target}
   )
 
-  if(HAL_ENABLE_GCOV)
+  if(ENABLE_COVERAGE)
     target_compile_options(${target} PUBLIC --coverage)
     target_link_libraries(${target} INTERFACE --coverage)
   endif()

@@ -1,574 +1,686 @@
 {
   "buildPresets": [
     {
-      "configurePreset": "libcomm.unit",
-      "name": "libcomm.unit"
+      "configurePreset": "opencl.coverage",
+      "name": "opencl.coverage",
+      "targets": [
+        "all",
+        "install"
+      ]
     },
     {
-      "configurePreset": "lv.unit",
-      "name": "lv.unit"
+      "configurePreset": "opencl.debug",
+      "name": "opencl.debug",
+      "targets": [
+        "all",
+        "install"
+      ]
     },
     {
-      "configurePreset": "simtix.utils.unit",
-      "name": "simtix.utils.unit"
+      "configurePreset": "opencl.release",
+      "name": "opencl.release",
+      "targets": [
+        "all",
+        "install"
+      ]
     },
     {
-      "configurePreset": "simtix.cache.unit",
-      "name": "simtix.cache.unit"
+      "configurePreset": "simtix.atomic_sm.coverage",
+      "name": "simtix.atomic_sm.coverage"
     },
     {
-      "configurePreset": "simtix.pipelined_core.unit",
-      "name": "simtix.pipelined_core.unit"
+      "configurePreset": "simtix.atomic_sm.debug",
+      "name": "simtix.atomic_sm.debug"
     },
     {
-      "configurePreset": "simtix.pipelined_sm",
-      "name": "simtix.pipelined_sm"
+      "configurePreset": "simtix.atomic_sm.release",
+      "name": "simtix.atomic_sm.release"
     },
     {
-      "configurePreset": "simtix.atomic_sm",
-      "name": "simtix.atomic_sm"
+      "configurePreset": "simtix.cache.coverage",
+      "name": "simtix.cache.coverage"
     },
     {
-      "configurePreset": "simtix.scalar_core",
-      "name": "simtix.scalar_core"
+      "configurePreset": "simtix.cache.debug",
+      "name": "simtix.cache.debug"
     },
     {
-      "configurePreset": "simtix.cache",
-      "name": "simtix.cache"
+      "configurePreset": "simtix.cache.release",
+      "name": "simtix.cache.release"
     },
     {
-      "configurePreset": "simtix.utils",
-      "name": "simtix.utils"
+      "configurePreset": "simtix.pipelined_sm.coverage",
+      "name": "simtix.pipelined_sm.coverage"
     },
     {
-      "configurePreset": "tests.opencl",
-      "name": "tests.opencl"
+      "configurePreset": "simtix.pipelined_sm.debug",
+      "name": "simtix.pipelined_sm.debug"
     },
     {
-      "configurePreset": "tests.kernel-sim",
-      "name": "tests.kernel-sim"
+      "configurePreset": "simtix.pipelined_sm.release",
+      "name": "simtix.pipelined_sm.release"
     },
     {
-      "configurePreset": "perf.opencl",
-      "name": "perf.opencl"
+      "configurePreset": "simtix.scalar_core.coverage",
+      "name": "simtix.scalar_core.coverage"
     },
     {
-      "configurePreset": "fw",
-      "name": "fw"
+      "configurePreset": "simtix.scalar_core.debug",
+      "name": "simtix.scalar_core.debug"
     },
     {
-      "configurePreset": "hal.unit",
-      "name": "hal.unit"
-    },
-    {
-      "configurePreset": "hal",
-      "name": "hal"
-    },
-    {
-      "configurePreset": "lv.bindings",
-      "name": "lv.bindings"
+      "configurePreset": "simtix.scalar_core.release",
+      "name": "simtix.scalar_core.release"
     }
   ],
   "configurePresets": [
     {
       "binaryDir": "build",
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug"
-      },
       "generator": "Ninja",
       "hidden": true,
-      "name": "common"
+      "name": "workflow.base"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "libcomm",
-        "LIBCOMM_ENABLE_TESTING": "ON"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "outputs/out",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "simtix;tests;hal;fw;libcomm",
+        "HAL_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
-      "displayName": "Build and test the libcomm public-header consumer",
-      "inherits": "common",
-      "name": "libcomm.unit"
+      "inherits": "workflow.base",
+      "name": "opencl.coverage"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "lv",
-        "LV_ENABLE_DOCGEN": "ON",
-        "LV_ENABLE_GCOV": "ON",
-        "LV_ENABLE_PERFETTO": "ON",
-        "LV_ENABLE_TESTING": "ON"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "outputs/out",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests;hal;fw;libcomm",
+        "HAL_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
-      "displayName": "Run the LV Lua and native unit tests",
-      "inherits": "common",
-      "name": "lv.unit"
+      "inherits": "workflow.base",
+      "name": "opencl.debug"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "simtix;lv",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON"
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "outputs/out",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests;hal;fw;libcomm",
+        "HAL_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
-      "displayName": "Run the simtix DelayQueue utility unit tests",
-      "inherits": "common",
-      "name": "simtix.utils.unit"
+      "inherits": "workflow.base",
+      "name": "opencl.release"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "simtix;lv",
-        "LV_ENABLE_GCOV": "ON",
-        "LV_ENABLE_TESTING": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
-      "displayName": "Run the simtix cache Lua and native unit tests",
-      "inherits": "common",
-      "name": "simtix.cache.unit"
+      "inherits": "workflow.base",
+      "name": "simtix.atomic_sm.coverage"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "simtix;lv",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
-      "displayName": "Develop simtix pipelined-core Lua unit tests",
-      "inherits": "common",
-      "name": "simtix.pipelined_core.unit"
+      "inherits": "workflow.base",
+      "name": "simtix.atomic_sm.debug"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON",
-        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
-      "displayName": "Develop simtix pipelined SM implementation and validate downstream OpenCL/kernel-sim workloads",
-      "inherits": "common",
-      "name": "simtix.pipelined_sm"
+      "inherits": "workflow.base",
+      "name": "simtix.atomic_sm.release"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON",
-        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
-      "displayName": "Develop simtix atomic SM implementation and validate downstream OpenCL/kernel-sim workloads",
-      "inherits": "common",
-      "name": "simtix.atomic_sm"
+      "inherits": "workflow.base",
+      "name": "simtix.cache.coverage"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+      },
+      "inherits": "workflow.base",
+      "name": "simtix.cache.debug"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+      },
+      "inherits": "workflow.base",
+      "name": "simtix.cache.release"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+      },
+      "inherits": "workflow.base",
+      "name": "simtix.pipelined_sm.coverage"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+      },
+      "inherits": "workflow.base",
+      "name": "simtix.pipelined_sm.debug"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+      },
+      "inherits": "workflow.base",
+      "name": "simtix.pipelined_sm.release"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "simtix;tests",
         "TESTS_ENABLE_TESTS": "cp"
       },
-      "displayName": "Develop simtix scalar core and validate it with the RV64 riscv-test workload",
-      "inherits": "common",
-      "name": "simtix.scalar_core"
+      "inherits": "workflow.base",
+      "name": "simtix.scalar_core.coverage"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON",
-        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "TESTS_ENABLE_TESTS": "cp"
       },
-      "displayName": "Develop simtix cache and cache-backed SM/system workloads",
-      "inherits": "common",
-      "name": "simtix.cache"
+      "inherits": "workflow.base",
+      "name": "simtix.scalar_core.debug"
     },
     {
       "cacheVariables": {
-        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON",
-        "TESTS_ENABLE_TESTS": "formosa;kernel-sim;opencl"
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "simtix;tests",
+        "TESTS_ENABLE_TESTS": "cp"
       },
-      "displayName": "Develop simtix utility modules such as DelayQueue",
-      "inherits": "common",
-      "name": "simtix.utils"
-    },
-    {
-      "cacheVariables": {
-        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON",
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
-      },
-      "displayName": "OpenCL development (including all supported SMs)",
-      "inherits": "common",
-      "name": "tests.opencl"
-    },
-    {
-      "cacheVariables": {
-        "ENABLE_PROJECTS": "fw;simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
-        "TESTS_ENABLE_TESTS": "kernel-sim"
-      },
-      "displayName": "Kernel-sim development (including all supported SMs)",
-      "inherits": "common",
-      "name": "tests.kernel-sim"
-    },
-    {
-      "cacheVariables": {
-        "ENABLE_PROJECTS": "fw;hal;simtix;lv;tests",
-        "LV_ENABLE_GCOV": "ON",
-        "SIMTIX_ENABLE_TESTING": "ON",
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
-      },
-      "displayName": "Manually run FORMOSA OpenCL performance regression on simtix.pipelined_sm",
-      "inherits": "common",
-      "name": "perf.opencl"
-    },
-    {
-      "cacheVariables": {
-        "ENABLE_PROJECTS": "fw",
-        "FW_ENABLE_TESTING": "ON"
-      },
-      "displayName": "Firmware development (without HAL)",
-      "inherits": "common",
-      "name": "fw"
-    },
-    {
-      "cacheVariables": {
-        "ENABLE_PROJECTS": "hal;fw;libcomm",
-        "HAL_ENABLE_GCOV": "ON",
-        "HAL_ENABLE_TESTING": "ON"
-      },
-      "displayName": "Build and test the HAL LV/MMIO integration",
-      "inherits": "common",
-      "name": "hal.unit"
-    },
-    {
-      "cacheVariables": {
-        "ENABLE_PROJECTS": "hal;lv;simtix;tests",
-        "HAL_ENABLE_GCOV": "ON",
-        "HAL_ENABLE_TESTING": "ON",
-        "LV_ENABLE_GCOV": "ON",
-        "TESTS_ENABLE_TESTS": "hal;formosa"
-      },
-      "displayName": "Develop FORMOSA HAL and its integration tests (including fw)",
-      "inherits": "common",
-      "name": "hal"
-    },
-    {
-      "cacheVariables": {
-        "ENABLE_PROJECTS": "lv;tests",
-        "LIBCOMM_ENABLE_GCOV": "ON",
-        "LV_ENABLE_GCOV": "ON",
-        "LV_ENABLE_PERFETTO": "ON",
-        "LV_ENABLE_TESTING": "ON",
-        "TESTS_ENABLE_TESTS": "cp;pfreader;ipc"
-      },
-      "displayName": "Develop all of the default bindings in lv (including libcomm)",
-      "inherits": "common",
-      "name": "lv.bindings"
+      "inherits": "workflow.base",
+      "name": "simtix.scalar_core.release"
     }
   ],
   "testPresets": [
     {
-      "configurePreset": "libcomm.unit",
+      "configurePreset": "opencl.coverage",
       "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
+        "noTestsAction": "error"
       },
       "filter": {
         "include": {
-          "name": "libcomm\\.unit"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
         }
       },
-      "name": "libcomm.unit",
+      "name": "opencl.coverage",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "configurePreset": "lv.unit",
+      "configurePreset": "opencl.debug",
       "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
+        "noTestsAction": "error"
       },
       "filter": {
         "include": {
-          "name": "lv\\.unit\\..*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
         }
       },
-      "name": "lv.unit",
+      "name": "opencl.debug",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "configurePreset": "simtix.utils.unit",
+      "configurePreset": "opencl.release",
       "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
+        "noTestsAction": "error"
       },
       "filter": {
         "include": {
-          "name": "simtix\\.delay_queue.*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
         }
       },
-      "name": "simtix.utils.unit",
+      "name": "opencl.release",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "configurePreset": "simtix.cache.unit",
+      "configurePreset": "simtix.atomic_sm.coverage",
       "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "simtix\\.cache(_|\\.).*"
-        }
-      },
-      "name": "simtix.cache.unit",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "simtix.pipelined_core.unit",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic"
-        }
-      },
-      "name": "simtix.pipelined_core.unit",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "simtix.pipelined_sm",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "pipelined_frontend|pipelined_scoreboard|simple_arbitrator|pipelined_arbitrator|pipelined_.*_lsu|opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm"
-        }
-      },
-      "name": "simtix.pipelined_sm",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "simtix.atomic_sm",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
+        "noTestsAction": "error"
       },
       "filter": {
         "include": {
           "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm"
         }
       },
-      "name": "simtix.atomic_sm",
+      "name": "simtix.atomic_sm.coverage",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "configurePreset": "simtix.scalar_core",
+      "configurePreset": "simtix.atomic_sm.debug",
       "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm"
         }
+      },
+      "name": "simtix.atomic_sm.debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.atomic_sm.release",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm"
+        }
+      },
+      "name": "simtix.atomic_sm.release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.cache.coverage",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.cache(_|\\.).*|opencl\\..*\\.simtix\\.atomic_sm|opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "simtix.cache.coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.cache.debug",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.cache(_|\\.).*|opencl\\..*\\.simtix\\.atomic_sm|opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "simtix.cache.debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.cache.release",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "simtix\\.cache(_|\\.).*|opencl\\..*\\.simtix\\.atomic_sm|opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "simtix.cache.release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.pipelined_sm.coverage",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic"
+        }
+      },
+      "name": "simtix.pipelined_sm.coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.pipelined_sm.debug",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic"
+        }
+      },
+      "name": "simtix.pipelined_sm.debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.pipelined_sm.release",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic"
+        }
+      },
+      "name": "simtix.pipelined_sm.release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "simtix.scalar_core.coverage",
+      "execution": {
+        "noTestsAction": "error"
       },
       "filter": {
         "include": {
           "name": "scalar_core_riscv_test"
         }
       },
-      "name": "simtix.scalar_core",
+      "name": "simtix.scalar_core.coverage",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "configurePreset": "simtix.cache",
+      "configurePreset": "simtix.scalar_core.debug",
       "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
+        "noTestsAction": "error"
       },
       "filter": {
         "include": {
-          "name": "simtix\\.cache\\..*|opencl\\..*\\.simtix\\.|kernel-sim\\..*\\.simtix\\."
+          "name": "scalar_core_riscv_test"
         }
       },
-      "name": "simtix.cache",
+      "name": "simtix.scalar_core.debug",
       "output": {
         "outputOnFailure": true
       }
     },
     {
-      "configurePreset": "simtix.utils",
+      "configurePreset": "simtix.scalar_core.release",
       "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
+        "noTestsAction": "error"
       },
       "filter": {
         "include": {
-          "name": "simtix\\.delay_queue.*"
+          "name": "scalar_core_riscv_test"
         }
       },
-      "name": "simtix.utils",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "tests.opencl",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "opencl"
-        }
-      },
-      "name": "tests.opencl",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "tests.kernel-sim",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "kernel-sim"
-        }
-      },
-      "name": "tests.kernel-sim",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "perf.opencl",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
-        }
-      },
-      "name": "perf.opencl",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "fw",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "fw"
-        }
-      },
-      "name": "fw",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "hal.unit",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "hal\\.lv_.*"
-        }
-      },
-      "name": "hal.unit",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "hal",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": "hal|opencl"
-        }
-      },
-      "name": "hal",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "lv.bindings",
-      "execution": {
-        "repeat": {
-          "count": 3,
-          "mode": "until-pass"
-        }
-      },
-      "filter": {
-        "include": {
-          "name": ".*/.*\\.lua|lv.unit.log|cp|pfreader|ipc_test"
-        }
-      },
-      "name": "lv.bindings",
+      "name": "simtix.scalar_core.release",
       "output": {
         "outputOnFailure": true
       }
     }
   ],
-  "version": 8
+  "version": 8,
+  "workflowPresets": [
+    {
+      "displayName": "Validate the OpenCL tests and software stack.",
+      "name": "opencl.coverage",
+      "steps": [
+        {
+          "name": "opencl.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "opencl.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the OpenCL tests and software stack.",
+      "name": "opencl.debug",
+      "steps": [
+        {
+          "name": "opencl.debug",
+          "type": "configure"
+        },
+        {
+          "name": "opencl.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the OpenCL tests and software stack.",
+      "name": "opencl.release",
+      "steps": [
+        {
+          "name": "opencl.release",
+          "type": "configure"
+        },
+        {
+          "name": "opencl.release",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix atomic SM with integration tests.",
+      "name": "simtix.atomic_sm.coverage",
+      "steps": [
+        {
+          "name": "simtix.atomic_sm.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.atomic_sm.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix atomic SM with integration tests.",
+      "name": "simtix.atomic_sm.debug",
+      "steps": [
+        {
+          "name": "simtix.atomic_sm.debug",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.atomic_sm.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix atomic SM with integration tests.",
+      "name": "simtix.atomic_sm.release",
+      "steps": [
+        {
+          "name": "simtix.atomic_sm.release",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.atomic_sm.release",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix cache model with unit and integration tests.",
+      "name": "simtix.cache.coverage",
+      "steps": [
+        {
+          "name": "simtix.cache.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.cache.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix cache model with unit and integration tests.",
+      "name": "simtix.cache.debug",
+      "steps": [
+        {
+          "name": "simtix.cache.debug",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.cache.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix cache model with unit and integration tests.",
+      "name": "simtix.cache.release",
+      "steps": [
+        {
+          "name": "simtix.cache.release",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.cache.release",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix pipelined SM with unit and integration tests.",
+      "name": "simtix.pipelined_sm.coverage",
+      "steps": [
+        {
+          "name": "simtix.pipelined_sm.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.pipelined_sm.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix pipelined SM with unit and integration tests.",
+      "name": "simtix.pipelined_sm.debug",
+      "steps": [
+        {
+          "name": "simtix.pipelined_sm.debug",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.pipelined_sm.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix pipelined SM with unit and integration tests.",
+      "name": "simtix.pipelined_sm.release",
+      "steps": [
+        {
+          "name": "simtix.pipelined_sm.release",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.pipelined_sm.release",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix scalar core with the RV64 riscv-test workload.",
+      "name": "simtix.scalar_core.coverage",
+      "steps": [
+        {
+          "name": "simtix.scalar_core.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.scalar_core.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix scalar core with the RV64 riscv-test workload.",
+      "name": "simtix.scalar_core.debug",
+      "steps": [
+        {
+          "name": "simtix.scalar_core.debug",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.scalar_core.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the simtix scalar core with the RV64 riscv-test workload.",
+      "name": "simtix.scalar_core.release",
+      "steps": [
+        {
+          "name": "simtix.scalar_core.release",
+          "type": "configure"
+        },
+        {
+          "name": "simtix.scalar_core.release",
+          "type": "build"
+        }
+      ]
+    }
+  ]
 }

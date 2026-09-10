@@ -53,10 +53,9 @@ message(STATUS "LV_LOG_LEVEL=${LV_LOG_LEVEL}")
 target_compile_definitions(${TARGET}
   PUBLIC QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_${LV_LOG_LEVEL})
 
-# Use GCOV to generate test coverages
-option(LV_ENABLE_GCOV "Enable gcov support for lv" OFF)
-if(LV_ENABLE_GCOV)
-  message(STATUS "Enabling gcov support for lv")
+# Use GCOV to generate test coverage.
+if(ENABLE_COVERAGE)
+  message(STATUS "Enabling coverage instrumentation for lv")
   target_compile_options(${TARGET} PUBLIC --coverage)
   target_link_libraries(${TARGET} PUBLIC --coverage)
 endif()

@@ -70,9 +70,8 @@ target_include_directories(simtix PRIVATE
 target_link_libraries(simtix PUBLIC liblv softfloat)
 
 # Use GCOV to generate host-side coverage reports for simtix.
-option(SIMTIX_ENABLE_GCOV "Enable gcov support for simtix" OFF)
-if(SIMTIX_ENABLE_GCOV)
-  message(STATUS "Enabling gcov support for simtix")
+if(ENABLE_COVERAGE)
+  message(STATUS "Enabling coverage instrumentation for simtix")
   target_compile_options(simtix PUBLIC --coverage)
   target_link_libraries(simtix PUBLIC --coverage)
 endif()
