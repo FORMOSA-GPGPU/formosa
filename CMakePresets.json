@@ -25,6 +25,18 @@
       ]
     },
     {
+      "configurePreset": "perf.coverage",
+      "name": "perf.coverage"
+    },
+    {
+      "configurePreset": "perf.debug",
+      "name": "perf.debug"
+    },
+    {
+      "configurePreset": "perf.release",
+      "name": "perf.release"
+    },
+    {
       "configurePreset": "simtix.atomic_sm.coverage",
       "name": "simtix.atomic_sm.coverage"
     },
@@ -85,9 +97,9 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "outputs/out",
         "ENABLE_COVERAGE": true,
-        "ENABLE_PROJECTS": "simtix;tests;hal;fw;libcomm",
+        "ENABLE_PROJECTS": "fw;simtix;tests;hal;libcomm",
         "HAL_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
       },
       "inherits": "workflow.base",
       "name": "opencl.coverage"
@@ -97,9 +109,9 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "outputs/out",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests;hal;fw;libcomm",
+        "ENABLE_PROJECTS": "fw;simtix;tests;hal;libcomm",
         "HAL_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
       },
       "inherits": "workflow.base",
       "name": "opencl.debug"
@@ -109,9 +121,9 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_INSTALL_PREFIX": "outputs/out",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests;hal;fw;libcomm",
+        "ENABLE_PROJECTS": "fw;simtix;tests;hal;libcomm",
         "HAL_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
       },
       "inherits": "workflow.base",
       "name": "opencl.release"
@@ -120,7 +132,37 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "fw;simtix;tests",
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
+      },
+      "inherits": "workflow.base",
+      "name": "perf.coverage"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "fw;simtix;tests",
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
+      },
+      "inherits": "workflow.base",
+      "name": "perf.debug"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "fw;simtix;tests",
+        "TESTS_ENABLE_TESTS": "formosa;opencl"
+      },
+      "inherits": "workflow.base",
+      "name": "perf.release"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "fw;simtix;tests",
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
       "inherits": "workflow.base",
@@ -130,7 +172,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "fw;simtix;tests",
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
       "inherits": "workflow.base",
@@ -140,7 +182,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "fw;simtix;tests",
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
       "inherits": "workflow.base",
@@ -150,7 +192,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "simtix;fw;tests",
         "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
@@ -161,7 +203,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "simtix;fw;tests",
         "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
@@ -172,7 +214,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "simtix;fw;tests",
         "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
@@ -183,7 +225,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "fw;simtix;tests",
         "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
@@ -194,7 +236,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "fw;simtix;tests",
         "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
@@ -205,7 +247,7 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "simtix;tests",
+        "ENABLE_PROJECTS": "fw;simtix;tests",
         "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
       },
@@ -251,7 +293,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
         }
       },
       "name": "opencl.coverage",
@@ -266,7 +308,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
         }
       },
       "name": "opencl.debug",
@@ -281,10 +323,55 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
         }
       },
       "name": "opencl.release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "perf.coverage",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "perf.coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "perf.debug",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "perf.debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "perf.release",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
+        }
+      },
+      "name": "perf.release",
       "output": {
         "outputOnFailure": true
       }
@@ -510,6 +597,48 @@
         },
         {
           "name": "opencl.release",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Run OpenCL tests with simtix pipelined SM to measure performance.",
+      "name": "perf.coverage",
+      "steps": [
+        {
+          "name": "perf.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "perf.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Run OpenCL tests with simtix pipelined SM to measure performance.",
+      "name": "perf.debug",
+      "steps": [
+        {
+          "name": "perf.debug",
+          "type": "configure"
+        },
+        {
+          "name": "perf.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Run OpenCL tests with simtix pipelined SM to measure performance.",
+      "name": "perf.release",
+      "steps": [
+        {
+          "name": "perf.release",
+          "type": "configure"
+        },
+        {
+          "name": "perf.release",
           "type": "build"
         }
       ]

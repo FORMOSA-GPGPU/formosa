@@ -42,14 +42,16 @@ local function make_lv_binding_component(name)
   }
 end
 
----@type table<SimtixTestSystem, { depends: string[], enabled_tests: string[] }>
+---@type table<SimtixTestSystem, { depends: string[], enabled_projects: string[], enabled_tests: string[] }>
 local simtix_test_systems = {
   opencl = {
     depends = { "formosa-pocl", "tests.opencl" },
+    enabled_projects = { "fw", "simtix", "tests" },
     enabled_tests = { "formosa", "opencl" },
   },
   ["kernel-sim"] = {
     depends = { "tests.kernel-sim" },
+    enabled_projects = { "simtix", "tests" },
     enabled_tests = { "kernel-sim" },
   },
 }
@@ -73,7 +75,7 @@ local function make_simtix_sm_test_suite(test_system, sm_model)
     adapters = {
       cmake = {
         build_options = {
-          ENABLE_PROJECTS = { "simtix", "tests" },
+          ENABLE_PROJECTS = system.enabled_projects,
           TESTS_ENABLE_TESTS = enabled_tests,
         },
         selectors = {
@@ -593,9 +595,13 @@ local config = {
       test_suites = {
         "opencl.simtix.pipelined_sm",
         "opencl.simtix.atomic_sm",
-        "kernel-sim.simtix.pipelined_sm",
-        "kernel-sim.simtix.atomic_sm",
         "hal.unit",
+      },
+    },
+    ["perf"] = {
+      description = "Run OpenCL tests with simtix pipelined SM to measure performance.",
+      test_suites = {
+        "opencl.simtix.pipelined_sm",
       },
     },
   },

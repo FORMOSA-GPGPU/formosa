@@ -36,10 +36,12 @@ function(add_lv_opencl_integration_test PROGRAM)
   endif()
 
   foreach(sm ${OPENCL_SMS})
-    add_lv_test_script(opencl.${FINAL_ID}.${sm}
+    set(TEST_NAME opencl.${FINAL_ID}.${sm})
+    set(TEST_OUTPUT ${TESTING_OUT}/${TEST_NAME})
+    add_lv_test_script(${TEST_NAME}
       ${OPENCL_RUN_SCRIPT}
-      ARGS -s ${TESTING_OUT}/${FINAL_ID}.toml
-           -t ${TESTING_OUT}/${FINAL_ID}
+      ARGS -s ${TEST_OUTPUT}.toml
+           -t ${TEST_OUTPUT}
            --sm ${sm}
            -- $<TARGET_FILE:${PROGRAM}> ${TEST_ARGS}
       LABELS integration opencl
