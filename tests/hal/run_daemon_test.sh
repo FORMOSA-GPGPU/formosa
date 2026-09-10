@@ -23,7 +23,7 @@ export AGENT_SOCKET_PATH=/tmp/formosa.sock
 
 # Cleanup existing socket and config if any
 rm -f /tmp/formosa.sock
-rm -f "${REPO_ROOT}/.lv-formosa-config.sh"
+rm -f "${REPO_ROOT}"/.lv-formosa-config*
 
 # Start daemon in background
 echo "Starting daemon: ${DAEMON_EXEC} ${DAEMON_LUA}"
@@ -36,7 +36,11 @@ cleanup() {
   kill "${DAEMON_PID}" 2>/dev/null || true
   wait "${DAEMON_PID}" 2>/dev/null || true
   rm -f /tmp/formosa.sock
-  rm -f "${REPO_ROOT}/.lv-formosa-config.sh"
+  if compgen -G "${REPO_ROOT}/.lv-formosa-config*" >/dev/null; then
+    echo "Error: daemon left simulator config files behind"
+    rm -f "${REPO_ROOT}"/.lv-formosa-config*
+    return 1
+  fi
 }
 trap cleanup EXIT
 

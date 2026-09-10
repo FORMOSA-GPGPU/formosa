@@ -142,11 +142,13 @@ function Config:foreach(cb)
 end
 
 function Config:dump(filename)
-  local env_file = assert(io.open(filename, "w"), "Error: Could not open env_file for writing")
+  local temporary = filename .. ".tmp"
+  local env_file = assert(io.open(temporary, "w"), "Error: Could not open env_file for writing")
   self:foreach(function(var, val) env_file:write(string.format("export %s=%s\n", var, val)) end)
   env_file:write("\n")
   env_file:flush()
   env_file:close()
+  assert(os.rename(temporary, filename), "Error: Could not publish env_file")
 end
 
 function Config:export()

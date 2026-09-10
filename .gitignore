@@ -99,7 +99,7 @@ __pycache__/
 .pytest_cache/
 
 
-.lv-formosa-config.sh
+.lv-formosa-config*
 .envrc.local
 outputs/
 

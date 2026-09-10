@@ -13,6 +13,7 @@ trace.settings.output_prefix = "daemon"
 local System = require("formosa.system")
 local argparse = require("argparse")
 local config = require("formosa.config")
+local U = require("posix.unistd")
 
 local sm_kinds = require("formosa.sm_kinds")
 
@@ -37,6 +38,16 @@ parser:flag("--keep-alive", "Ignore client Terminate and keep the simulation run
 
 local args = parser:parse({ ... })
 
+local daemon_pid = U.getpid()
+local config_link = os.getenv("LV_FORMOSA_CONFIG_FILE") or ".lv-formosa-config.sh"
+local config_dir, config_name = config_link:match("^(.*)/([^/]+)$")
+config_dir = config_dir or "."
+config_name = config_name or config_link
+local config_stem = config_name:match("^(.*)%.sh$") or config_name
+local config_target = string.format("%s.%d.sh", config_stem, daemon_pid)
+local config_file = config_dir .. "/" .. config_target
+local config_link_tmp = config_link .. ".tmp." .. daemon_pid
+
 config.pipelined_core_config = config.pipelined_core_config or {}
 config.pipelined_core_config.heartbeat_frequency = args.heartbeat_frequency
 
@@ -45,7 +56,16 @@ local system = System("System", "/tmp/formosa.sock", config, make_sm, {
   keep_alive = args.keep_alive,
 })
 
-config:dump(".lv-formosa-config.sh")
+config:dump(config_file)
+os.remove(config_link_tmp)
+assert(U.link(config_target, config_link_tmp, true))
+assert(os.rename(config_link_tmp, config_link))
+lv.info(string.format("FORMOSA daemon PID %d published config: %s", daemon_pid, config_file))
+
+local function remove_config()
+  if U.readlink(config_link) == config_target then os.remove(config_link) end
+  os.remove(config_file)
+end
 
 local function exit_hook()
   if args.stats and system.stats and system.stats.dump_toml then
@@ -53,11 +73,12 @@ local function exit_hook()
     stat_file:write(system.stats:dump_toml())
     stat_file:close()
   end
+  remove_config()
   lv.info("===----- Simulation stops -----===")
 end
 
+lv.exit_hook(exit_hook)
 if not args.limit then
-  sc.exit_hook(exit_hook)
   sc.start()
   sc.stop()
 else

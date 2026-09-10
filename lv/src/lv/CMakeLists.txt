@@ -10,6 +10,7 @@ set(TARGET_OBJ "${TARGET}_obj")
 # This decouples compilation from the plugin dependency chain.
 add_library(${TARGET_OBJ} OBJECT
   main.cc
+  bindings/exit_hook.cc
   bindings/log.cc
   bindings/dbg/monitor.cc
   bindings/dbg/memory_debugger.cc

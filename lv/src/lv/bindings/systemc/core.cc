@@ -5,21 +5,7 @@
 #include <liblv/binding.h>
 #include <systemc.h>
 
-#include <csignal>
-#include <cstdlib>
-
-namespace {
-sol::function exit_hook;
-}
-
 LV_MODULE(sc)
-    .init([] {
-      // Run the registered hook when receiving SIGINT.
-      std::signal(SIGINT, [](int) {
-        exit_hook();
-        std::exit(0);
-      });
-    })
     .function(
         "start",
         [] {
@@ -52,13 +38,6 @@ LV_MODULE(sc)
           sc_pause();
         },
         lv::doc("Pause the SystemC simulation."))
-    .function(
-        "exit_hook",
-        [](sol::function f) {
-          exit_hook = f;
-        },
-        lv::params(lv::param("f")),
-        lv::doc("Register a Lua callback invoked on SIGINT."))
     .function(
         "reset",
         [] {
