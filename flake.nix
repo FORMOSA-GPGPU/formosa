@@ -111,6 +111,7 @@
           opencl-clhpp
           ocl-icd
           clinfo
+          verilator
         ];
 
         # Tools the CI pipeline expects inside the docker env image (built from

@@ -21,6 +21,7 @@ add_library(${TARGET_OBJ} OBJECT
   bindings/simple/block_aligner.cc
   bindings/simple/clint.cc
   bindings/simple/constant_table.cc
+  bindings/simple/vclint.cc
   bindings/simple/exit_code_register.cc
   bindings/simple/initiator.cc
   bindings/simple/memory.cc
@@ -47,6 +48,14 @@ add_library(${TARGET_OBJ} OBJECT
   bindings/formosa/sm_transactor.cc
   bindings/formosa/stub_cache_mmio.cc
   bindings/formosa/stub_warp_ctrl.cc
+)
+
+find_package(verilator CONFIG REQUIRED)
+verilate(${TARGET_OBJ}
+  SOURCES "${formosa_SOURCE_DIR}/lv/src/lv/bindings/simple/vclint.sv"
+  PREFIX Vvclint
+  TOP_MODULE vclint
+  OPT_GLOBAL -DVL_TIME_STAMP64
 )
 
 # C++ 17 is required

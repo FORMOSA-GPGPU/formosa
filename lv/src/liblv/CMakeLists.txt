@@ -16,6 +16,7 @@ add_library(${TARGET} STATIC
   statistics.cc
   time.cc
   trace.cc
+  vl_time.cc
 )
 set_target_properties(${TARGET} PROPERTIES OUTPUT_NAME "lv")
 
