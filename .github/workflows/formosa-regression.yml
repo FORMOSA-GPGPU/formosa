@@ -85,6 +85,18 @@ jobs:
             exit 1
           fi
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          enable_kvm: false
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Validate generated presets
+        run: |
+          set -euo pipefail
+          test -s CMakePresets.json
+          nix shell --inputs-from . nixpkgs#xmake --command xmake workflow check
+
       - name: Resolve FORMOSA environment
         id: image
         env:
@@ -97,38 +109,6 @@ jobs:
             --format '{{index .RepoDigests 0}}' "$image")
           [[ "$image_ref" =~ ^ghcr\.io/formosa-gpgpu/formosa@sha256:[0-9a-f]{64}$ ]]
           echo "image=$image_ref" >>"$GITHUB_OUTPUT"
-
-      - name: Validate generated presets
-        env:
-          FORMOSA_CI_IMAGE: ${{ steps.image.outputs.image }}
-        run: |
-          set -euo pipefail
-          docker run --rm \
-            --user "$(id -u):$(id -g)" \
-            --env HOME=/tmp \
-            --env TMP=/tmp \
-            --env TEMP=/tmp \
-            --env TEMPDIR=/tmp \
-            --env TMPDIR=/tmp \
-            --env NIX_BUILD_TOP=/tmp \
-            --tmpfs /tmp:rw,exec,mode=1777 \
-            --volume "$GITHUB_WORKSPACE:/workspace" \
-            --workdir /workspace \
-            "$FORMOSA_CI_IMAGE" \
-            bash -c '
-              set -eo pipefail
-              set +u
-              rc=(/nix/store/*-nix-shell-rc)
-              if (( ${#rc[@]} != 1 )); then
-                printf "expected one Nix shell rc, found %d\n" "${#rc[@]}" >&2
-                exit 1
-              fi
-              source "${rc[0]}"
-              set -euo pipefail
-
-              test -s CMakePresets.json
-              xmake workflow check
-            '
 
       - name: Lint changed files
         if: steps.range.outputs.use_all != 'true'
@@ -174,19 +154,64 @@ jobs:
     timeout-minutes: 180
     env:
       FORMOSA_CI_IMAGE: ${{ needs.plan.outputs.image }}
-      REGRESSION_BASE: ${{ needs.plan.outputs.base }}
-      REGRESSION_HEAD: ${{ needs.plan.outputs.head }}
-      REGRESSION_USE_ALL: ${{ needs.plan.outputs.use_all }}
     steps:
       - name: Check out repository
         uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
           fetch-depth: 0
 
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          enable_kvm: false
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate regression presets
+        id: generate
+        env:
+          REGRESSION_BASE: ${{ needs.plan.outputs.base }}
+          REGRESSION_HEAD: ${{ needs.plan.outputs.head }}
+          REGRESSION_USE_ALL: ${{ needs.plan.outputs.use_all }}
+        run: |
+          set -euo pipefail
+          use_all=$REGRESSION_USE_ALL
+          # workflows.lua, xmake/, and generated presets have no owning
+          # component, so a change there selects no suites. Fall back to
+          # the full run to avoid silently skipping validation.
+          # (xmake here comes from pinned nixpkgs, not the Docker image,
+          # which may predate the xmake workflow tooling.)
+          if [[ "$use_all" != true ]]; then
+            if git diff --name-only "$REGRESSION_BASE" "$REGRESSION_HEAD" -- \
+              workflows.lua xmake/ CMakePresets.json CMakeUserPresets.json .github/ \
+              | grep -q .; then
+              echo "Workflow definition changed; running full regression."
+              use_all=true
+            fi
+          fi
+          if [[ "$use_all" == true ]]; then
+            nix shell --inputs-from . nixpkgs#xmake --command \
+              xmake workflow regression \
+              --profile=debug --adapter=cmake --all --generate
+          else
+            nix shell --inputs-from . nixpkgs#xmake --command \
+              xmake workflow regression \
+              --profile=debug --adapter=cmake \
+              --base "$REGRESSION_BASE" --head "$REGRESSION_HEAD" \
+              --generate
+          fi
+          if jq -e '.testPresets // [] | length > 0' CMakeUserPresets.json >/dev/null; then
+            echo "has_tests=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "No affected test suites; skipping build and test."
+            echo "has_tests=false" >>"$GITHUB_OUTPUT"
+          fi
+
       - name: Pull FORMOSA environment
+        if: steps.generate.outputs.has_tests == 'true'
         run: docker pull "$FORMOSA_CI_IMAGE"
 
-      - name: Plan, build, and test affected suites
+      - name: Build and test affected suites
+        if: steps.generate.outputs.has_tests == 'true'
         run: |
           set -euo pipefail
           docker run --rm \
@@ -197,9 +222,6 @@ jobs:
             --env TEMPDIR=/tmp \
             --env TMPDIR=/tmp \
             --env NIX_BUILD_TOP=/tmp \
-            --env REGRESSION_BASE="$REGRESSION_BASE" \
-            --env REGRESSION_HEAD="$REGRESSION_HEAD" \
-            --env REGRESSION_USE_ALL="$REGRESSION_USE_ALL" \
             --tmpfs /tmp:rw,exec,mode=1777 \
             --volume "$GITHUB_WORKSPACE:/workspace" \
             --workdir /workspace \
@@ -214,34 +236,6 @@ jobs:
               fi
               source "${rc[0]}"
               set -euo pipefail
-
-              git config --global --add safe.directory /workspace
-              # workflows.lua, xmake/, and generated presets have no owning
-              # component, so a change there selects no suites. Fall back to
-              # the full run to avoid silently skipping validation.
-              if [[ "$REGRESSION_USE_ALL" != true ]]; then
-                if git diff --name-only "$REGRESSION_BASE" "$REGRESSION_HEAD" -- \
-                  workflows.lua xmake/ CMakePresets.json CMakeUserPresets.json .github/ \
-                  | grep -q .; then
-                  echo "Workflow definition changed; running full regression."
-                  REGRESSION_USE_ALL=true
-                fi
-              fi
-
-              if [[ "$REGRESSION_USE_ALL" == true ]]; then
-                xmake workflow regression \
-                  --profile=debug --adapter=cmake --all --generate
-              else
-                xmake workflow regression \
-                  --profile=debug --adapter=cmake \
-                  --base "$REGRESSION_BASE" --head "$REGRESSION_HEAD" \
-                  --generate
-              fi
-
-              if ! jq -e ".testPresets // [] | length > 0" CMakeUserPresets.json >/dev/null; then
-                echo "No affected test suites; skipping build and test."
-                exit 0
-              fi
 
               cmake --workflow --preset regression.debug
               ctest --preset regression.debug -j --timeout 3000
