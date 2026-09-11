@@ -32,17 +32,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Set up xmake
-        uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1.2.5
-        with:
-          xmake-version: "3.0.4"
-
-      - name: Validate generated presets
-        run: |
-          set -euo pipefail
-          test -s CMakePresets.json
-          xmake workflow check
-
       - name: Select regression range
         id: range
         env:
@@ -108,6 +97,38 @@ jobs:
             --format '{{index .RepoDigests 0}}' "$image")
           [[ "$image_ref" =~ ^ghcr\.io/formosa-gpgpu/formosa@sha256:[0-9a-f]{64}$ ]]
           echo "image=$image_ref" >>"$GITHUB_OUTPUT"
+
+      - name: Validate generated presets
+        env:
+          FORMOSA_CI_IMAGE: ${{ steps.image.outputs.image }}
+        run: |
+          set -euo pipefail
+          docker run --rm \
+            --user "$(id -u):$(id -g)" \
+            --env HOME=/tmp \
+            --env TMP=/tmp \
+            --env TEMP=/tmp \
+            --env TEMPDIR=/tmp \
+            --env TMPDIR=/tmp \
+            --env NIX_BUILD_TOP=/tmp \
+            --tmpfs /tmp:rw,exec,mode=1777 \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --workdir /workspace \
+            "$FORMOSA_CI_IMAGE" \
+            bash -c '
+              set -eo pipefail
+              set +u
+              rc=(/nix/store/*-nix-shell-rc)
+              if (( ${#rc[@]} != 1 )); then
+                printf "expected one Nix shell rc, found %d\n" "${#rc[@]}" >&2
+                exit 1
+              fi
+              source "${rc[0]}"
+              set -euo pipefail
+
+              test -s CMakePresets.json
+              xmake workflow check
+            '
 
       - name: Lint changed files
         if: steps.range.outputs.use_all != 'true'
