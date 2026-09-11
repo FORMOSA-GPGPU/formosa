@@ -16,12 +16,15 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Set up xmake
+        uses: xmake-io/github-action-setup-xmake@3a1a5dddfc7fa625d9a698738334bf55655a861a # v1.2.5
+        with:
+          xmake-version: "3.0.4"
+
       - name: Validate CMake presets
         run: |
+          set -euo pipefail
           test -s CMakePresets.json
-          jq -e '
-            (.version | type == "number") and
-            (.testPresets | type == "array") and
-            ((.testPresets | length) == 17)
-          ' CMakePresets.json >/dev/null
+          xmake workflow check
