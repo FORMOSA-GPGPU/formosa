@@ -13,8 +13,9 @@
 
 local args = { ... }
 local agent_socket_path = os.tmpname()
+local U = require("posix.unistd")
 
-local function test_dev()
+local function test_dev(ready_fd)
   local sizes = { 1, 2, 4, 8, 16, 32, 64 }
   local resp_cnt = 0
 
@@ -74,6 +75,8 @@ local function test_dev()
 
   initiator.target = agent.port
   agent.target = memory.port
+  assert(U.write(ready_fd, "1"), "failed to signal that the agent is ready")
+  U.close(ready_fd)
 
   sc.start()
 
@@ -89,19 +92,26 @@ local function test_dev()
   return true
 end
 
-local function test_host()
+local function test_host(ready_fd)
+  local ready = U.read(ready_fd, 1)
+  U.close(ready_fd)
+  if ready ~= "1" then return false end
+
   local test_program = args[1]
   local exit_code = os.execute(string.format("%s %s", test_program, agent_socket_path))
   return exit_code == 0
 end
 
-local childpid = require("posix.unistd").fork()
+local ready_r, ready_w = U.pipe()
+local childpid = U.fork()
 if childpid == 0 then
   -- Child
-  assert(test_host(), "Host test failed")
+  U.close(ready_w)
+  assert(test_host(ready_r), "Host test failed")
 else
   -- Parent
-  assert(test_dev(), "Device test failed")
+  U.close(ready_r)
+  assert(test_dev(ready_w), "Device test failed")
   -- If parent isn't failing, return the child's return value so that child's return value can be
   -- reflected on the parent process.
   local _, _, ret = require("posix.sys.wait").wait(childpid)
