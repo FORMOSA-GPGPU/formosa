@@ -178,7 +178,7 @@ foreach(nw ${WARPS_LIST})
   endforeach() # end ns
 endforeach() # end nw
 
-set(LSU_LIST "simple" "coalescing")
+set(LSU_LIST "simple" "coalescing" "coalescing_outstanding")
 set(LSU_LANES_LIST 4 8 32 64)
 foreach(lsu ${LSU_LIST})
   foreach(nl ${LSU_LANES_LIST})
@@ -193,3 +193,4 @@ foreach(lsu ${LSU_LIST})
 endforeach()
 
 add_simtix_unit_test(pipelined_coalescing_lsu_deterministic lsu_coalescing.lua)
+add_simtix_unit_test(pipelined_coalescing_lsu_outstanding lsu_outstanding.lua)

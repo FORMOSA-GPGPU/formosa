@@ -32,6 +32,12 @@ tester:lsu_init(function(name)
     return simtix.CoalescingLsu(name, param, {
       enable_stack_remap = false, -- Disable stack remap for testing
     })
+  elseif args.lsu == "coalescing_outstanding" then
+    return simtix.CoalescingOutstandingLsu(name, param, {
+      enable_stack_remap = false, -- Disable stack remap for testing
+    })
+  else
+    error("Unknown LSU: " .. tostring(args.lsu))
   end
 end)
 

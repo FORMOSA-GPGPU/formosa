@@ -33,6 +33,7 @@ add_library(simtix STATIC
   cores/pipelined/lsu/probe_memory.cc
   cores/pipelined/lsu/simple.cc
   cores/pipelined/lsu/coalescing.cc
+  cores/pipelined/lsu/coalescing_outstanding.cc
   cores/pipelined/lsu/stack_remap_table.cc
   cores/scalar/packet.cc
   cores/scalar/scalar_core.cc

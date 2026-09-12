@@ -4,6 +4,9 @@
 
 #include <liblv/binding.h>
 
+#include <algorithm>
+#include <string>
+
 #include "cores/pipelined/lsu/base.h"
 
 namespace simtix::pipelined {
@@ -13,9 +16,9 @@ class LsuTester : public sc_module {
   LsuTester(const sc_module_name &name, const ArchParam &param)
       : sc_module(name),
         num_lanes_(param.num_lanes),
-        pool_(param, 10),
-        lsu_req_(2),
-        lsu_resp_(2) {
+        pool_(param, 64),
+        lsu_req_(64),
+        lsu_resp_(64) {
     SC_METHOD(Pause);
     sensitive << lsu_resp_.ok_to_get();
     dont_initialize();
@@ -81,6 +84,91 @@ class LsuTester : public sc_module {
     return data_buf;
   }
 
+  uint64_t issue_load(uint64_t id, const LuaArr<uint64_t> &addr, size_t size,
+                      bool is_signed, const char *tmask) {
+    Packet *packet = pool_.Acquire();
+    packet->wpc = id;
+    packet->tmask = tmask;
+    packet->addr_buf = addr.value();
+    std::fill(packet->data_buf.begin(), packet->data_buf.end(), 0);
+    packet->flag = ExecFlag::LOAD | Size2Flag(size) |
+                   (is_signed ? ExecFlag::SIGNED : ExecFlag::NONE);
+    outstanding_.push_back(packet);
+    lsu_req_.put(packet);
+    return id;
+  }
+
+  uint64_t issue_store(uint64_t id, const LuaArr<uint64_t> &addr,
+                       const LuaArr<uint8_t> &data, size_t size,
+                       const char *tmask) {
+    Packet *packet = pool_.Acquire();
+    packet->wpc = id;
+    packet->tmask = tmask;
+    packet->addr_buf = addr.value();
+    std::memcpy(packet->data_buf.data(), data.value().data(), 8 * num_lanes_);
+    packet->flag = ExecFlag::STORE | Size2Flag(size);
+    outstanding_.push_back(packet);
+    lsu_req_.put(packet);
+    return id;
+  }
+
+  uint64_t issue_atomic(uint64_t id, const LuaArr<uint64_t> &addr,
+                        const LuaArr<uint8_t> &data, size_t size,
+                        bool is_signed, const char *tmask,
+                        const std::string &op) {
+    Packet *packet = pool_.Acquire();
+    packet->wpc = id;
+    packet->tmask = tmask;
+    packet->addr_buf = addr.value();
+    std::memcpy(packet->data_buf.data(), data.value().data(), 8 * num_lanes_);
+    ExecFlag amo = ExecFlag::AMO_ADD;
+    if (op == "swap")
+      amo = ExecFlag::AMO_SWAP;
+    else if (op == "xor")
+      amo = ExecFlag::AMO_XOR;
+    else if (op == "and")
+      amo = ExecFlag::AMO_AND;
+    else if (op == "or")
+      amo = ExecFlag::AMO_OR;
+    else if (op == "min")
+      amo = ExecFlag::AMO_MIN;
+    else if (op == "max")
+      amo = ExecFlag::AMO_MAX;
+    else if (op == "minu")
+      amo = ExecFlag::AMO_MINU;
+    else if (op == "maxu")
+      amo = ExecFlag::AMO_MAXU;
+    packet->flag = ExecFlag::ATOMIC | Size2Flag(size) | amo |
+                   (is_signed ? ExecFlag::SIGNED : ExecFlag::NONE);
+    outstanding_.push_back(packet);
+    lsu_req_.put(packet);
+    return id;
+  }
+
+  bool response_available() const { return lsu_resp_.nb_can_get(); }
+  uint64_t completed_id() { return lsu_resp_.peek()->wpc; }
+  LuaArr<uint8_t> collect_response() {
+    Packet *packet = lsu_resp_.get();
+    std::vector<uint8_t> data(8 * num_lanes_);
+    std::memcpy(data.data(), packet->data_buf.data(), data.size());
+    auto it = std::find(outstanding_.begin(), outstanding_.end(), packet);
+    assert(it != outstanding_.end());
+    outstanding_.erase(it);
+    pool_.Release(packet);
+    return data;
+  }
+
+  LuaArr<uint8_t> inspect_data(uint64_t id) const {
+    auto it =
+        std::find_if(outstanding_.begin(), outstanding_.end(), [id](Packet *p) {
+          return p->wpc == id;
+        });
+    assert(it != outstanding_.end());
+    std::vector<uint8_t> data(8 * num_lanes_);
+    std::memcpy(data.data(), (*it)->data_buf.data(), data.size());
+    return sol::as_table(std::move(data));
+  }
+
  private:
   void Pause() { sc_pause(); }
 
@@ -107,6 +195,7 @@ class LsuTester : public sc_module {
   sol::function lsu_init_;
   Lsu::Target *target_ = nullptr;
   sc_clock *clock_ = nullptr;
+  std::vector<Packet *> outstanding_;
 };
 
 LV_BINDING(simtix, LsuTester)
@@ -126,6 +215,25 @@ LV_BINDING(simtix, LsuTester)
     .method("store", &LsuTester::store,
             lv::params("ip", "addr", "data", "size", "tmask"),
             lv::doc("Issue a store packet"))
+    .method("issue_load", &LsuTester::issue_load,
+            lv::params("id", "addr", "size", "is_signed", "tmask"),
+            lv::doc("Issue a load without waiting for completion"))
+    .method("issue_store", &LsuTester::issue_store,
+            lv::params("id", "addr", "data", "size", "tmask"),
+            lv::doc("Issue a store without waiting for completion"))
+    .method("issue_atomic", &LsuTester::issue_atomic,
+            lv::params("id", "addr", "data", "size", "is_signed", "tmask",
+                       "op"),
+            lv::doc("Issue an atomic operation without waiting for completion"))
+    .method("response_available", &LsuTester::response_available,
+            lv::doc("Whether a completed packet is available"))
+    .method("completed_id", &LsuTester::completed_id,
+            lv::doc("Return the identifier of the next completion"))
+    .method("collect_response", &LsuTester::collect_response,
+            lv::doc("Collect and release the next completed packet"))
+    .method(
+        "inspect_data", &LsuTester::inspect_data, lv::params("id"),
+        lv::doc("Inspect an outstanding packet's data without modifying it"))
     .property("target", &LsuTester::set_target, lv::doc("Memory target"));
 
 }  // namespace simtix::pipelined

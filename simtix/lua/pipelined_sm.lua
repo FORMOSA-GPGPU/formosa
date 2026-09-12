@@ -11,6 +11,8 @@ local BankedMemory = require("simtix.banked_memory")
 ---@field num_lmem_banks? integer
 ---@field scheduler? string
 ---@field scheduler_config? table
+---@field lsu? "simple"|"coalescing"|"coalescing_outstanding"
+---@field lsu_config? table
 ---@field enable_ghost_scheduler? boolean
 ---@field ghost_scheduler_param? simtix.PipelinedCore.GhostParam
 
@@ -160,6 +162,7 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
   -- Subcore (backends) configuration
   local scheduler = config.scheduler or "tl"
   local scheduler_config = config.scheduler_config or {}
+  local lsu_config = config.lsu_config or {}
   for i = 1, #self._core.subcores do
     local subcore = self._core.subcores[i]
     subcore:sched_init(function(name)
@@ -175,7 +178,10 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
     end)
 
     subcore:lsu_init(function(name)
-      local lsu = simtix.CoalescingLsu(name, core_param, {
+      local lsu_kind = config.lsu or "coalescing_outstanding"
+      if lsu_kind == "simple" then return simtix.SimpleLsu(name, core_param) end
+
+      local lsu_param = {
         cache_block_size = config.dcache_block_size or config.cache_block_size,
         enable_stack_remap = true,
         granularity = 8,
@@ -183,7 +189,16 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
         stack_start = 0x81000000,
         stack_end = 0x81FFFFFF,
         stack_size_per_thread = config.stack_size_per_thread,
-      })
+      }
+      local lsu
+      if lsu_kind == "coalescing" then
+        lsu = simtix.CoalescingLsu(name, core_param, lsu_param)
+      elseif lsu_kind == "coalescing_outstanding" then
+        lsu_param.num_inflight_slots = lsu_config.num_inflight_slots
+        lsu = simtix.CoalescingOutstandingLsu(name, core_param, lsu_param)
+      else
+        error("Unknown LSU: " .. tostring(lsu_kind))
+      end
       lsu.stack_remap_table = self._stack_remap
       return lsu
     end)

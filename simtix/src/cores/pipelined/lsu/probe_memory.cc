@@ -16,6 +16,8 @@
 #include <string>
 #include <vector>
 
+#include "cores/pipelined/lsu/coalescing_outstanding.h"
+
 namespace simtix::pipelined {
 
 class LsuProbeMemory : public sc_module {
@@ -69,6 +71,36 @@ class LsuProbeMemory : public sc_module {
     return sol::as_table(RequestAt(index).byte_enable);
   }
 
+  void set_auto_respond(bool enable) { auto_respond_ = enable; }
+  bool auto_respond() const { return auto_respond_; }
+  size_t pending_response_count() const { return pending_.size(); }
+  uint32_t request_slot_id(size_t index) const {
+    return RequestAt(index).slot_id;
+  }
+  uint32_t request_req_id(size_t index) const {
+    return RequestAt(index).req_id;
+  }
+
+  void respond(size_t index) {
+    assert(index >= 1 && index <= pending_.size());
+    auto *trans = pending_[index - 1];
+    pending_.erase(pending_.begin() + index - 1);
+    assert(sink_.resp_port->nb_write(trans));
+  }
+
+  void respond_by_tag(uint32_t slot_id, uint32_t req_id) {
+    auto pending_iter =
+        std::find_if(pending_.begin(), pending_.end(), [&](auto *trans) {
+          auto *extension = trans->template get_extension<LsuTransExtension>();
+          return extension && extension->slot_id == slot_id &&
+                 extension->req_id == req_id;
+        });
+    assert(pending_iter != pending_.end());
+    auto *trans = *pending_iter;
+    pending_.erase(pending_iter);
+    assert(sink_.resp_port->nb_write(trans));
+  }
+
   LuaBytes read_bytes(uint64_t addr, size_t size) const {
     assert(addr <= mem_.size());
     auto offset = static_cast<size_t>(addr);
@@ -91,6 +123,8 @@ class LsuProbeMemory : public sc_module {
     uint64_t addr = 0;
     uint32_t length = 0;
     uint32_t byte_enable_length = 0;
+    uint32_t slot_id = 0;
+    uint32_t req_id = 0;
     std::vector<uint8_t> data;
     std::vector<uint8_t> byte_enable;
   };
@@ -105,7 +139,10 @@ class LsuProbeMemory : public sc_module {
     for (;;) {
       auto *trans = sink_.req_port->read();
       ProcessRequest(trans);
-      sink_.resp_port->write(trans);
+      if (auto_respond_)
+        sink_.resp_port->write(trans);
+      else
+        pending_.push_back(trans);
     }
   }
 
@@ -122,6 +159,10 @@ class LsuProbeMemory : public sc_module {
     record.addr = addr;
     record.length = length;
     record.byte_enable_length = byte_enable_length;
+    if (auto *extension = trans->get_extension<LsuTransExtension>()) {
+      record.slot_id = extension->slot_id;
+      record.req_id = extension->req_id;
+    }
     if (byte_enable_ptr != nullptr && byte_enable_length > 0) {
       record.byte_enable.assign(byte_enable_ptr,
                                 byte_enable_ptr + byte_enable_length);
@@ -178,6 +219,8 @@ class LsuProbeMemory : public sc_module {
   std::vector<uint8_t> mem_;
   lv::TlmSink sink_;
   std::vector<RequestRecord> requests_;
+  std::vector<tlm::tlm_generic_payload *> pending_;
+  bool auto_respond_ = true;
 };
 
 LV_BINDING(simtix, LsuProbeMemory)
@@ -204,6 +247,20 @@ LV_BINDING(simtix, LsuProbeMemory)
     .method("request_byte_enable", &LsuProbeMemory::request_byte_enable,
             lv::params("index"),
             lv::doc("Return recorded request byte-enable data"))
+    .property("auto_respond", &LsuProbeMemory::auto_respond,
+              &LsuProbeMemory::set_auto_respond,
+              lv::doc("Whether requests are responded to immediately"))
+    .method("pending_response_count", &LsuProbeMemory::pending_response_count,
+            lv::doc("Return the number of held responses"))
+    .method("request_slot_id", &LsuProbeMemory::request_slot_id,
+            lv::params("index"), lv::doc("Return the LSU slot tag"))
+    .method("request_req_id", &LsuProbeMemory::request_req_id,
+            lv::params("index"), lv::doc("Return the LSU request tag"))
+    .method("respond", &LsuProbeMemory::respond, lv::params("pending_index"),
+            lv::doc("Respond to one held request"))
+    .method("respond_by_tag", &LsuProbeMemory::respond_by_tag,
+            lv::params("slot_id", "req_id"),
+            lv::doc("Respond to a held request selected by LSU tag"))
     .method("read_bytes", &LsuProbeMemory::read_bytes,
             lv::params("addr", "size"), lv::doc("Read bytes from memory"))
     .method("write_bytes", &LsuProbeMemory::write_bytes,
