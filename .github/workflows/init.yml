@@ -16,12 +16,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Check out repository
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@13d8dd58da0234aa297dedd986986ccb8e7f3e24 # v31.11.1
+        with:
+          enable_kvm: false
+          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Validate CMake presets
         run: |
+          set -euo pipefail
           test -s CMakePresets.json
-          jq -e '
-            (.version | type == "number") and
-            (.testPresets | type == "array") and
-            ((.testPresets | length) == 17)
-          ' CMakePresets.json >/dev/null
+          nix shell --inputs-from . nixpkgs#xmake --command xmake workflow check
