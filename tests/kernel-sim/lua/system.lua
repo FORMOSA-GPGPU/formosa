@@ -53,7 +53,8 @@ function System.new(prog_name, args)
 
   ---@type formosa.system.sm_ctor
   local make_sm = require(param.sm)
-  self._sm = make_sm("SM0", self._config, self._clock, self._reset_n, 0)
+  self._sm = make_sm("SM0", self._config, 0)
+  self._sm.clock = self._clock
 
   self._initiator.clock = self._clock
   self._tick_agent.clock = self._clock

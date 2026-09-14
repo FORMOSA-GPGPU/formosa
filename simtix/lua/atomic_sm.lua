@@ -4,7 +4,6 @@
 
 ---@class simtix.atomic_sm : formosa.system.sm
 ---@field protected _clock sc.clock
----@field protected _reset_n sc.signal
 ---@field protected _id integer
 ---@field protected _sc_module sc.Module
 ---@field protected _router simple.XBar
@@ -16,21 +15,18 @@
 ---@field protected _wg_init formosa.WGInitializer
 ---@field protected _core_info simple.ConstantTable
 ---@field protected _stack_remap simtix.StackRemapTable
----@overload fun(name: string, config: formosa.system.config, clock: sc.clock, reset_n: sc.signal, id: integer): simtix.atomic_sm
+---@overload fun(name: string, config: formosa.system.config, id: integer, sm_param?: table): simtix.atomic_sm
 local AtomicSM = {}
 
 ---@param name string
 ---@param config formosa.system.config
----@param clock sc.clock
----@param reset_n sc.signal
 ---@param id integer
+---@param sm_param? table
 ---@return simtix.atomic_sm
-function AtomicSM.new(name, config, clock, reset_n, id)
-  config = config or {}
+function AtomicSM.new(name, config, id, sm_param)
+  assert(not sm_param or not next(sm_param), "AtomicSM has no SM-specific configuration")
   ---@type simtix.atomic_sm
   local self = setmetatable({}, AtomicSM --[[@as table]])
-  self._clock = clock
-  self._reset_n = reset_n
   self._id = id
 
   -- Child names are local to this hierarchy-aware SM instance.
@@ -117,14 +113,17 @@ function AtomicSM.new(name, config, clock, reset_n, id)
   self.stats:add_sub_group(self._core.stats)
   self.stats:add_sub_group(self._l1cache.stats)
 
-  self._core.clock = self._clock
-  self._router.clock = self._clock
-  self._stub_cache.clock = self._clock
-  self._l1cache.clock = self._clock
-  self._dmem_xbar.clock = self._clock
-  self._local_mem.clock = self._clock
-
   return self
+end
+
+function AtomicSM:set_clock(clock)
+  self._clock = clock
+  self._core.clock = clock
+  self._router.clock = clock
+  self._stub_cache.clock = clock
+  self._l1cache.clock = clock
+  self._dmem_xbar.clock = clock
+  self._local_mem.clock = clock
 end
 
 function AtomicSM:set_target(target) self._l1cache.target = target end
@@ -134,6 +133,8 @@ function AtomicSM:get_port() return self._router.core_side[1].port end
 function AtomicSM:__index(key)
   if key == "port" then
     return self:get_port()
+  elseif key == "clock" then
+    return self._clock
   else
     return AtomicSM[key]
   end
@@ -142,6 +143,8 @@ end
 function AtomicSM:__newindex(key, value)
   if key == "target" then
     self:set_target(value)
+  elseif key == "clock" then
+    self:set_clock(value)
   else
     rawset(self, key, value)
   end

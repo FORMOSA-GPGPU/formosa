@@ -2,16 +2,19 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
----@class formosa.system.sm : nil
+---@class formosa.system.sm
 ---@field port sc.Socket
 ---@field target sc.Socket
+---@field clock sc.clock
 ---@field stats stats.Group | nil
 
----@alias formosa.system.sm_ctor fun(name: string, config: formosa.system.config, clock: sc.clock, rst_n: sc.signal, id: number): formosa.system.sm
+---@alias formosa.system.sm_ctor fun(name: string, config: formosa.system.config, id: number, sm_param: table|nil): formosa.system.sm
 
 ---@class formosa.system.opts
----@field replay boolean
----@field keep_alive boolean
+---@field replay? boolean
+---@field replay_host_mem_size? integer
+---@field keep_alive? boolean
+---@field sm_param? table
 
 ---@class formosa.system
 ---@field protected _period sc.time
@@ -54,10 +57,11 @@ System.__index = System
 ---@param agent_socket_path string
 ---@param config formosa.system.config
 ---@param make_sm formosa.system.sm_ctor
----@param opts table|nil
+---@param opts? formosa.system.opts
 ---@return formosa.system
 -- `name` is consumed by lv.sc_module.wrap to name the backing SystemC module.
 function System.new(name, agent_socket_path, config, make_sm, opts)
+  opts = opts or {}
   ---@type formosa.system
   local self = setmetatable({}, System --[[@as table]])
 
@@ -231,11 +235,11 @@ function System.new(name, agent_socket_path, config, make_sm, opts)
 
   for i = 1, config.num_sm do
     local id = i - 1
-    local sm = make_sm("SM" .. id, config, self._clock, self._rst_n, id)
+    local sm = make_sm("SM" .. id, config, id, opts.sm_param)
+    sm.clock = self._clock
     table.insert(self._sm, sm)
   end
 
-  opts = opts or {}
   local replay = opts.replay or false
 
   -- Agent subsys

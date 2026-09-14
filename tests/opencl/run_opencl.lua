@@ -5,7 +5,6 @@
 ---@type formosa.system.config
 local config = require("formosa.config")
 ---@class formosa.system.config
----@field pipelined_core_config? table
 
 ---@type formosa.system
 local System = require("formosa.system")
@@ -32,14 +31,11 @@ local sm_kinds = require("formosa.sm_kinds")
 local parser = argparse("run_opencl.lua")
 parser:option("-s --stats", "Output path of the stat"):args(1)
 parser
-  :option("--ghost", "Override the GhOST scheduler configuration")
-  :args(1)
-  :choices({ "off", "on" })
-parser
   :option("--sm", "Stream multiprocessor to simulate")
   :args(1)
   :choices(sm_kinds.available())
   :default("simtix.pipelined_sm")
+parser:option("--sm-param", "Lua file returning the selected SM's parameter table"):args(1)
 parser:option("-t --trace", "Output prefix of the Perfetto trace"):args(1):default("run_opencl")
 parser
   :option(
@@ -48,16 +44,20 @@ parser
   )
   :args(1)
   :convert(tonumber)
-  :default(0)
 parser:option("--replay-capture", "Output directory for replay capture"):args(1)
 parser:argument("host_program", "Host program to run with the simulator"):args("1")
 parser:argument("host_program_args", "Arguments for the host program"):args("*")
 
 local args = parser:parse({ ... })
 
-config.pipelined_core_config = config.pipelined_core_config or {}
-config.pipelined_core_config.heartbeat_frequency = args.heartbeat_frequency
-if args.ghost then config.pipelined_core_config.enable_ghost_scheduler = args.ghost == "on" end
+local sm_param = {}
+if args.sm_param then sm_param = dofile(args.sm_param) end
+assert(type(sm_param) == "table", "--sm-param must return a table")
+if args.heartbeat_frequency ~= nil then
+  assert(args.sm == "simtix.pipelined_sm", "--heartbeat-frequency requires pipelined SM")
+  sm_param.core = sm_param.core or {}
+  sm_param.core.heartbeat_frequency = args.heartbeat_frequency
+end
 
 local make_sm = require(args.sm)
 
@@ -130,7 +130,7 @@ if childpid == 0 then
     end
   end
 
-  local system = System("System", agent_socket_path, config, make_sm)
+  local system = System("System", agent_socket_path, config, make_sm, { sm_param = sm_param })
   local socket_info = assert(Stat.stat(agent_socket_path), "agent socket was not created")
   assert(Stat.S_ISSOCK(socket_info.st_mode) ~= 0, "agent socket path is not a socket")
   assert(U.write(ready_w, "1"), "failed to signal that the agent socket is ready")

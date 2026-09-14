@@ -4,21 +4,18 @@
 
 local BankedMemory = require("simtix.banked_memory")
 
----@class simtix.pipelined_sm.config : formosa.system.config
----@field pipelined_core_config simtix.PipelinedCore.Param
----@field icache_block_size integer
----@field dcache_block_size integer
+---@class simtix.pipelined_sm.param
+---@field core? simtix.PipelinedCore.Param
+---@field icache_block_size? integer
+---@field dcache_block_size? integer
 ---@field num_lmem_banks? integer
 ---@field scheduler? string
 ---@field scheduler_config? table
 ---@field lsu? "simple"|"coalescing"|"coalescing_outstanding"
 ---@field lsu_config? table
----@field enable_ghost_scheduler? boolean
----@field ghost_scheduler_param? simtix.PipelinedCore.GhostParam
 
 ---@class simtix.pipelined_sm : formosa.system.sm
 ---@field protected _clock sc.clock
----@field protected _reset_n sc.signal
 ---@field protected _id integer
 ---@field protected _sc_module sc.Module
 ---@field protected _router simple.XBar
@@ -32,21 +29,18 @@ local BankedMemory = require("simtix.banked_memory")
 ---@field protected _wg_init formosa.WGInitializer
 ---@field protected _core_info simple.ConstantTable
 ---@field protected _stack_remap simtix.StackRemapTable
----@overload fun(name: string, config: simtix.pipelined_sm.config, clock: sc.clock, reset_n: sc.signal, id: integer): simtix.pipelined_sm
+---@overload fun(name: string, config: formosa.system.config, id: integer, sm_param?: simtix.pipelined_sm.param): simtix.pipelined_sm
 local PipelinedSM = {}
 
 ---@param name string
----@param config simtix.pipelined_sm.config
----@param clock sc.clock
----@param reset_n sc.signal
+---@param config formosa.system.config
 ---@param id integer
+---@param sm_param? simtix.pipelined_sm.param
 ---@return simtix.pipelined_sm
-function PipelinedSM.new(name, config, clock, reset_n, id)
-  config = config or {}
+function PipelinedSM.new(name, config, id, sm_param)
+  sm_param = sm_param or {}
   ---@type simtix.pipelined_sm
   local self = setmetatable({}, PipelinedSM --[[@as table]])
-  self._clock = clock
-  self._reset_n = reset_n
   self._id = id
 
   local core_param = {
@@ -54,23 +48,7 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
     num_lanes = config.threads_per_warp,
   }
 
-  local pipe_param = config.pipelined_core_config
-    or {
-      fetch_width = 2,
-      decode_width = 2,
-      num_subcores = 4,
-      num_fetch_filter_entries = 8,
-      num_fetch_entries = 8,
-      enable_iwis = true,
-      pftrace = false,
-    }
-
-  if config.enable_ghost_scheduler ~= nil then
-    pipe_param.enable_ghost_scheduler = config.enable_ghost_scheduler
-  end
-
-  local ghost_scheduler_param = config.ghost_scheduler_param
-  pipe_param.ghost_param = ghost_scheduler_param or {}
+  local pipe_param = sm_param.core or {}
 
   -- Child names are local to this hierarchy-aware SM instance.
   self._core = simtix.PipelinedCore("PipelinedCore", core_param, pipe_param)
@@ -79,7 +57,7 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
   self._icache = simtix.Cache("ICache", {
     write_hit_policy = "WriteThrough",
     size_bytes = config.icache_size or config.cache_size,
-    block_size_bytes = config.icache_block_size or config.cache_block_size,
+    block_size_bytes = sm_param.icache_block_size or config.cache_block_size,
     ways = 4,
     mshrs = 4,
   })
@@ -87,7 +65,7 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
   self._dcache = simtix.Cache("DCache", {
     write_hit_policy = "WriteBack",
     size_bytes = config.dcache_size or config.cache_size,
-    block_size_bytes = config.dcache_block_size or config.cache_block_size,
+    block_size_bytes = sm_param.dcache_block_size or config.cache_block_size,
     non_cacheable_regions = config.non_cacheable_regions or {},
     ways = 4,
     mshrs = 8,
@@ -110,9 +88,9 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
   end
   self._local_mem = BankedMemory("LocalMem", {
     size = config.local_mem_size,
-    num_banks = config.num_lmem_banks or num_subcores,
+    num_banks = sm_param.num_lmem_banks or num_subcores,
     num_froms = num_subcores,
-    bank_line_size = config.dcache_block_size or config.cache_block_size,
+    bank_line_size = sm_param.dcache_block_size or config.cache_block_size,
   })
 
   self._mux = simple.Mux("Mux", { fifo_size = 32 })
@@ -133,10 +111,11 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
     },
   })
 
-  self._stack_remap = simtix.StackRemapTable("StackRemapTable", {
+  local stack_remap = simtix.StackRemapTable("StackRemapTable", {
     entries = config.stack_remap_entries,
     region_size = config.stack_size_per_thread * config.threads_per_core,
   })
+  self._stack_remap = stack_remap
 
   self._router = simple.XBar("SMRouter", 1, {
     { addr = config.wgi_csr_base, size = config.wgi_csr_size }, -- WGInit
@@ -160,9 +139,9 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
   self._dmem_mux.to = self._dcache.port
 
   -- Subcore (backends) configuration
-  local scheduler = config.scheduler or "tl"
-  local scheduler_config = config.scheduler_config or {}
-  local lsu_config = config.lsu_config or {}
+  local scheduler = sm_param.scheduler or "tl"
+  local scheduler_config = sm_param.scheduler_config or {}
+  local lsu_config = sm_param.lsu_config or {}
   for i = 1, #self._core.subcores do
     local subcore = self._core.subcores[i]
     subcore:sched_init(function(name)
@@ -178,11 +157,11 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
     end)
 
     subcore:lsu_init(function(name)
-      local lsu_kind = config.lsu or "coalescing_outstanding"
+      local lsu_kind = sm_param.lsu or "coalescing_outstanding"
       if lsu_kind == "simple" then return simtix.SimpleLsu(name, core_param) end
 
       local lsu_param = {
-        cache_block_size = config.dcache_block_size or config.cache_block_size,
+        cache_block_size = sm_param.dcache_block_size or config.cache_block_size,
         enable_stack_remap = true,
         granularity = 8,
         stack_group_size = config.stack_remap_group_size,
@@ -199,7 +178,7 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
       else
         error("Unknown LSU: " .. tostring(lsu_kind))
       end
-      lsu.stack_remap_table = self._stack_remap
+      lsu.stack_remap_table = stack_remap
       return lsu
     end)
 
@@ -210,7 +189,7 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
           num_write_collect_units = 1,
           rf_arch = "Baseline",
           num_regfile_banks = 4,
-          num_subcores = pipe_param.num_subcores,
+          num_subcores = num_subcores,
           num_shared_ports = 1,
           num_read_ports = 0,
           num_write_ports = 0,
@@ -232,20 +211,22 @@ function PipelinedSM.new(name, config, clock, reset_n, id)
   self.stats:add_sub_group(self._icache.stats)
   self.stats:add_sub_group(self._dcache.stats)
 
-  -- Clock
-  self._core.clock = self._clock
-  self._icache.clock = self._clock
-  self._dcache.clock = self._clock
-  for _, dmem_xbar in ipairs(self._dmem_xbars) do
-    dmem_xbar.clock = self._clock
-  end
-  self._local_mem.clock = self._clock
-  self._router.clock = self._clock
-
   self._icache.target = self._mux.from
   self._dcache.target = self._mux.from
 
   return self
+end
+
+function PipelinedSM:set_clock(clock)
+  self._clock = clock
+  self._core.clock = clock
+  self._icache.clock = clock
+  self._dcache.clock = clock
+  for _, dmem_xbar in ipairs(self._dmem_xbars) do
+    dmem_xbar.clock = clock
+  end
+  self._local_mem.clock = clock
+  self._router.clock = clock
 end
 
 function PipelinedSM:set_target(target) self._mux.to = target end
@@ -255,6 +236,8 @@ function PipelinedSM:get_port() return self._router.core_side[1].port end
 function PipelinedSM:__index(key)
   if key == "port" then
     return self:get_port()
+  elseif key == "clock" then
+    return self._clock
   else
     return PipelinedSM[key]
   end
@@ -263,6 +246,8 @@ end
 function PipelinedSM:__newindex(key, value)
   if key == "target" then
     self:set_target(value)
+  elseif key == "clock" then
+    self:set_clock(value)
   else
     rawset(self, key, value)
   end

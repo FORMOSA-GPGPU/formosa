@@ -28,6 +28,7 @@ parser
   :args(1)
   :choices(sm_kinds.available())
   :default("simtix.pipelined_sm")
+parser:option("--sm-param", "Lua file returning the selected SM's parameter table"):args(1)
 parser
   :option("-t --trace", "Output prefix of the Perfetto trace")
   :args(1)
@@ -52,6 +53,10 @@ parser
 parser:argument("replay_dir", "Replay capture directory"):args(1)
 
 local args = parser:parse({ ... })
+
+local sm_param = {}
+if args.sm_param then sm_param = dofile(args.sm_param) end
+assert(type(sm_param) == "table", "--sm-param must return a table")
 
 local make_sm = require(args.sm)
 
@@ -412,6 +417,7 @@ end
 
 local system = System("System", make_agent_socket_path(), config, make_sm, {
   replay = true,
+  sm_param = sm_param,
   replay_host_mem_size = replay_host_address + replay_host_payload_bytes + max_payload_size + 64,
 })
 

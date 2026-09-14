@@ -32,7 +32,7 @@ parser
   )
   :args(1)
   :convert(tonumber)
-  :default(0)
+parser:option("--sm-param", "Lua file returning the selected SM's parameter table"):args(1)
 parser:option("--drain", "Extra drain cycles after the main run"):convert(tonumber):default(5000)
 parser:flag("--keep-alive", "Ignore client Terminate and keep the simulation running")
 
@@ -48,12 +48,19 @@ local config_target = string.format("%s.%d.sh", config_stem, daemon_pid)
 local config_file = config_dir .. "/" .. config_target
 local config_link_tmp = config_link .. ".tmp." .. daemon_pid
 
-config.pipelined_core_config = config.pipelined_core_config or {}
-config.pipelined_core_config.heartbeat_frequency = args.heartbeat_frequency
+local sm_param = {}
+if args.sm_param then sm_param = dofile(args.sm_param) end
+assert(type(sm_param) == "table", "--sm-param must return a table")
+if args.heartbeat_frequency ~= nil then
+  assert(args.sm == "simtix.pipelined_sm", "--heartbeat-frequency requires pipelined SM")
+  sm_param.core = sm_param.core or {}
+  sm_param.core.heartbeat_frequency = args.heartbeat_frequency
+end
 
 local make_sm = require(args.sm)
 local system = System("System", "/tmp/formosa.sock", config, make_sm, {
   keep_alive = args.keep_alive,
+  sm_param = sm_param,
 })
 
 config:dump(config_file)
