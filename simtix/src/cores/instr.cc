@@ -277,6 +277,10 @@ LV_BINDING(simtix, Instr)
     .property("rs1", &Instr::rs1, lv::doc("First source register index"))
     .property("rs2", &Instr::rs2, lv::doc("Second source register index"))
     .property("rs3", &Instr::rs3, lv::doc("Third source register index"))
+    .property("is_branch", &Instr::is_branch,
+              lv::doc("Whether this is a conditional branch instruction"))
+    .property("is_jump", &Instr::is_jump,
+              lv::doc("Whether this is a jump instruction"))
     .property("is_cti", &Instr::is_cti,
               lv::doc("Whether this is a control-transfer instruction"))
     .property("is_mem", &Instr::is_mem,

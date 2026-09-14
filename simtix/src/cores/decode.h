@@ -92,19 +92,29 @@ class Decoder {
     return (HasType<InstrDef, InstrClasses>::value || ...) ? Flag : 0;
   }
 
+  template <typename InstrDef, InstrFlags::Bits Flag, typename InstrClass>
+  static constexpr InstrFlags::Bits FlagIfMatch() {
+    return (std::is_same_v<InstrDef, InstrClass> ? Flag : 0);
+  }
+
   template <typename InstrDef>
   static constexpr InstrFlags::Bits FlagsFor() {
     if constexpr (std::is_same_v<InstrDef, Illegal>) {
       return 0;
     }
-    return FlagIfMember<InstrDef, InstrFlags::kLoad, InstrLoad>() |
-           FlagIfMember<InstrDef, InstrFlags::kStore, InstrStore>() |
-           FlagIfMember<InstrDef, InstrFlags::kAtomic, InstrAmo>() |
-           FlagIfMember<InstrDef, InstrFlags::kSerializing, InstrSystem,
-                        InstrFormosa>() |
-           FlagIfMember<InstrDef, InstrFlags::kCti, InstrBranch, InstrJal,
-                        InstrJalr, InstrFormosa>() |
-           (std::is_same_v<InstrDef, ECALL> ? InstrFlags::kCti : 0);
+    return
+        // InstrDef is a member of a given group.
+        FlagIfMember<InstrDef, InstrFlags::kLoad, InstrLoad>() |
+        FlagIfMember<InstrDef, InstrFlags::kStore, InstrStore>() |
+        FlagIfMember<InstrDef, InstrFlags::kAtomic, InstrAmo>() |
+        FlagIfMember<InstrDef, InstrFlags::kSerializing, InstrSystem,
+                     InstrFormosa>() |
+        FlagIfMember<InstrDef, InstrFlags::kCti, InstrBranch, InstrJal,
+                     InstrJalr, InstrFormosa>() |
+        FlagIfMember<InstrDef, InstrFlags::kBranch, InstrBranch>() |
+        FlagIfMember<InstrDef, InstrFlags::kJump, InstrJal, InstrJalr>() |
+        // ECALL is a CTI, but neither a branch nor a jump.
+        FlagIfMatch<InstrDef, InstrFlags::kCti, ECALL>();
   }
 
   template <typename InstrDef>

@@ -12,7 +12,7 @@
 #include <queue>
 #include <vector>
 
-#include "cores/encoding.h"
+#include "cores/instr_def.h"
 #include "cores/pipelined/arbitrator/base.h"
 #include "cores/pipelined/arbitrator/scalar_regfile.h"
 
@@ -162,9 +162,8 @@ class PipelinedArbitrator : public ArbitratorIntf {
       //    uniform.
       //    - ADDI: rs1 is affine and the immediate is treated as the uniform
       //    second operand.
-      uint32_t iword = packet_->iword;
-      bool is_add = (iword & MASK_ADD) == MATCH_ADD;
-      bool is_addi = (iword & MASK_ADDI) == MATCH_ADDI;
+      bool is_add = packet_->instr.is<ADD>();
+      bool is_addi = packet_->instr.is<ADDI>();
 
       if (is_add) {
         return (IsUniform(rs1_kind_) && IsAffine(rs2_kind_)) ||

@@ -33,6 +33,8 @@ struct InstrFlags {
   static constexpr Bits kAtomic = 1u << 2;
   static constexpr Bits kSerializing = 1u << 3;
   static constexpr Bits kCti = 1u << 4;
+  static constexpr Bits kBranch = 1u << 5;
+  static constexpr Bits kJump = 1u << 6;
 
   static constexpr Bits kMemory = kLoad | kStore | kAtomic;
   static constexpr Bits kControl = kCti | kSerializing;
@@ -76,6 +78,12 @@ class Instr {
   inline uint32_t pri() const { return pri_; }
   inline uint8_t rm() const { return rm_; }
   inline bool is_cti() const { return (instr_flags_ & InstrFlags::kCti) != 0; }
+  inline bool is_branch() const {
+    return (instr_flags_ & InstrFlags::kBranch) != 0;
+  }
+  inline bool is_jump() const {
+    return (instr_flags_ & InstrFlags::kJump) != 0;
+  }
   inline bool is_mem() const {
     return (instr_flags_ & InstrFlags::kMemory) != 0;
   }
