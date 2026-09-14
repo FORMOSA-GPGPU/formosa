@@ -8,8 +8,9 @@
 
 #include <array>
 #include <tuple>
+#include <type_traits>
 
-#include "cores/instr.h"
+#include "cores/instr_def.h"
 
 namespace simtix {
 
@@ -83,12 +84,34 @@ class Decoder {
     ExecFunc exec;
     MnemonicFunc mnemonic;
     std::size_t fmt_idx;
+    InstrFlags::Bits flags;
   };
+
+  template <typename InstrDef, InstrFlags::Bits Flag, typename... InstrClasses>
+  static constexpr InstrFlags::Bits FlagIfMember() {
+    return (HasType<InstrDef, InstrClasses>::value || ...) ? Flag : 0;
+  }
+
+  template <typename InstrDef>
+  static constexpr InstrFlags::Bits FlagsFor() {
+    if constexpr (std::is_same_v<InstrDef, Illegal>) {
+      return 0;
+    }
+    return FlagIfMember<InstrDef, InstrFlags::kLoad, InstrLoad>() |
+           FlagIfMember<InstrDef, InstrFlags::kStore, InstrStore>() |
+           FlagIfMember<InstrDef, InstrFlags::kAtomic, InstrAmo>() |
+           FlagIfMember<InstrDef, InstrFlags::kSerializing, InstrSystem,
+                        InstrFormosa>() |
+           FlagIfMember<InstrDef, InstrFlags::kCti, InstrBranch, InstrJal,
+                        InstrJalr, InstrFormosa>() |
+           (std::is_same_v<InstrDef, ECALL> ? InstrFlags::kCti : 0);
+  }
 
   template <typename InstrDef>
   static constexpr DecodeEntry MakeEntry() {
     return {&InstrDef::Execute, &InstrDef::Mnemonic,
-            TupleIndex<typename InstrDef::Fmt, UniqueFmtsTuple>::value};
+            TupleIndex<typename InstrDef::Fmt, UniqueFmtsTuple>::value,
+            FlagsFor<InstrDef>()};
   }
 
   template <std::size_t... I>
@@ -123,6 +146,7 @@ class Decoder {
     Instr instr = prefilled[entry.fmt_idx];
     instr.exec_ = entry.exec;
     instr.mnemonic_ = entry.mnemonic;
+    instr.instr_flags_ = entry.flags;
     return instr;
   }
 };

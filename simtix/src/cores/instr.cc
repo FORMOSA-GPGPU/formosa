@@ -10,6 +10,8 @@
 #include <string>
 #include <string_view>
 
+#include "cores/instr_def.h"
+
 namespace simtix {
 
 namespace {
@@ -91,6 +93,13 @@ static inline uint8_t DecodeUImm(uint32_t iword) {
 
 }  // namespace
 
+bool Instr::is_call() const { return (is<JAL>() || is<JALR>()) && rd() == 1; }
+
+bool Instr::is_ret() const {
+  // RISC-V `ret` == jalr x0, 0(x1/ra).
+  return is<JALR>() && rd() == 0 && rs1() == 1 && imm() == 0;
+}
+
 ////////////
 // R type //
 ////////////
@@ -98,9 +107,6 @@ void RType::Fill(Instr *instr, uint32_t iword) {
   instr->rd_ = DecodeRd(iword);
   instr->rs1_ = DecodeRs1(iword);
   instr->rs2_ = DecodeRs2(iword);
-  if ((iword & INSN_FIELD_OPCODE) == kAmo) {
-    instr->memory_class_ = Instr::MemoryClass::kAtomic;
-  }
 }
 
 std::string RType::Disasm(std::string_view name, const Instr &instr) {
@@ -115,13 +121,6 @@ void IType::Fill(Instr *instr, uint32_t iword) {
   instr->rd_ = DecodeRd(iword);
   instr->rs1_ = DecodeRs1(iword);
   instr->imm_ = DecodeImmIType(iword);
-  if ((iword & MASK_JALR) == MATCH_JALR) {
-    instr->is_cti_ = true;
-    instr->control_class_ = Instr::ControlClass::kBranch;
-  }
-  if ((iword & INSN_FIELD_OPCODE) == kLoad) {
-    instr->memory_class_ = Instr::MemoryClass::kLoad;
-  }
 }
 
 std::string IType::Disasm(std::string_view name, const Instr &instr) {
@@ -142,7 +141,6 @@ void SType::Fill(Instr *instr, uint32_t iword) {
   instr->rs1_ = DecodeRs1(iword);
   instr->rs2_ = DecodeRs2(iword);
   instr->imm_ = DecodeImmSType(iword);
-  instr->memory_class_ = Instr::MemoryClass::kStore;
 }
 
 std::string SType::Disasm(std::string_view name, const Instr &instr) {
@@ -157,8 +155,6 @@ void BType::Fill(Instr *instr, uint32_t iword) {
   instr->rs1_ = DecodeRs1(iword);
   instr->rs2_ = DecodeRs2(iword);
   instr->imm_ = DecodeImmBType(iword);
-  instr->is_cti_ = true;
-  instr->control_class_ = Instr::ControlClass::kBranch;
 }
 
 std::string BType::Disasm(std::string_view name, const Instr &instr) {
@@ -184,8 +180,6 @@ std::string UType::Disasm(std::string_view name, const Instr &instr) {
 void JType::Fill(Instr *instr, uint32_t iword) {
   instr->rd_ = DecodeRd(iword);
   instr->imm_ = DecodeImmJType(iword);
-  instr->is_cti_ = true;
-  instr->control_class_ = Instr::ControlClass::kBranch;
 }
 
 std::string JType::Disasm(std::string_view name, const Instr &instr) {
@@ -200,7 +194,6 @@ void SystemType::Fill(Instr *instr, uint32_t iword) {
   if (funct3 != 0) {
     instr->rd_ = DecodeRd(iword);
     instr->csr_ = DecodeCSR(iword);
-    instr->control_class_ = Instr::ControlClass::kSerializing;
     switch (DecodeFunct3(iword)) {
       case 0b001:
       case 0b010:
@@ -213,10 +206,6 @@ void SystemType::Fill(Instr *instr, uint32_t iword) {
         instr->uimm_ = DecodeUImm(iword);
         break;
     }
-  }
-  if ((iword & MASK_ECALL) == MATCH_ECALL) {
-    instr->is_cti_ = true;
-    instr->control_class_ = Instr::ControlClass::kSerializing;
   }
 }
 
@@ -242,8 +231,6 @@ void FormosaType::Fill(Instr *instr, uint32_t iword) {
   if (funct3 == 0b101 || funct3 == 0b011) {
     instr->pri_ = DecodeRs2(iword);  // rs2 encodes the pri field.
   }
-  instr->is_cti_ = true;
-  instr->control_class_ = Instr::ControlClass::kSerializing;
 }
 
 std::string FormosaType::Disasm(std::string_view name, const Instr &instr) {
@@ -261,11 +248,6 @@ void FPType::Fill(Instr *instr, uint32_t iword) {
   instr->rs1_ = DecodeRs1(iword);
   instr->rs2_ = DecodeRs2(iword);
   instr->rm_ = DecodeFunct3(iword);
-  if ((iword & INSN_FIELD_OPCODE) == kFLoad) {
-    instr->memory_class_ = Instr::MemoryClass::kLoad;
-  } else if ((iword & INSN_FIELD_OPCODE) == kFStore) {
-    instr->memory_class_ = Instr::MemoryClass::kStore;
-  }
 }
 
 std::string FPType::Disasm(std::string_view name, const Instr &instr) {

@@ -9,6 +9,9 @@
 #include <cstdint>
 #include <string>
 #include <string_view>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 
 #include "cores/encoding.h"
 #include "cores/exec_flag.h"
@@ -17,9 +20,23 @@ namespace simtix {
 
 class ExecContext;
 class Instr;
+struct Illegal;
 
 using ExecFunc = ExecFlag (*)(ExecContext *, const Instr &);
 using MnemonicFunc = std::string (*)(const Instr &);
+
+struct InstrFlags {
+  using Bits = uint8_t;
+
+  static constexpr Bits kLoad = 1u << 0;
+  static constexpr Bits kStore = 1u << 1;
+  static constexpr Bits kAtomic = 1u << 2;
+  static constexpr Bits kSerializing = 1u << 3;
+  static constexpr Bits kCti = 1u << 4;
+
+  static constexpr Bits kMemory = kLoad | kStore | kAtomic;
+  static constexpr Bits kControl = kCti | kSerializing;
+};
 
 enum Opcode : uint8_t {
   // clang-format off
@@ -48,20 +65,6 @@ enum Opcode : uint8_t {
 };
 
 class Instr {
- private:
-  enum class MemoryClass {
-    kNone,
-    kLoad,
-    kStore,
-    kAtomic,
-  };
-
-  enum class ControlClass {
-    kNone,
-    kBranch,
-    kSerializing,
-  };
-
  public:
   inline uint8_t rd() const { return rd_; }
   inline uint8_t rs1() const { return rs1_; }
@@ -72,18 +75,37 @@ class Instr {
   inline uint8_t uimm() const { return uimm_; }
   inline uint32_t pri() const { return pri_; }
   inline uint8_t rm() const { return rm_; }
-  inline bool is_cti() const { return is_cti_; }
-  inline bool is_mem() const { return memory_class_ != MemoryClass::kNone; }
-  inline bool is_load() const { return memory_class_ == MemoryClass::kLoad; }
-  inline bool is_store() const { return memory_class_ == MemoryClass::kStore; }
+  inline bool is_cti() const { return (instr_flags_ & InstrFlags::kCti) != 0; }
+  inline bool is_mem() const {
+    return (instr_flags_ & InstrFlags::kMemory) != 0;
+  }
+  inline bool is_load() const {
+    return (instr_flags_ & InstrFlags::kLoad) != 0;
+  }
+  inline bool is_store() const {
+    return (instr_flags_ & InstrFlags::kStore) != 0;
+  }
   inline bool is_atomic() const {
-    return memory_class_ == MemoryClass::kAtomic;
+    return (instr_flags_ & InstrFlags::kAtomic) != 0;
   }
   inline bool is_serializing() const {
-    return control_class_ == ControlClass::kSerializing;
+    return (instr_flags_ & InstrFlags::kSerializing) != 0;
   }
   inline bool is_control() const {
-    return control_class_ != ControlClass::kNone;
+    return (instr_flags_ & InstrFlags::kControl) != 0;
+  }
+  // Call/return classification depends on operands, so it is not cached.
+  bool is_call() const;
+  bool is_ret() const;
+  template <typename Definition>
+  bool is() const {
+    return exec_ == &Definition::Execute;
+  }
+  template <typename InstrClass>
+  bool in() const {
+    // O(n) in the number of definitions in InstrClass.
+    return IsAny<InstrClass>(
+        std::make_index_sequence<std::tuple_size_v<InstrClass>>{});
   }
 
   void Reset() {
@@ -92,14 +114,22 @@ class Instr {
     rs2_ = kNullReg;
     rs3_ = kNullReg;
     imm_ = 0;
-    is_cti_ = false;
-    memory_class_ = MemoryClass::kNone;
-    control_class_ = ControlClass::kNone;
+    instr_flags_ = 0;
+    exec_ = nullptr;
+    mnemonic_ = nullptr;
   }
 
   static constexpr uint8_t kNullReg = 0xff;
 
  private:
+  template <typename InstrClass, std::size_t... I>
+  bool IsAny(std::index_sequence<I...>) const {
+    // Illegal is the fallback in decoder tuples, not a member of each class.
+    return ((!std::is_same_v<std::tuple_element_t<I, InstrClass>, Illegal> &&
+             is<std::tuple_element_t<I, InstrClass>>()) ||
+            ...);
+  }
+
   uint8_t rd_ = kNullReg;
   uint8_t rs1_ = kNullReg;
   uint8_t rs2_ = kNullReg;
@@ -114,10 +144,7 @@ class Instr {
     uint8_t rm_;
   };
 
-  bool is_cti_ = false;
-
-  MemoryClass memory_class_ = MemoryClass::kNone;
-  ControlClass control_class_ = ControlClass::kNone;
+  InstrFlags::Bits instr_flags_ = 0;
 
   ExecFunc exec_ = nullptr;
   MnemonicFunc mnemonic_ = nullptr;
