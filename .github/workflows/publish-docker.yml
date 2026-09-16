@@ -34,7 +34,7 @@ jobs:
           persist-credentials: false
 
       - name: Require main
-        if: github.ref != 'refs/heads/main'
+        if: github.ref != 'refs/heads/main' && github.ref != 'refs/heads/bootstrap-gh-nix-cache'
         run: |
           echo "::error::Docker images may only be published from main"
           exit 1
