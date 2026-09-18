@@ -47,6 +47,9 @@ function(add_lv_opencl_integration_test PROGRAM)
       LABELS integration opencl
       WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
     )
+    set_tests_properties(${TEST_NAME} PROPERTIES
+      ENVIRONMENT "POCL_CACHE_DIR=${TEST_OUTPUT}/pocl-cache"
+    )
   endforeach()
 endfunction()
 
