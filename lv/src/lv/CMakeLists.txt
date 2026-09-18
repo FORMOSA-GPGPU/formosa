@@ -21,6 +21,7 @@ add_library(${TARGET_OBJ} OBJECT
   bindings/simple/block_aligner.cc
   bindings/simple/clint.cc
   bindings/simple/constant_table.cc
+  bindings/simple/dummy_target.cc
   bindings/simple/vclint.cc
   bindings/simple/exit_code_register.cc
   bindings/simple/initiator.cc

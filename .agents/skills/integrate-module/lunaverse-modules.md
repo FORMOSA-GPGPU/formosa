@@ -26,7 +26,7 @@ Inspect these files for conventions and patterns:
 | :--- | :--- |
 | Lua composition | `simtix/lua/banked_memory.lua` |
 | Lua hierarchy | `simtix/lua/pipelined_sm.lua` |
-| native SystemC | `lv/src/lv/bindings/simple/memory.h`, `lv/src/lv/bindings/simple/memory.cc` |
+| native SystemC | `lv/src/lv/bindings/simple/constant_table.cc` |
 | thin binding | `lv/src/lv/bindings/dramsys/dramsys.cc` + `lv/tests/unit/dramsys/dramsys.lua` |
 | RTL source | `lv/src/lv/bindings/simple/vclint.sv` |
 | Verilated wrapper | `lv/src/lv/bindings/simple/vclint.cc` + `lv/tests/unit/simple/vclint.lua` |
@@ -37,6 +37,8 @@ Inspect these files for conventions and patterns:
 
 ## Gotchas
 
+- Keep a Lua-only binding's class and implementation in one `.cc`; add a header
+  when another C++ translation unit consumes the type.
 - New `.cc` must be listed on the owning CMake target
 - New CMake library target must call `lv_register_binding()`
 - Lua classes that own a SystemC hierarchy use `require("lv.sc_module").wrap`
