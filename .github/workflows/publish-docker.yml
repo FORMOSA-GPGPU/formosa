@@ -144,7 +144,6 @@ jobs:
     steps:
       - name: Initialize runner paths and report disk usage
         run: |
-          echo "ATTIC_PROFILE=$RUNNER_TEMP/formosa-attic-profile" >>"$GITHUB_ENV"
           echo "XDG_CACHE_HOME=$RUNNER_TEMP/formosa-xdg-cache" >>"$GITHUB_ENV"
           df -h /
 
@@ -157,33 +156,12 @@ jobs:
           enable_kvm: false
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Configure Attic
-        env:
-          ATTIC_CACHE: ${{ vars.ATTIC_CACHE }}
-          ATTIC_SERVER: ${{ secrets.ATTIC_SERVER }}
-          ATTIC_TOKEN: ${{ secrets.ATTIC_TOKEN }}
-        run: |
-          set -euo pipefail
-          test -n "$ATTIC_CACHE" || {
-            echo "::error::ATTIC_CACHE repository variable is not configured"
-            exit 1
-          }
-          test -n "$ATTIC_SERVER" || {
-            echo "::error::ATTIC_SERVER repository secret is not configured"
-            exit 1
-          }
-          test -n "$ATTIC_TOKEN" || {
-            echo "::error::ATTIC_TOKEN repository secret is not configured"
-            exit 1
-          }
-          echo "::add-mask::$ATTIC_SERVER"
-          nix profile add \
-            --profile "$ATTIC_PROFILE" \
-            --inputs-from . \
-            nixpkgs#attic-client
-          "$ATTIC_PROFILE/bin/attic" login \
-            formosa "$ATTIC_SERVER" "$ATTIC_TOKEN" >/dev/null
-          "$ATTIC_PROFILE/bin/attic" use "formosa:$ATTIC_CACHE" >/dev/null
+      - name: Restore Nix store
+        id: nix-cache
+        uses: nix-community/cache-nix-action/restore@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        with:
+          primary-key: formosa-nix-v1-${{ runner.os }}-${{ needs.resolve.outputs.environment_tag }}
+          restore-prefixes-first-match: formosa-nix-v1-${{ runner.os }}-
 
       - name: Report disk usage after setup
         run: df -h / /nix
@@ -196,6 +174,13 @@ jobs:
           test -s result
           df -h / /nix
 
+      - name: Save Nix store
+        if: steps.nix-cache.outputs.hit-primary-key != 'true'
+        uses: nix-community/cache-nix-action/save@7df957e333c1e5da7721f60227dbba6d06080569 # v7
+        with:
+          primary-key: formosa-nix-v1-${{ runner.os }}-${{ needs.resolve.outputs.environment_tag }}
+          gc-max-store-size-linux: 8G
+
       - name: Preserve archive and reclaim Nix store
         id: archive
         run: |
@@ -203,8 +188,6 @@ jobs:
           archive="$RUNNER_TEMP/formosa-docker-env.tar.gz"
           cp --dereference result "$archive"
           rm result
-          nix profile remove --profile "$ATTIC_PROFILE" attic-client
-          nix profile wipe-history --profile "$ATTIC_PROFILE"
           rm -rf -- "$XDG_CACHE_HOME/nix"
           nix store gc
           test -s "$archive"
