@@ -4,13 +4,6 @@
 
 #include "cores/pipelined/ghost_scheduler.h"
 
-#include <fmt/format.h>
-#include <fmt/ostream.h>
-
-#include <algorithm>
-
-#include "cores/pipelined/ghost_param.h"
-
 #define WITH_TRACER(code)            \
   do {                               \
     if (auto *t = core_->tracer()) { \
@@ -29,17 +22,14 @@ GhostScheduler::GhostScheduler(const sc_module_name &name,
       to_backend("to_backend", param.num_warps / pipe_param.num_subcores),
       num_warps_(param.num_warps),
       num_local_warps_(param.num_warps / pipe_param.num_subcores),
-      num_lanes_(param.num_lanes),
       num_subcores_(pipe_param.num_subcores),
       subcore_id_(subcore_id),
-      num_dcs_(pipe_param.decode_width),
+      dispatch_width_(pipe_param.decode_width),
       num_isb_entries_per_warp_(ghost_param.num_isb_entries_per_warp),
       num_itab_entries_per_warp_(ghost_param.num_itab_entries_per_warp),
       core_(core),
       scoreboard_(core->scoreboard(subcore_id)),
       stats_(name),
-      dispatched_this_cycle_(num_local_warps_, false),
-      dcs_(num_dcs_, DependenceChecker(num_isb_entries_per_warp_)),
       warps_(num_local_warps_,
              WarpState(num_isb_entries_per_warp_, num_itab_entries_per_warp_)) {
   scoreboard_->set_on_change([this](uint32_t wid) {
@@ -49,11 +39,6 @@ GhostScheduler::GhostScheduler(const sc_module_name &name,
     warps_[get_local_wid(wid)].scoreboard_changed = true;
   });
   core_->stats_group()->add_sub_group(&stats_);
-  for (WarpState &warp : warps_) {
-    for (uint32_t slot = 0; slot < num_isb_entries_per_warp_; ++slot) {
-      warp.free_isb_idx_q.push(slot);
-    }
-  }
   issue_ports_.reserve(num_local_warps_);
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
     issue_ports_.push_back(std::make_unique<IssuePort>(this, local_wid));
@@ -150,91 +135,7 @@ void GhostScheduler::CollectStateChanges() {
     }
 
     has_active_warp = true;
-    stats_.active_warp_cycles++;
-    const WarpState &warp = warps_[local_wid];
-    const uint32_t isb_occupancy = CountValidIsbEntries(local_wid);
-    stats_.isb_occupancy_sum += isb_occupancy;
-
-    if (warp.control_pending) {
-      stats_.control_pending_warp_cycles++;
-    }
-    if (warp.update_pending) {
-      stats_.itab_update_pending_warp_cycles++;
-    }
-    if (isb_occupancy == num_isb_entries_per_warp_) {
-      stats_.isb_full_warp_cycles++;
-    }
-    if (isb_occupancy == 0) {
-      stats_.isb_empty_warp_cycles++;
-      continue;
-    }
-
-    bool has_ready = false;
-    bool has_isb_dep_blocker = false;
-    bool has_scoreboard_blocker = false;
-    bool has_scoreboard_control_blocker = false;
-    bool has_scoreboard_data_blocker = false;
-    bool has_scoreboard_memory_blocker = false;
-    bool has_scoreboard_readbin_blocker = false;
-
-    for (uint32_t slot = 0; slot < num_isb_entries_per_warp_; ++slot) {
-      const IsbEntry &isb = warp.isb[slot];
-      if (!isb.occupied()) {
-        continue;
-      }
-
-      if (isb.isb_dep.or_reduce()) {
-        has_isb_dep_blocker = true;
-        continue;
-      }
-      IssueStallReason stall_reason = IssueStallReason::kNone;
-      if (!scoreboard_->CanIssue(isb.packet, &stall_reason)) {
-        has_scoreboard_blocker = true;
-        switch (stall_reason) {
-          case IssueStallReason::kControlHazard:
-            has_scoreboard_control_blocker = true;
-            break;
-          case IssueStallReason::kDataHazard:
-            has_scoreboard_data_blocker = true;
-            break;
-          case IssueStallReason::kMemHazard:
-            has_scoreboard_memory_blocker = true;
-            break;
-          case IssueStallReason::kReadBinFull:
-            has_scoreboard_readbin_blocker = true;
-            break;
-          case IssueStallReason::kNone:
-            break;
-        }
-        continue;
-      }
-      if (isb.packet->instr.is_serializing() && isb.inst_order != 0) {
-        continue;
-      }
-      has_ready = true;
-    }
-
-    if (!has_ready) {
-      stats_.isb_no_ready_warp_cycles++;
-      if (has_isb_dep_blocker) {
-        stats_.isb_register_or_memory_dep_blocked_warp_cycles++;
-      }
-      if (has_scoreboard_blocker) {
-        stats_.isb_scoreboard_blocked_warp_cycles++;
-        if (has_scoreboard_control_blocker) {
-          stats_.isb_scoreboard_control_blocked_warp_cycles++;
-        }
-        if (has_scoreboard_data_blocker) {
-          stats_.isb_scoreboard_data_blocked_warp_cycles++;
-        }
-        if (has_scoreboard_memory_blocker) {
-          stats_.isb_scoreboard_memory_blocked_warp_cycles++;
-        }
-        if (has_scoreboard_readbin_blocker) {
-          stats_.isb_scoreboard_readbin_blocked_warp_cycles++;
-        }
-      }
-    }
+    RecordWarpStats(local_wid);
   }
 
   if (has_active_warp) {
@@ -242,12 +143,91 @@ void GhostScheduler::CollectStateChanges() {
   }
 }
 
-void GhostScheduler::DispatchToDependenceCheckers() {
-  std::fill(dispatched_this_cycle_.begin(), dispatched_this_cycle_.end(),
-            false);
+void GhostScheduler::RecordWarpStats(uint32_t local_wid) {
+  assert(local_wid < num_local_warps_);
+  const WarpState &warp = warps_[local_wid];
+
+  uint32_t isb_occupancy = 0;
+  bool has_ready = false;
+  bool has_isb_dep_blocker = false;
+  bool has_scoreboard_blocker = false;
+  bool has_scoreboard_control_blocker = false;
+  bool has_scoreboard_data_blocker = false;
+  bool has_scoreboard_memory_blocker = false;
+  bool has_scoreboard_readbin_blocker = false;
+
+  for (const IsbEntry &entry : warp.isb) {
+    const IsbIssueStatus status = EvaluateIsbIssueStatus(entry);
+    if (status != IsbIssueStatus::kEmpty) {
+      ++isb_occupancy;
+    }
+
+    switch (status) {
+      case IsbIssueStatus::kEmpty:
+      case IsbIssueStatus::kSerializing:
+        break;
+      case IsbIssueStatus::kIsbDependency:
+        has_isb_dep_blocker = true;
+        break;
+      case IsbIssueStatus::kScoreboardControl:
+        has_scoreboard_blocker = true;
+        has_scoreboard_control_blocker = true;
+        break;
+      case IsbIssueStatus::kScoreboardData:
+        has_scoreboard_blocker = true;
+        has_scoreboard_data_blocker = true;
+        break;
+      case IsbIssueStatus::kScoreboardMemory:
+        has_scoreboard_blocker = true;
+        has_scoreboard_memory_blocker = true;
+        break;
+      case IsbIssueStatus::kScoreboardReadBinFull:
+        has_scoreboard_blocker = true;
+        has_scoreboard_readbin_blocker = true;
+        break;
+      case IsbIssueStatus::kReady:
+        has_ready = true;
+        break;
+    }
+  }
+
+  stats_.active_warp_cycles++;
+  stats_.isb_occupancy_sum += isb_occupancy;
+  stats_.control_pending_warp_cycles += warp.control_pending;
+  stats_.itab_update_pending_warp_cycles += warp.update_pending;
+
+  if (isb_occupancy == num_isb_entries_per_warp_) {
+    stats_.isb_full_warp_cycles++;
+  }
+  if (isb_occupancy == 0) {
+    stats_.isb_empty_warp_cycles++;
+    return;
+  }
+  if (has_ready) {
+    return;
+  }
+
+  stats_.isb_no_ready_warp_cycles++;
+  if (has_isb_dep_blocker) {
+    stats_.isb_register_or_memory_dep_blocked_warp_cycles++;
+  }
+  if (!has_scoreboard_blocker) {
+    return;
+  }
+
+  stats_.isb_scoreboard_blocked_warp_cycles++;
+  stats_.isb_scoreboard_control_blocked_warp_cycles +=
+      has_scoreboard_control_blocker;
+  stats_.isb_scoreboard_data_blocked_warp_cycles += has_scoreboard_data_blocker;
+  stats_.isb_scoreboard_memory_blocked_warp_cycles +=
+      has_scoreboard_memory_blocker;
+  stats_.isb_scoreboard_readbin_blocked_warp_cycles +=
+      has_scoreboard_readbin_blocker;
+}
+
+void GhostScheduler::DispatchToIssueBuffer() {
   std::optional<uint32_t> first_dispatched_warp;
   bool has_active_warp = false;
-  bool has_available_dc = false;
   bool has_dispatched = false;
 
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
@@ -257,44 +237,38 @@ void GhostScheduler::DispatchToDependenceCheckers() {
     }
   }
 
-  for (auto &dc : dcs_) {
-    if (dc.valid) {
-      // dc is unavailable
-      continue;
-    }
+  for (uint32_t dispatch = 0; dispatch < dispatch_width_; ++dispatch) {
+    std::array<uint32_t, kDispatchRejectReasonCount> rejected{};
+    auto selected = SelectDispatchTarget(rejected);
 
-    has_available_dc = true;
-    DispatchSelection selection = SelectDispatchWarp();
-    if (!selection.warp) {
-      // Attribute rejection reasons only to cycles where no DC dispatched a
-      // packet.  A failed selection after an earlier DC succeeded is merely
-      // unused residual dispatch width, not a completely blocked cycle.
+    if (!selected) {
+      // Attribute rejection reasons only to cycles where no slot dispatched a
+      // packet. A failure after an earlier dispatch only represents unused
+      // residual dispatch width, not a completely blocked cycle.
       if (has_active_warp && !has_dispatched) {
-        const auto rejected = [&selection](DispatchRejectReason reason) {
-          return selection.rejected[DispatchRejectIndex(reason)];
+        const auto rejected_count = [&rejected](DispatchRejectReason reason) {
+          return rejected[DispatchRejectIndex(reason)];
         };
 
         stats_.dispatch_select_failure_cycles++;
-        stats_.dispatch_rejected_already_dispatched_warps +=
-            rejected(DispatchRejectReason::kAlreadyDispatched);
         stats_.dispatch_rejected_inactive_warps +=
-            rejected(DispatchRejectReason::kInactive);
+            rejected_count(DispatchRejectReason::kInactive);
         stats_.dispatch_rejected_flush_pending_warps +=
-            rejected(DispatchRejectReason::kFlushPending);
+            rejected_count(DispatchRejectReason::kFlushPending);
         stats_.dispatch_rejected_control_pending_warps +=
-            rejected(DispatchRejectReason::kControlPending);
+            rejected_count(DispatchRejectReason::kControlPending);
         stats_.dispatch_rejected_isb_full_warps +=
-            rejected(DispatchRejectReason::kIsbFull);
+            rejected_count(DispatchRejectReason::kIsbFull);
         stats_.dispatch_rejected_frontend_empty_warps +=
-            rejected(DispatchRejectReason::kFrontendEmpty);
+            rejected_count(DispatchRejectReason::kFrontendEmpty);
         stats_.dispatch_rejected_serializing_warps +=
-            rejected(DispatchRejectReason::kSerializing);
+            rejected_count(DispatchRejectReason::kSerializing);
         stats_.dispatch_rejected_warp_counts += num_local_warps_;
       }
       break;
     }
 
-    uint32_t local_wid = *selection.warp;
+    const auto [local_wid, isb_slot] = *selected;
     Packet *peeked = nullptr;
     bool peek_succeeded = from_frontend[local_wid]->nb_peek(peeked);
     assert(peek_succeeded);
@@ -305,19 +279,20 @@ void GhostScheduler::DispatchToDependenceCheckers() {
     assert(packet != nullptr);
     assert(packet == peeked);
 
-    WITH_TRACER(StartStage(packet, 0, "GDC"));
-
-    if (!InitializeDependenceChecker(dc, packet, local_wid)) {
+    if (!InsertIntoIssueBuffer(packet, local_wid, isb_slot)) {
       continue;
     }
 
-    dispatched_this_cycle_[local_wid] = true;
     has_dispatched = true;
-    stats_.dc_dispatch_total_counts++;
+    stats_.dispatch_counts++;
 
     if (!first_dispatched_warp) {
       first_dispatched_warp = local_wid;
     }
+
+    // Keep the remaining dispatch width on the same warp. Selection moves to
+    // another warp only when this one can no longer dispatch.
+    dispatch_prioritized_ = local_wid;
   }
 
   if (first_dispatched_warp) {
@@ -325,29 +300,20 @@ void GhostScheduler::DispatchToDependenceCheckers() {
   }
 
   if (has_dispatched) {
-    stats_.dc_has_dispatch_cycles++;
-  }
-
-  if (has_active_warp && !has_available_dc) {
-    stats_.dc_not_available_cycles++;
+    stats_.dispatch_cycles++;
   }
 }
 
-GhostScheduler::DispatchSelection GhostScheduler::SelectDispatchWarp() const {
-  DispatchSelection selection;
-
-  const auto reject = [&selection](DispatchRejectReason reason) {
-    selection.rejected[DispatchRejectIndex(reason)]++;
+std::optional<std::pair<uint32_t, uint32_t>>
+GhostScheduler::SelectDispatchTarget(
+    std::array<uint32_t, kDispatchRejectReasonCount> &rejected) const {
+  const auto reject = [&rejected](DispatchRejectReason reason) {
+    rejected[DispatchRejectIndex(reason)]++;
   };
 
   for (uint32_t i = 0; i < num_local_warps_; ++i) {
     uint32_t local_wid = (dispatch_prioritized_ + i) % num_local_warps_;
     uint32_t wid = get_wid(local_wid);
-
-    if (dispatched_this_cycle_[local_wid]) {
-      reject(DispatchRejectReason::kAlreadyDispatched);
-      continue;
-    }
 
     if (!core_->active_warps().val()[wid]) {
       reject(DispatchRejectReason::kInactive);
@@ -364,10 +330,14 @@ GhostScheduler::DispatchSelection GhostScheduler::SelectDispatchWarp() const {
       continue;
     }
 
-    // IsB potentially full
-    if (CountValidIsbEntries(local_wid) +
-            CountOccupiedDependenceCheckers(local_wid) >=
-        num_isb_entries_per_warp_) {
+    std::optional<uint32_t> free_slot;
+    for (uint32_t slot = 0; slot < num_isb_entries_per_warp_; ++slot) {
+      if (!warp->isb[slot].occupied()) {
+        free_slot = slot;
+        break;
+      }
+    }
+    if (!free_slot) {
       reject(DispatchRejectReason::kIsbFull);
       continue;
     }
@@ -383,11 +353,10 @@ GhostScheduler::DispatchSelection GhostScheduler::SelectDispatchWarp() const {
       continue;
     }
 
-    selection.warp = local_wid;
-    return selection;
+    return std::pair{local_wid, *free_slot};
   }
 
-  return selection;
+  return std::nullopt;
 }
 
 bool GhostScheduler::CaptureThreadMask(Packet *packet) {
@@ -400,9 +369,8 @@ bool GhostScheduler::CaptureThreadMask(Packet *packet) {
   return packet->tmask != 0;
 }
 
-bool GhostScheduler::InitializeDependenceChecker(DependenceChecker &dc,
-                                                 Packet *packet,
-                                                 uint32_t local_wid) {
+bool GhostScheduler::InsertIntoIssueBuffer(Packet *packet, uint32_t local_wid,
+                                           uint32_t isb_slot) {
   if (packet == nullptr) {
     return false;
   }
@@ -413,74 +381,50 @@ bool GhostScheduler::InitializeDependenceChecker(DependenceChecker &dc,
     return false;
   }
 
+  assert(local_wid < num_local_warps_);
+  assert(isb_slot < num_isb_entries_per_warp_);
   WarpState *warp = &warps_[local_wid];
-
-  dc.valid = true;
-  dc.packet = packet;
-  dc.local_wid = local_wid;
-  dc.inst_order = warp->next_inst_order;
-  dc.isb_dep = 0;
-  dc.compare_mask = 0;
-
-  warp->next_inst_order++;
+  IsbEntry *inserted = &warp->isb[isb_slot];
+  assert(!inserted->occupied());
+  const uint32_t inst_order = CountOccupiedIsbEntries(local_wid);
+  inserted->valid = true;
+  inserted->packet = packet;
+  inserted->inst_order = inst_order;
+  inserted->isb_dep = 0;
 
   if (packet->instr.is_control()) {
     warp->control_pending = true;
     warp->control_unique_id = packet->unique_id;
   }
 
-  // get IsB compare mask
+  // Earlier instructions dispatched in this cycle are already in the IsB, so
+  // the same dependency pass handles both same-cycle and older instructions.
   for (uint32_t i = 0; i < num_isb_entries_per_warp_; ++i) {
-    IsbEntry *isb = &warp->isb[i];
-    if (!isb->occupied()) {
+    const IsbEntry &older = warp->isb[i];
+    if (i == isb_slot || !older.occupied()) {
       continue;
     }
-    dc.compare_mask[i] = 1;
-    dc.isb_dep[i] =
-        CheckRegisterDependency(&isb->packet->instr, &packet->instr) ||
-        CheckMemoryDependency(&isb->packet->instr, &packet->instr);
+    inserted->isb_dep[i] =
+        CheckRegisterDependency(&older.packet->instr, &packet->instr) ||
+        CheckMemoryDependency(&older.packet->instr, &packet->instr);
   }
 
+  WITH_TRACER(StartStage(packet, 0, "GIsB"));
+  warp->update_pending = true;
   return true;
-}
-
-void GhostScheduler::AdvanceDependenceCheckers() {
-  for (uint32_t dc_id = 0; dc_id < num_dcs_; ++dc_id) {
-    DependenceChecker *dc = &dcs_[dc_id];
-    if (!dc->valid) {
-      continue;
-    }
-
-    // update isb-dep
-    for (uint32_t i = 0; i < num_isb_entries_per_warp_; ++i) {
-      if (!dc->compare_mask[i]) {
-        continue;
-      }
-
-      IsbEntry *isb = &warps_[dc->local_wid].isb[i];
-      if (!isb->occupied()) {
-        dc->isb_dep[i] = 0;
-        dc->compare_mask[i] = 0;
-        continue;
-      }
-    }
-
-    if (InsertIssueBuffer(dc_id)) {
-      // clear DC after inserting into IsB
-      dc->Reset();
-    }
-  }
 }
 
 bool GhostScheduler::CheckRegisterDependency(const Instr *older,
                                              const Instr *newer) const {
-  bool rs_busy = older->rd() != Instr::kNullReg && older->rd() != 0 &&
-                 (newer->rs1() == older->rd() || newer->rs2() == older->rd() ||
-                  newer->rs3() == older->rd());
-  bool rd_busy = newer->rd() != Instr::kNullReg && newer->rd() != 0 &&
-                 (newer->rd() == older->rs1() || newer->rd() == older->rs2() ||
-                  newer->rd() == older->rs3() || newer->rd() == older->rd());
-  return rs_busy || rd_busy;
+  bool has_raw_dependency =
+      older->rd() != Instr::kNullReg && older->rd() != 0 &&
+      (newer->rs1() == older->rd() || newer->rs2() == older->rd() ||
+       newer->rs3() == older->rd());
+  bool has_war_or_waw_dependency =
+      newer->rd() != Instr::kNullReg && newer->rd() != 0 &&
+      (newer->rd() == older->rs1() || newer->rd() == older->rs2() ||
+       newer->rd() == older->rs3() || newer->rd() == older->rd());
+  return has_raw_dependency || has_war_or_waw_dependency;
 }
 
 bool GhostScheduler::CheckMemoryDependency(const Instr *older,
@@ -508,48 +452,12 @@ bool GhostScheduler::CanDispatchSerializing(uint32_t local_wid,
     return true;
   }
 
-  // serializing instructions must wait DC and IsB become empty
-  // to prevent out of order
-  return CountValidIsbEntries(local_wid) == 0 &&
-         CountOccupiedDependenceCheckers(local_wid) == 0;
-}
-
-bool GhostScheduler::InsertIssueBuffer(uint32_t dc_id) {
-  if (dc_id >= num_dcs_) {
-    return false;
-  }
-
-  DependenceChecker *dc = &dcs_[dc_id];
-  if (!dc->valid || dc->packet == nullptr) {
-    return false;
-  }
-
-  WarpState *warp = &warps_[dc->local_wid];
-
-  if (warp->free_isb_idx_q.empty()) {
-    return false;
-  }
-
-  uint32_t slot = warp->free_isb_idx_q.front();
-  warp->free_isb_idx_q.pop();
-
-  // move packet from DC to IsB
-  IsbEntry *isb = &warp->isb[slot];
-  isb->valid = true;
-  isb->packet = dc->packet;
-  isb->inst_order = dc->inst_order;
-  isb->isb_dep = dc->isb_dep;
-
-  WITH_TRACER(StartStage(isb->packet, 0, "GIsB"));
-
-  // clear DC
-  dc->Reset();
-  warp->update_pending = true;
-  return true;
+  // Serializing instructions wait until all older instructions have issued.
+  return CountOccupiedIsbEntries(local_wid) == 0;
 }
 
 void GhostScheduler::UpdateInstructionTable() {
-  std::optional<uint32_t> selected_warp = SelectScheduleWarp();
+  std::optional<uint32_t> selected_warp = SelectItabUpdateWarp();
   if (!selected_warp) {
     return;
   }
@@ -558,27 +466,13 @@ void GhostScheduler::UpdateInstructionTable() {
   WarpState *warp = &warps_[local_wid];
   bool has_candidate = false;
 
+  // Clear the old ITab entries before choosing the oldest ready IsB entries.
   for (ItabEntry &itab : warp->itab) {
     itab = ItabEntry{};
   }
 
   for (uint32_t i = 0; i < num_itab_entries_per_warp_; ++i) {
     auto selected_slot = SelectOldestReadyIsb(local_wid);
-    bool selected_oldest_fallback = false;
-
-    // put the oldest IsB entry into ITab if no ready isb is selected
-    // (only wait for scoreboard dependency)
-    if (!selected_slot && i == 0) {
-      for (uint32_t slot = 0; slot < num_isb_entries_per_warp_; ++slot) {
-        const IsbEntry &entry = warp->isb[slot];
-        if (!entry.occupied() || entry.inst_order != 0) {
-          continue;
-        }
-        selected_slot = slot;
-        selected_oldest_fallback = true;
-        break;
-      }
-    }
 
     if (!selected_slot) {
       break;
@@ -588,21 +482,17 @@ void GhostScheduler::UpdateInstructionTable() {
     warp->itab[i].valid = true;
     warp->itab[i].slot = slot;
     has_candidate = true;
-
-    Packet *packet = warp->isb[slot].packet;
   }
 
-  warp->update_pending = CountValidIsbEntries(local_wid) != 0;
+  warp->update_pending = CountOccupiedIsbEntries(local_wid) != 0;
   schedule_prioritized_ = (local_wid + 1) % num_local_warps_;
 
   if (has_candidate) {
     issue_ports_[local_wid]->NotifyCandidateAvailable();
-  } else {
-    stats_.itab_no_ready_isb_selected_cycles++;
   }
 }
 
-std::optional<uint32_t> GhostScheduler::SelectScheduleWarp() const {
+std::optional<uint32_t> GhostScheduler::SelectItabUpdateWarp() const {
   for (uint32_t i = 0; i < num_local_warps_; ++i) {
     uint32_t local_wid = (schedule_prioritized_ + i) % num_local_warps_;
 
@@ -618,34 +508,42 @@ std::optional<uint32_t> GhostScheduler::SelectScheduleWarp() const {
   return std::nullopt;
 }
 
-bool GhostScheduler::IsbReady(uint32_t local_wid, uint32_t slot) const {
-  assert(local_wid < num_local_warps_);
-  if (slot >= num_isb_entries_per_warp_) {
-    return false;
+GhostScheduler::IsbIssueStatus GhostScheduler::EvaluateIsbIssueStatus(
+    const IsbEntry &entry) const {
+  if (!entry.occupied()) {
+    return IsbIssueStatus::kEmpty;
   }
 
-  const WarpState *warp = &warps_[local_wid];
-
-  const IsbEntry *isb = &warp->isb[slot];
-  if (!isb->occupied()) {
-    return false;
+  if (entry.isb_dep.or_reduce()) {
+    return IsbIssueStatus::kIsbDependency;
   }
 
-  // check dependency among IsB
-  if (isb->isb_dep.or_reduce()) {
-    return false;
+  IssueStallReason stall_reason = IssueStallReason::kNone;
+  if (!scoreboard_->CanIssue(entry.packet, &stall_reason)) {
+    switch (stall_reason) {
+      case IssueStallReason::kControlHazard:
+        return IsbIssueStatus::kScoreboardControl;
+      case IssueStallReason::kDataHazard:
+        return IsbIssueStatus::kScoreboardData;
+      case IssueStallReason::kMemHazard:
+        return IsbIssueStatus::kScoreboardMemory;
+      case IssueStallReason::kReadBinFull:
+        return IsbIssueStatus::kScoreboardReadBinFull;
+      case IssueStallReason::kNone:
+        assert(false && "Scoreboard rejected issue without a stall reason");
+        return IsbIssueStatus::kScoreboardData;
+    }
   }
 
-  // check dependency with scoreboard
-  if (!scoreboard_->CanIssue(isb->packet)) {
-    return false;
+  if (entry.packet->instr.is_serializing() && entry.inst_order != 0) {
+    return IsbIssueStatus::kSerializing;
   }
 
-  if (isb->packet->instr.is_serializing() && isb->inst_order != 0) {
-    return false;
-  }
+  return IsbIssueStatus::kReady;
+}
 
-  return true;
+bool GhostScheduler::IsbReady(const IsbEntry &entry) const {
+  return EvaluateIsbIssueStatus(entry) == IsbIssueStatus::kReady;
 }
 
 std::optional<uint32_t> GhostScheduler::SelectOldestReadyIsb(
@@ -671,7 +569,7 @@ std::optional<uint32_t> GhostScheduler::SelectOldestReadyIsb(
       continue;
     }
 
-    if (!IsbReady(local_wid, slot)) {
+    if (!IsbReady(entry)) {
       continue;
     }
 
@@ -683,7 +581,23 @@ std::optional<uint32_t> GhostScheduler::SelectOldestReadyIsb(
   return selected;
 }
 
-uint32_t GhostScheduler::CountValidIsbEntries(uint32_t local_wid) const {
+std::optional<uint32_t> GhostScheduler::SelectInOrderIsbHead(
+    uint32_t local_wid) const {
+  assert(local_wid < num_local_warps_);
+  const WarpState &warp = warps_[local_wid];
+
+  for (uint32_t slot = 0; slot < num_isb_entries_per_warp_; ++slot) {
+    const IsbEntry &entry = warp.isb[slot];
+    if (entry.occupied() && entry.inst_order == 0 &&
+        !entry.isb_dep.or_reduce()) {
+      return slot;
+    }
+  }
+
+  return std::nullopt;
+}
+
+uint32_t GhostScheduler::CountOccupiedIsbEntries(uint32_t local_wid) const {
   uint32_t count = 0;
   const WarpState *warp = &warps_[local_wid];
 
@@ -696,37 +610,26 @@ uint32_t GhostScheduler::CountValidIsbEntries(uint32_t local_wid) const {
   return count;
 }
 
-uint32_t GhostScheduler::CountOccupiedDependenceCheckers(
+std::optional<uint32_t> GhostScheduler::SelectIssueSlot(
     uint32_t local_wid) const {
-  uint32_t count = 0;
+  assert(local_wid < num_local_warps_);
+  const WarpState &warp = warps_[local_wid];
 
-  for (const DependenceChecker &dc : dcs_) {
-    if (dc.valid && dc.local_wid == local_wid) {
-      ++count;
+  for (const ItabEntry &itab : warp.itab) {
+    if (itab.valid && itab.slot < num_isb_entries_per_warp_ &&
+        warp.isb[itab.slot].occupied()) {
+      return itab.slot;
     }
   }
 
-  return count;
+  return SelectInOrderIsbHead(local_wid);
 }
 
 bool GhostScheduler::PeekIssueCandidate(uint32_t local_wid,
                                         Packet *&packet) const {
   packet = nullptr;
-  assert(local_wid < num_local_warps_);
-
-  const WarpState &warp = warps_[local_wid];
-
-  for (const auto &itab : warp.itab) {
-    if (!itab.valid || itab.slot >= num_isb_entries_per_warp_) {
-      continue;
-    }
-
-    const auto &isb = warp.isb[itab.slot];
-    if (!isb.occupied()) {
-      continue;
-    }
-
-    packet = isb.packet;
+  if (auto slot = SelectIssueSlot(local_wid)) {
+    packet = warps_[local_wid].isb[*slot].packet;
     return true;
   }
 
@@ -735,22 +638,8 @@ bool GhostScheduler::PeekIssueCandidate(uint32_t local_wid,
 
 bool GhostScheduler::GetIssueCandidate(uint32_t local_wid, Packet *&packet) {
   packet = nullptr;
-
-  assert(local_wid < num_local_warps_);
-
-  const WarpState &warp = warps_[local_wid];
-
-  for (const auto &itab : warp.itab) {
-    if (!itab.valid || itab.slot >= num_isb_entries_per_warp_) {
-      continue;
-    }
-
-    const auto &isb = warp.isb[itab.slot];
-    if (!isb.occupied()) {
-      continue;
-    }
-
-    packet = ReleaseIssueBufferEntry(local_wid, itab.slot);
+  if (auto slot = SelectIssueSlot(local_wid)) {
+    packet = ReleaseIssueBufferEntry(local_wid, *slot);
     return packet != nullptr;
   }
 
@@ -766,12 +655,12 @@ Packet *GhostScheduler::ReleaseIssueBufferEntry(uint32_t local_wid,
 
   WarpState *warp = &warps_[local_wid];
   IsbEntry *issued = &warp->isb[slot];
-  Packet *packet = issued->packet;
-  uint32_t issued_inst_order = issued->inst_order;
-
   if (!issued->occupied()) {
     return nullptr;
   }
+
+  Packet *packet = issued->packet;
+  const uint32_t issued_inst_order = issued->inst_order;
 
   stats_.issue_counts++;
   stats_.issue_order_distance_sum += issued_inst_order;
@@ -790,19 +679,6 @@ Packet *GhostScheduler::ReleaseIssueBufferEntry(uint32_t local_wid,
     isb.isb_dep[slot] = 0;
   }
 
-  // compact instruction order in dependence checker and clear dependence of
-  // that slot
-  for (auto &dc : dcs_) {
-    if (!dc.valid || dc.local_wid != local_wid) {
-      continue;
-    }
-    if (dc.inst_order > issued_inst_order) {
-      --dc.inst_order;
-    }
-    dc.compare_mask[slot] = 0;
-    dc.isb_dep[slot] = 0;
-  }
-
   // free itab entry
   for (auto &itab : warp->itab) {
     if (itab.valid && (itab.slot == slot)) {
@@ -815,9 +691,6 @@ Packet *GhostScheduler::ReleaseIssueBufferEntry(uint32_t local_wid,
   issued->Reset();
 
   // update warp state
-  assert(warp->next_inst_order > 0);
-  warp->next_inst_order--;
-  warp->free_isb_idx_q.push(slot);
   warp->update_pending = true;
 
   return packet;
@@ -828,22 +701,6 @@ void GhostScheduler::FlushWarp(uint32_t local_wid) {
 
   WarpState *warp = &warps_[local_wid];
 
-  for (DependenceChecker &dc : dcs_) {
-    if (!dc.valid || dc.local_wid != local_wid) {
-      continue;
-    }
-    if (dc.packet != nullptr) {
-      WITH_TRACER(Flush(dc.packet));
-      core_->FreePacket(dc.packet);
-    }
-
-    dc.Reset();
-  }
-
-  while (!warp->free_isb_idx_q.empty()) {
-    warp->free_isb_idx_q.pop();
-  }
-
   for (uint32_t slot = 0; slot < num_isb_entries_per_warp_; ++slot) {
     IsbEntry *isb = &warp->isb[slot];
 
@@ -853,14 +710,12 @@ void GhostScheduler::FlushWarp(uint32_t local_wid) {
     }
 
     isb->Reset();
-    warp->free_isb_idx_q.push(slot);
   }
 
   for (ItabEntry &itab : warp->itab) {
     itab = ItabEntry{};
   }
 
-  warp->next_inst_order = 0;
   warp->control_pending = false;
   warp->control_unique_id = 0;
   warp->update_pending = false;
@@ -889,23 +744,17 @@ GhostScheduler::Stats::Stats(const char *name)
               "Number of out-of-order instructions issued by GhOST"),
       LV_STAT(issue_order_distance_sum,
               "Accumulated IsB order distance of GhOST issues"),
-      LV_STAT(dc_not_available_cycles,
-              "Number of active GhOST scheduler cycles without available "
-              "Dependence Checkers"),
-      LV_STAT(dc_has_dispatch_cycles,
+      LV_STAT(dispatch_cycles,
               "Number of active GhOST scheduler cycles that have "
               "dispatched packet"),
-      LV_STAT(dc_dispatch_total_counts,
-              "Number of total packets DC dispatches"),
+      LV_STAT(dispatch_counts,
+              "Number of packets dispatched into GhOST issue buffers"),
       LV_STAT(dispatch_select_failure_cycles,
-              "Number of active GhOST scheduler cycles where an available "
-              "DC failed to find a dispatchable warp"),
+              "Number of active GhOST scheduler cycles with no dispatchable "
+              "warp"),
       LV_STAT(dispatch_rejected_warp_counts,
               "Number of warp rejections observed during failed GhOST "
               "dispatch selections"),
-      LV_STAT(dispatch_rejected_already_dispatched_warps,
-              "Failed-selection warp rejections because the warp already "
-              "dispatched this cycle"),
       LV_STAT(dispatch_rejected_inactive_warps,
               "Failed-selection warp rejections because the warp is "
               "inactive"),
@@ -952,24 +801,18 @@ GhostScheduler::Stats::Stats(const char *name)
               "read-bin-full blocker"),
       LV_STAT(control_pending_warp_cycles,
               "Number of active GhOST warp cycles with unresolved control"),
-      LV_STAT(itab_no_ready_isb_selected_cycles,
-              "Number of active GhOST cycles that don't have ready isb entry "
-              "when updating ITab"),
       LV_STAT(itab_update_pending_warp_cycles,
               "Number of active GhOST warp cycles awaiting an ITab update"),
       LV_STAT(issue_rate, "GhOST issues per active GhOST scheduler cycle"),
       LV_STAT(ooo_issue_ratio,
               "Fraction of GhOST issues that are out of order"),
-      LV_STAT(avg_dc_dispatches_per_ghost_cycle,
-              "Average packets that DC dispatches per ghost scheduler cycle"),
-      LV_STAT(avg_dc_dispatches_utility,
-              "Average packets that DC dispatches per dispatch cycle"),
+      LV_STAT(avg_dispatches_per_ghost_cycle,
+              "Average packets dispatched per GhOST scheduler cycle"),
+      LV_STAT(avg_dispatches_per_dispatch_cycle,
+              "Average packets dispatched per dispatch cycle"),
       LV_STAT(dispatch_select_failure_ratio,
-              "Fraction of active GhOST scheduler cycles where an "
-              "available DC failed to find a dispatchable warp"),
-      LV_STAT(dispatch_rejected_already_dispatched_ratio,
-              "Fraction of failed-selection warp rejections already "
-              "dispatched this cycle"),
+              "Fraction of active GhOST scheduler cycles with no "
+              "dispatchable warp"),
       LV_STAT(dispatch_rejected_inactive_ratio,
               "Fraction of failed-selection warp rejections that are "
               "inactive"),
@@ -992,10 +835,7 @@ GhostScheduler::Stats::Stats(const char *name)
               "Average IsB order distance of out-of-order GhOST issues"),
       LV_STAT(avg_isb_occupancy,
               "Average number of valid IsB entries per active warp"),
-      LV_STAT(dc_not_available_ratio,
-              "Fraction of active GhOST scheduler cycles without available "
-              "Dependence Checkers"),
-      LV_STAT(dc_has_dispatch_ratio,
+      LV_STAT(dispatch_cycle_ratio,
               "Fraction of active GhOST scheduler cycles that have "
               "dispatched packet"),
       LV_STAT(isb_empty_warp_ratio,
@@ -1025,19 +865,13 @@ GhostScheduler::Stats::Stats(const char *name)
               "full read bin"),
       LV_STAT(control_pending_warp_ratio,
               "Fraction of active GhOST warp cycles with unresolved control"),
-      LV_STAT(itab_no_ready_isb_selected_ratio,
-              "Fraction of active GhOST cycles that don't have ready isb entry "
-              "when updating ITab"),
       LV_STAT(itab_update_pending_warp_ratio,
               "Fraction of active GhOST warp cycles awaiting an ITab update") {
   issue_rate = issue_counts / ghost_cycles;
   ooo_issue_ratio = ooo_issue_counts / issue_counts;
-  avg_dc_dispatches_per_ghost_cycle = dc_dispatch_total_counts / ghost_cycles;
-  avg_dc_dispatches_utility = dc_dispatch_total_counts / dc_has_dispatch_cycles;
+  avg_dispatches_per_ghost_cycle = dispatch_counts / ghost_cycles;
+  avg_dispatches_per_dispatch_cycle = dispatch_counts / dispatch_cycles;
   dispatch_select_failure_ratio = dispatch_select_failure_cycles / ghost_cycles;
-  dispatch_rejected_already_dispatched_ratio =
-      dispatch_rejected_already_dispatched_warps /
-      dispatch_rejected_warp_counts;
   dispatch_rejected_inactive_ratio =
       dispatch_rejected_inactive_warps / dispatch_rejected_warp_counts;
   dispatch_rejected_flush_pending_ratio =
@@ -1052,8 +886,7 @@ GhostScheduler::Stats::Stats(const char *name)
       dispatch_rejected_serializing_warps / dispatch_rejected_warp_counts;
   avg_issue_order_distance = issue_order_distance_sum / ooo_issue_counts;
   avg_isb_occupancy = isb_occupancy_sum / active_warp_cycles;
-  dc_not_available_ratio = dc_not_available_cycles / ghost_cycles;
-  dc_has_dispatch_ratio = dc_has_dispatch_cycles / ghost_cycles;
+  dispatch_cycle_ratio = dispatch_cycles / ghost_cycles;
   isb_empty_warp_ratio = isb_empty_warp_cycles / active_warp_cycles;
   isb_full_warp_ratio = isb_full_warp_cycles / active_warp_cycles;
   isb_no_ready_warp_ratio = isb_no_ready_warp_cycles / active_warp_cycles;
@@ -1074,8 +907,6 @@ GhostScheduler::Stats::Stats(const char *name)
       isb_scoreboard_readbin_blocked_warp_cycles /
       isb_scoreboard_blocked_warp_cycles;
   control_pending_warp_ratio = control_pending_warp_cycles / active_warp_cycles;
-  itab_no_ready_isb_selected_ratio =
-      itab_no_ready_isb_selected_cycles / ghost_cycles;
   itab_update_pending_warp_ratio =
       itab_update_pending_warp_cycles / active_warp_cycles;
 }

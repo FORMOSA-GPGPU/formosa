@@ -7,7 +7,7 @@ local bit = require("bit")
 local NUM_WARPS = 4
 local NUM_LANES = 4
 local NUM_SUBCORES = 1
-local DECODE_WIDTH = 2
+local DECODE_WIDTH = 4
 local WID = 0
 
 local function make_i(rd, rs1, imm)
@@ -81,6 +81,28 @@ tester:scoreboard_finish(WID, BLOCKER)
 local second = issue_tag(0)
 assert(second.wpc == 0, "GhOST did not issue the older instruction after the hazard cleared")
 tester:finish(second)
+
+-- These three instructions enter the IsB in the same cycle. The middle
+-- instruction depends on the blocked oldest instruction, while the youngest
+-- is independent. This checks same-cycle IsB dependency tracking: without it,
+-- the middle instruction would incorrectly be nominated first.
+local SAME_CYCLE_OLDER_BLOCKED = make_i(5, 31, 0)
+local SAME_CYCLE_DEPENDENT = make_i(6, 5, 0)
+local SAME_CYCLE_READY = make_lui(7, 1)
+
+tester:scoreboard_issue(WID, BLOCKER)
+tester:enqueue(WID, SAME_CYCLE_OLDER_BLOCKED, 10)
+tester:enqueue(WID, SAME_CYCLE_DEPENDENT, 11)
+tester:enqueue(WID, SAME_CYCLE_READY, 12)
+
+local independent = issue_tag(12)
+tester:finish(independent)
+
+tester:scoreboard_finish(WID, BLOCKER)
+local older = issue_tag(10)
+tester:finish(older)
+local dependent = issue_tag(11)
+tester:finish(dependent)
 
 assert(tester.outstanding_packets == 0)
 

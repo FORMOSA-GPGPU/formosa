@@ -11,12 +11,13 @@
 #include <systemc.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_core_ifs.h>
 
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
 #include <memory>
 #include <optional>
-#include <queue>
+#include <utility>
 #include <vector>
 
 #include "cores/pipelined/ghost_param.h"
@@ -79,28 +80,6 @@ class GhostScheduler : public sc_module {
     return static_cast<std::size_t>(num_itab_entries);
   }
 
-  struct DependenceChecker {
-    explicit DependenceChecker(uint32_t num_isb_entries)
-        : isb_dep(false, CheckedIsbEntryCount(num_isb_entries)),
-          compare_mask(false, CheckedIsbEntryCount(num_isb_entries)) {}
-
-    void Reset() {
-      valid = false;
-      packet = nullptr;
-      local_wid = 0;
-      inst_order = 0;
-      isb_dep = 0u;
-      compare_mask = 0u;
-    }
-
-    bool valid = false;
-    Packet *packet = nullptr;
-    uint32_t local_wid = 0;
-    uint32_t inst_order = 0;
-    sc_bv_base isb_dep;
-    sc_bv_base compare_mask;
-  };
-
   struct IsbEntry {
     explicit IsbEntry(uint32_t num_isb_entries)
         : isb_dep(false, CheckedIsbEntryCount(num_isb_entries)) {}
@@ -133,8 +112,6 @@ class GhostScheduler : public sc_module {
 
     std::vector<IsbEntry> isb;
     std::vector<ItabEntry> itab;
-    std::queue<uint32_t> free_isb_idx_q;
-    uint32_t next_inst_order = 0;
     bool control_pending = false;
     uint64_t control_unique_id = 0;
     bool update_pending = false;
@@ -142,8 +119,18 @@ class GhostScheduler : public sc_module {
     bool flush_pending = false;
   };
 
+  enum class IsbIssueStatus {
+    kEmpty,
+    kIsbDependency,
+    kScoreboardControl,
+    kScoreboardData,
+    kScoreboardMemory,
+    kScoreboardReadBinFull,
+    kSerializing,
+    kReady,
+  };
+
   enum class DispatchRejectReason : uint32_t {
-    kAlreadyDispatched,
     kInactive,
     kFlushPending,
     kControlPending,
@@ -160,11 +147,6 @@ class GhostScheduler : public sc_module {
       DispatchRejectReason reason) {
     return static_cast<std::size_t>(reason);
   }
-
-  struct DispatchSelection {
-    std::optional<uint32_t> warp;
-    std::array<uint32_t, kDispatchRejectReasonCount> rejected{};
-  };
 
   class IssuePort : public tlm::tlm_get_peek_if<Packet *> {
    public:
@@ -196,28 +178,24 @@ class GhostScheduler : public sc_module {
   void Tick() {
     CollectStateChanges();
     UpdateInstructionTable();
-    AdvanceDependenceCheckers();
-    DispatchToDependenceCheckers();
+    DispatchToIssueBuffer();
   }
 
-  // Converts scoreboard, control, and flush changes into ITab update requests.
+  // Applies deferred changes and records the post-issue scheduler state.
   void CollectStateChanges();
 
-  // Moves frontend instructions into available dependence checkers.
-  void DispatchToDependenceCheckers();
+  // Records occupancy and issue-readiness statistics for one active warp.
+  void RecordWarpStats(uint32_t local_wid);
 
-  // Selects an eligible local warp for DC admission using round-robin order.
-  DispatchSelection SelectDispatchWarp() const;
+  // Moves up to decode_width frontend instructions directly into the IsB.
+  void DispatchToIssueBuffer();
+
+  // Selects an eligible local warp and its first available IsB slot.
+  std::optional<std::pair<uint32_t, uint32_t>> SelectDispatchTarget(
+      std::array<uint32_t, kDispatchRejectReasonCount> &rejected) const;
 
   // Captures a packet's SIMT mask in program order before out-of-order issue.
   bool CaptureThreadMask(Packet *packet);
-
-  // Initializes a DC entry and snapshots the older IsB entries to compare.
-  bool InitializeDependenceChecker(DependenceChecker &dc, Packet *packet,
-                                   uint32_t local_wid);
-
-  // Completes DC comparisons and transfers finished entries into the IsB.
-  void AdvanceDependenceCheckers();
 
   // Detects RAW, WAW, or WAR dependencies between two instructions.
   bool CheckRegisterDependency(const Instr *older, const Instr *newer) const;
@@ -228,31 +206,39 @@ class GhostScheduler : public sc_module {
   // Checks whether a serializing instruction may enter the GhOST pipeline.
   bool CanDispatchSerializing(uint32_t local_wid, const Packet *packet) const;
 
-  // Allocates an IsB slot and transfers one completed DC entry into it.
-  bool InsertIssueBuffer(uint32_t dc_id);
+  // Captures a packet and inserts it into the IsB with its dependencies.
+  bool InsertIntoIssueBuffer(Packet *packet, uint32_t local_wid,
+                             uint32_t isb_slot);
 
   // Rebuilds one requested warp's ITab with its oldest ready instructions.
   void UpdateInstructionTable();
 
   // Selects one warp whose ITab requires an update using round-robin order.
-  std::optional<uint32_t> SelectScheduleWarp() const;
+  std::optional<uint32_t> SelectItabUpdateWarp() const;
+
+  // Classifies an IsB entry using the current dependency and scoreboard state.
+  IsbIssueStatus EvaluateIsbIssueStatus(const IsbEntry &entry) const;
 
   // Checks IsB dependencies, scoreboard hazards, and serialization rules.
-  bool IsbReady(uint32_t local_wid, uint32_t slot) const;
+  bool IsbReady(const IsbEntry &entry) const;
 
   // Finds the oldest ready IsB slots by program-order index.
   std::optional<uint32_t> SelectOldestReadyIsb(uint32_t local_wid) const;
 
-  // Count how many valid isb entries does a warp have
-  uint32_t CountValidIsbEntries(uint32_t local_wid) const;
+  // Finds the in-order IsB head used only as an issue-time fallback.
+  std::optional<uint32_t> SelectInOrderIsbHead(uint32_t local_wid) const;
 
-  // Count how many occupied dcs does a warp have
-  uint32_t CountOccupiedDependenceCheckers(uint32_t local_wid) const;
+  // Counts the occupied IsB entries belonging to one warp.
+  uint32_t CountOccupiedIsbEntries(uint32_t local_wid) const;
 
-  // Returns the first ITab packet without changing state.
+  // Selects the first valid ITab slot, or the in-order IsB head as fallback.
+  std::optional<uint32_t> SelectIssueSlot(uint32_t local_wid) const;
+
+  // Returns the first ITab packet, or the in-order IsB head when ITab is empty.
   bool PeekIssueCandidate(uint32_t local_wid, Packet *&packet) const;
 
-  // Consumes the first ITab packet and updates scheduler state.
+  // Consumes the first ITab packet, or the in-order IsB head when ITab is
+  // empty.
   bool GetIssueCandidate(uint32_t local_wid, Packet *&packet);
 
   // Releases an issued IsB slot, clears dependencies, and compresses indices.
@@ -269,10 +255,9 @@ class GhostScheduler : public sc_module {
 
   const uint32_t num_warps_;
   const uint32_t num_local_warps_;
-  const uint32_t num_lanes_;
   const uint32_t num_subcores_;
   const uint32_t subcore_id_;
-  const uint32_t num_dcs_;
+  const uint32_t dispatch_width_;
   const uint32_t num_isb_entries_per_warp_;
   const uint32_t num_itab_entries_per_warp_;
 
@@ -282,12 +267,10 @@ class GhostScheduler : public sc_module {
     Metric issue_counts;
     Metric ooo_issue_counts;
     Metric issue_order_distance_sum;
-    Metric dc_not_available_cycles;
-    Metric dc_has_dispatch_cycles;
-    Metric dc_dispatch_total_counts;
+    Metric dispatch_cycles;
+    Metric dispatch_counts;
     Metric dispatch_select_failure_cycles;
     Metric dispatch_rejected_warp_counts;
-    Metric dispatch_rejected_already_dispatched_warps;
     Metric dispatch_rejected_inactive_warps;
     Metric dispatch_rejected_flush_pending_warps;
     Metric dispatch_rejected_control_pending_warps;
@@ -305,15 +288,13 @@ class GhostScheduler : public sc_module {
     Metric isb_scoreboard_memory_blocked_warp_cycles;
     Metric isb_scoreboard_readbin_blocked_warp_cycles;
     Metric control_pending_warp_cycles;
-    Metric itab_no_ready_isb_selected_cycles;
     Metric itab_update_pending_warp_cycles;
 
     Formula<Real> issue_rate;
     Formula<Real> ooo_issue_ratio;
-    Formula<Real> avg_dc_dispatches_per_ghost_cycle;
-    Formula<Real> avg_dc_dispatches_utility;
+    Formula<Real> avg_dispatches_per_ghost_cycle;
+    Formula<Real> avg_dispatches_per_dispatch_cycle;
     Formula<Real> dispatch_select_failure_ratio;
-    Formula<Real> dispatch_rejected_already_dispatched_ratio;
     Formula<Real> dispatch_rejected_inactive_ratio;
     Formula<Real> dispatch_rejected_flush_pending_ratio;
     Formula<Real> dispatch_rejected_control_pending_ratio;
@@ -322,8 +303,7 @@ class GhostScheduler : public sc_module {
     Formula<Real> dispatch_rejected_serializing_ratio;
     Formula<Real> avg_issue_order_distance;
     Formula<Real> avg_isb_occupancy;
-    Formula<Real> dc_not_available_ratio;
-    Formula<Real> dc_has_dispatch_ratio;
+    Formula<Real> dispatch_cycle_ratio;
     Formula<Real> isb_empty_warp_ratio;
     Formula<Real> isb_full_warp_ratio;
     Formula<Real> isb_no_ready_warp_ratio;
@@ -334,7 +314,6 @@ class GhostScheduler : public sc_module {
     Formula<Real> isb_scoreboard_memory_blocked_warp_ratio;
     Formula<Real> isb_scoreboard_readbin_blocked_warp_ratio;
     Formula<Real> control_pending_warp_ratio;
-    Formula<Real> itab_no_ready_isb_selected_ratio;
     Formula<Real> itab_update_pending_warp_ratio;
 
     explicit Stats(const char *name);
@@ -346,8 +325,6 @@ class GhostScheduler : public sc_module {
 
   uint32_t dispatch_prioritized_ = 0;
   uint32_t schedule_prioritized_ = 0;
-  std::vector<bool> dispatched_this_cycle_;
-  std::vector<DependenceChecker> dcs_;
   std::vector<WarpState> warps_;
   std::vector<std::unique_ptr<IssuePort>> issue_ports_;
 };
