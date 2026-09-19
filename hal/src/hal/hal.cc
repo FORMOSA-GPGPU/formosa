@@ -129,6 +129,7 @@ bool derive_device_description(
   }
 
   description.num_cores = config.num_cores;
+  description.threads_per_warp = config.threads_per_warp;
   description.max_threads_per_work_group = threads_per_core;
   description.local_mem_size_per_core = config.local_mem_size;
   description.cache_size = config.shared_cache_size;

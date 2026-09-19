@@ -72,12 +72,13 @@ bool same_description(const FsaDeviceDescription &lhs,
          lhs.cache_size == rhs.cache_size &&
          lhs.cache_line_size == rhs.cache_line_size &&
          lhs.global_mem_size == rhs.global_mem_size &&
-         lhs.max_allocation_size == rhs.max_allocation_size;
+         lhs.max_allocation_size == rhs.max_allocation_size &&
+         lhs.threads_per_warp == rhs.threads_per_warp;
 }
 
 int test_invalid_configuration() {
   const FsaDeviceDescription untouched = {
-      11, 22, 33, 44, 55, 66, 77,
+      11, 22, 33, 44, 55, 66, 77, 88,
   };
   FsaDeviceDescription description = untouched;
   if (fsa_hal_init(&description) == 0 || fsa_hal_is_available() ||
@@ -101,7 +102,7 @@ void test_fsa_hal_init() {
   std::cout << "\n[FORMOSA HAL Test] Calling fsa_hal_init()..." << std::endl;
   if (std::getenv("LV_FORMOSA_FAIL_INIT_ONCE") != nullptr) {
     const FsaDeviceDescription untouched = {
-        101, 202, 303, 404, 505, 606, 707,
+        101, 202, 303, 404, 505, 606, 707, 808,
     };
     FsaDeviceDescription failed_description = untouched;
     if (fsa_hal_init(&failed_description) == 0 || fsa_hal_is_available() ||
@@ -120,7 +121,7 @@ void test_fsa_hal_init() {
               << std::endl;
     exit(-1);
   }
-  if (description.num_cores != 1 ||
+  if (description.num_cores != 1 || description.threads_per_warp != 16 ||
       description.max_threads_per_work_group != 64 ||
       description.local_mem_size_per_core != 65536 ||
       description.cache_size != 1048576 || description.cache_line_size != 64 ||

@@ -69,6 +69,7 @@ typedef struct {
   uint64_t cache_line_size;
   uint64_t global_mem_size;
   uint64_t max_allocation_size;
+  uint64_t threads_per_warp;
 } FsaDeviceDescription;
 
 /**
