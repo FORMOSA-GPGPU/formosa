@@ -84,8 +84,9 @@ class LsuProbeMemory : public sc_module {
   void respond(size_t index) {
     assert(index >= 1 && index <= pending_.size());
     auto *trans = pending_[index - 1];
+    if (!sink_.resp_port->nb_write(trans))
+      LV_FATAL("LsuProbeMemory response FIFO is full");
     pending_.erase(pending_.begin() + index - 1);
-    assert(sink_.resp_port->nb_write(trans));
   }
 
   void respond_by_tag(uint32_t slot_id, uint32_t req_id) {
@@ -97,8 +98,9 @@ class LsuProbeMemory : public sc_module {
         });
     assert(pending_iter != pending_.end());
     auto *trans = *pending_iter;
+    if (!sink_.resp_port->nb_write(trans))
+      LV_FATAL("LsuProbeMemory response FIFO is full");
     pending_.erase(pending_iter);
-    assert(sink_.resp_port->nb_write(trans));
   }
 
   LuaBytes read_bytes(uint64_t addr, size_t size) const {
