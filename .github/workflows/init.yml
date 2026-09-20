@@ -23,5 +23,5 @@ jobs:
           jq -e '
             (.version | type == "number") and
             (.testPresets | type == "array") and
-            ((.testPresets | length) == 17)
+            ((.testPresets | length) == 18)
           ' CMakePresets.json >/dev/null
