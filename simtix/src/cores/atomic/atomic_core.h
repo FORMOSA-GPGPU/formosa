@@ -6,9 +6,9 @@
 
 #pragma once
 
+#include <ilha/warp_ctrl.h>
 #include <liblv/common/ip_extension.h>
 #include <liblv/common/tlm_source.h>
-#include <liblv/interfaces/warp_ctrl.h>
 #include <liblv/mm/static.h>
 #include <liblv/statistics.h>
 #include <systemc.h>
@@ -69,9 +69,7 @@ class AtomicCore : public BaseCore {
     mem_port_.set_target(target);
   }
 
-  lv::formosa::WarpCtrl *warp_ctrl() {
-    return static_cast<lv::formosa::WarpCtrl *>(this);
-  }
+  ilha::WarpCtrl *warp_ctrl() { return static_cast<ilha::WarpCtrl *>(this); }
 
   lv::TlmSource::Target *target() const { return mem_port_.target(); }
   lv::stats::Group *stats() const { return &stats_; }
@@ -140,7 +138,7 @@ class AtomicCore : public BaseCore {
   void MainProc();
   void IssueMemReq();
   void CollectMemResp();
-  void ExecuteWarpCtrlCommand(const lv::formosa::WarpCtrlCommand &cmd) override;
+  void ExecuteWarpCtrlCommand(const ilha::WarpCtrlCommand &cmd) override;
 
   std::shared_ptr<WarpSched> sched_;
   sol::function sched_init_;

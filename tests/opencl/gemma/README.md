@@ -96,7 +96,7 @@ cmake --build build --target gemma verify_layer_breakdown verify_layer_e2e verif
 Start the FORMOSA daemon in the background if not already running:
 
 ```bash
-./build/bin/lv tests/formosa/daemon.lua
+./build/bin/lv ilha/daemon.lua
 ```
 
 Run all layer-breakdown stages manually:

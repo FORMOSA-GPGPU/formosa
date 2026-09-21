@@ -2,11 +2,8 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
----@type formosa.system.config
-local config = require("formosa.config")
-
----@type formosa.system
-local System = require("formosa.system")
+---@type ilha.system
+local System = require("ilha.system")
 
 local argparse = require("argparse")
 local stdlib = require("posix.stdlib")
@@ -20,15 +17,10 @@ local function make_agent_socket_path()
   return path
 end
 
-local sm_kinds = require("formosa.sm_kinds")
+local ConfigCli = require("ilha.config_cli")
 local parser = argparse("run_opencl_replay.lua")
 parser:option("-s --stats", "Output path of the stat"):args(1)
-parser
-  :option("--sm", "Stream multiprocessor to simulate")
-  :args(1)
-  :choices(sm_kinds.available())
-  :default("simtix.pipelined_sm")
-parser:option("--sm-param", "Lua file returning the selected SM's parameter table"):args(1)
+ConfigCli.add_options(parser)
 parser
   :option("-t --trace", "Output prefix of the Perfetto trace")
   :args(1)
@@ -53,12 +45,8 @@ parser
 parser:argument("replay_dir", "Replay capture directory"):args(1)
 
 local args = parser:parse({ ... })
-
-local sm_param = {}
-if args.sm_param then sm_param = dofile(args.sm_param) end
-assert(type(sm_param) == "table", "--sm-param must return a table")
-
-local make_sm = require(args.sm)
+local config = ConfigCli.load(args)
+local addr = require("ilha.addr_map")
 
 trace.settings.streaming = true
 trace.settings.file_write_period_ms = 100
@@ -216,8 +204,8 @@ local function patch_memory_copy_packet_host_address(bytes)
   local dst_domain = bytes[4]
   local size = read_u64_le(bytes, 25)
   local slot_index = bytes[57] + bytes[58] * 256
-  assert(slot_index < config.completion_pool_entries, "invalid completion slot")
-  local slot_addr = config.completion_pool_base + slot_index * 8
+  assert(slot_index < addr.completion_pool_entries, "invalid completion slot")
+  local slot_addr = addr.completion_pool_base + slot_index * addr.completion_slot_bytes
   assert(
     memory_copy_sizes_by_slot_addr[slot_addr] == nil,
     "completion slot reused before completion"
@@ -393,14 +381,11 @@ local manifest = load_manifest(args.replay_dir)
 events = load_events(args.replay_dir)
 
 assert(manifest.version == 2, "unsupported replay manifest version; recapture with the current HAL")
-assert(manifest.global_mem_base == config.global_mem_base, "global_mem_base mismatch")
-assert(
-  manifest.global_mem_alloc_base == config.global_mem_alloc_base,
-  "global_mem_alloc_base mismatch"
-)
-assert(manifest.global_mem_size == config.global_mem_size, "global_mem_size mismatch")
-assert(manifest.fsa_mmio_base == config.fsa_mmio_base, "fsa_mmio_base mismatch")
-assert(manifest.cache_block_size == config.cache_block_size, "cache_block_size mismatch")
+assert(manifest.global_mem_base == addr.global_mem_base, "global_mem_base mismatch")
+assert(manifest.global_mem_alloc_base == addr.global_alloc_base, "global_mem_alloc_base mismatch")
+assert(manifest.global_mem_size == addr.global_mem_size, "global_mem_size mismatch")
+assert(manifest.fsa_mmio_base == addr.fsa_mmio_base, "fsa_mmio_base mismatch")
+assert(manifest.cache_block_size == config.system.cache_block_size, "cache_block_size mismatch")
 
 local max_payload_size = 8
 local replay_host_payload_bytes = 0
@@ -415,9 +400,9 @@ for _, event in ipairs(events) do
   end
 end
 
-local system = System("System", make_agent_socket_path(), config, make_sm, {
+local system = System("System", config, {
+  agent_socket_path = make_agent_socket_path(),
   replay = true,
-  sm_param = sm_param,
   replay_host_mem_size = replay_host_address + replay_host_payload_bytes + max_payload_size + 64,
 })
 
@@ -464,16 +449,16 @@ local function read_completion_slot(addr, label)
   return alloc_tag, result
 end
 
-local fsa_mmio_base = config.fsa_mmio_base
+local fsa_mmio_base = addr.fsa_mmio_base
 -- CP CSR offsets relative to fsa_mmio_base (see formosa_addr_map.h FSA_CP_OFF_*).
-local CP_OFF_FW_HOST_ADDR = 0x108
-local CP_OFF_FW_SIZE = 0x110
-local CP_OFF_FW_STATUS = 0x140
-local CP_OFF_FW_FAULT = 0x158
+local CP_OFF_FW_HOST_ADDR = addr.cp_off_fw_host_addr
+local CP_OFF_FW_SIZE = addr.cp_off_fw_size
+local CP_OFF_FW_STATUS = addr.cp_off_fw_status
+local CP_OFF_FW_FAULT = addr.cp_off_fw_fault_code
 local FW_STATUS_RESET = 0
 local FW_STATUS_READY = 2
 local FW_STATUS_FAULT = 3
-local cp_reset_addr = config.clint_base
+local cp_reset_addr = addr.clint_base
 local strict_mismatch_count = 0
 local max_unstrict_mismatch_logs = 10
 

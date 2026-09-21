@@ -1,6 +1,18 @@
 {
   "buildPresets": [
     {
+      "configurePreset": "ilha.platform.coverage",
+      "name": "ilha.platform.coverage"
+    },
+    {
+      "configurePreset": "ilha.platform.debug",
+      "name": "ilha.platform.debug"
+    },
+    {
+      "configurePreset": "ilha.platform.release",
+      "name": "ilha.platform.release"
+    },
+    {
       "configurePreset": "opencl.coverage",
       "name": "opencl.coverage",
       "targets": [
@@ -95,11 +107,38 @@
     {
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "ilha"
+      },
+      "inherits": "workflow.base",
+      "name": "ilha.platform.coverage"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "ilha"
+      },
+      "inherits": "workflow.base",
+      "name": "ilha.platform.debug"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "ilha"
+      },
+      "inherits": "workflow.base",
+      "name": "ilha.platform.release"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
         "CMAKE_INSTALL_PREFIX": "outputs/out",
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "fw;simtix;tests;hal;libcomm",
         "HAL_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
+        "TESTS_ENABLE_TESTS": "opencl"
       },
       "inherits": "workflow.base",
       "name": "opencl.coverage"
@@ -111,7 +150,7 @@
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests;hal;libcomm",
         "HAL_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
+        "TESTS_ENABLE_TESTS": "opencl"
       },
       "inherits": "workflow.base",
       "name": "opencl.debug"
@@ -123,7 +162,7 @@
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests;hal;libcomm",
         "HAL_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
+        "TESTS_ENABLE_TESTS": "opencl"
       },
       "inherits": "workflow.base",
       "name": "opencl.release"
@@ -133,7 +172,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
+        "TESTS_ENABLE_TESTS": "opencl"
       },
       "inherits": "workflow.base",
       "name": "perf.coverage"
@@ -143,7 +182,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
+        "TESTS_ENABLE_TESTS": "opencl"
       },
       "inherits": "workflow.base",
       "name": "perf.debug"
@@ -153,7 +192,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "formosa;opencl"
+        "TESTS_ENABLE_TESTS": "opencl"
       },
       "inherits": "workflow.base",
       "name": "perf.release"
@@ -163,7 +202,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.atomic_sm.coverage"
@@ -173,7 +212,7 @@
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.atomic_sm.debug"
@@ -183,7 +222,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.atomic_sm.release"
@@ -194,7 +233,7 @@
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "simtix;fw;tests",
         "SIMTIX_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.cache.coverage"
@@ -205,7 +244,7 @@
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "simtix;fw;tests",
         "SIMTIX_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.cache.debug"
@@ -216,7 +255,7 @@
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "simtix;fw;tests",
         "SIMTIX_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.cache.release"
@@ -227,7 +266,7 @@
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "fw;simtix;tests",
         "SIMTIX_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.pipelined_sm.coverage"
@@ -238,7 +277,7 @@
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
         "SIMTIX_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.pipelined_sm.debug"
@@ -249,7 +288,7 @@
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
         "SIMTIX_ENABLE_TESTING": true,
-        "TESTS_ENABLE_TESTS": "formosa;opencl;kernel-sim"
+        "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
       "name": "simtix.pipelined_sm.release"
@@ -286,6 +325,51 @@
     }
   ],
   "testPresets": [
+    {
+      "configurePreset": "ilha.platform.coverage",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "ilha\\..*"
+        }
+      },
+      "name": "ilha.platform.coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "ilha.platform.debug",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "ilha\\..*"
+        }
+      },
+      "name": "ilha.platform.debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "ilha.platform.release",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "ilha\\..*"
+        }
+      },
+      "name": "ilha.platform.release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
     {
       "configurePreset": "opencl.coverage",
       "execution": {
@@ -559,6 +643,48 @@
   ],
   "version": 8,
   "workflowPresets": [
+    {
+      "displayName": "Validate the Ilha platform configuration and bindings.",
+      "name": "ilha.platform.coverage",
+      "steps": [
+        {
+          "name": "ilha.platform.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "ilha.platform.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the Ilha platform configuration and bindings.",
+      "name": "ilha.platform.debug",
+      "steps": [
+        {
+          "name": "ilha.platform.debug",
+          "type": "configure"
+        },
+        {
+          "name": "ilha.platform.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the Ilha platform configuration and bindings.",
+      "name": "ilha.platform.release",
+      "steps": [
+        {
+          "name": "ilha.platform.release",
+          "type": "configure"
+        },
+        {
+          "name": "ilha.platform.release",
+          "type": "build"
+        }
+      ]
+    },
     {
       "displayName": "Validate the OpenCL tests and software stack.",
       "name": "opencl.coverage",

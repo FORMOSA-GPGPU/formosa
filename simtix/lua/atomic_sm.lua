@@ -2,7 +2,10 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
----@class simtix.atomic_sm : formosa.system.sm
+---@class simtix.atomic_sm.param
+---@field non_cacheable_regions? {addr: integer, size: integer}[]
+
+---@class simtix.atomic_sm : ilha.system.sm
 ---@field protected _clock sc.clock
 ---@field protected _id integer
 ---@field protected _sc_module sc.Module
@@ -11,23 +14,25 @@
 ---@field protected _dmem_xbar simple.XBar
 ---@field protected _local_mem simtix.AtomicMemory
 ---@field protected _l1cache simtix.Cache
----@field protected _stub_cache formosa.StubCacheMmio
----@field protected _wg_init formosa.WGInitializer
+---@field protected _stub_cache ilha.StubCacheMmio
+---@field protected _wg_init ilha.WGInitializer
 ---@field protected _core_info simple.ConstantTable
 ---@field protected _stack_remap simple.DummyTarget
----@overload fun(name: string, config: formosa.system.config, id: integer, sm_param?: table): simtix.atomic_sm
+---@overload fun(name: string, id: integer, config: ilha.system_config, sm_param?: simtix.atomic_sm.param): simtix.atomic_sm
 local AtomicSM = {}
 
 ---@param name string
----@param config formosa.system.config
 ---@param id integer
----@param sm_param? table
+---@param config ilha.system_config
+---@param sm_param? simtix.atomic_sm.param
 ---@return simtix.atomic_sm
-function AtomicSM.new(name, config, id, sm_param)
-  assert(not sm_param or not next(sm_param), "AtomicSM has no SM-specific configuration")
+function AtomicSM.new(name, id, config, sm_param)
+  sm_param = sm_param or {}
   ---@type simtix.atomic_sm
   local self = setmetatable({}, AtomicSM --[[@as table]])
   self._id = id
+  local addr = require("ilha.addr_map")
+  local threads_per_core = config:threads_per_core()
 
   -- Child names are local to this hierarchy-aware SM instance.
   self._core = simtix.AtomicCore("AtomicCore", {
@@ -37,28 +42,29 @@ function AtomicSM.new(name, config, id, sm_param)
 
   self._l1cache = simtix.Cache("L1Cache", {
     write_hit_policy = "WriteBack",
-    size_bytes = config.cache_size,
+    size_bytes = 0x1000,
     block_size_bytes = config.cache_block_size,
-    non_cacheable_regions = config.non_cacheable_regions or {},
+    non_cacheable_regions = sm_param.non_cacheable_regions
+      or config:effective_non_cacheable_regions(),
   })
-  local lmem_window = config.local_mem_window or config.local_mem_size
+  local lmem_window = addr.lmem_window
   self._dmem_xbar = simple.XBar("DMemXBar", 1, {
-    { addr = 0x0, size = config.local_mem_size }, -- usable local memory
+    { addr = 0x0, size = addr.lmem_size }, -- usable local memory
     {
       addr = lmem_window,
-      size = (config.max_size - lmem_window + 1),
+      size = (addr.max_size - lmem_window + 1),
       subtract_start_addr = false,
     }, -- system map identity
   })
   self._local_mem = simtix.AtomicMemory("LocalMem", {
-    size = config.local_mem_size,
+    size = addr.lmem_size,
   })
 
-  self._stub_cache = formosa.StubCacheMmio("StubCache", {
+  self._stub_cache = ilha.StubCacheMmio("StubCache", {
     verbose = false,
   })
 
-  self._wg_init = formosa.WGInitializer("wg_init", {
+  self._wg_init = ilha.WGInitializer("wg_init", {
     warps_per_core = config.warps_per_core,
     threads_per_warp = config.threads_per_warp,
     wg_resident_limit = config.wg_resident_limit,
@@ -68,9 +74,9 @@ function AtomicSM.new(name, config, id, sm_param)
 
   self._core_info = simple.ConstantTable("CoreInfo", {
     entries = {
-      { addr = 0x00, size = 8, value = config.threads_per_core }, -- Max threads per core
+      { addr = 0x00, size = 8, value = threads_per_core }, -- Max threads per core
       { addr = 0x08, size = 8, value = config.stack_remap_entries }, -- Stack remap entries
-      { addr = 0x10, size = 8, value = config.stack_remap_group_size }, -- Stack remap group size
+      { addr = 0x10, size = 8, value = config:effective_stack_remap_group_size() },
     },
   })
 
@@ -78,13 +84,13 @@ function AtomicSM.new(name, config, id, sm_param)
   self._stack_remap = simple.DummyTarget("StackRemapTable", {})
 
   self._router = simple.XBar("SMRouter", 1, {
-    { addr = config.wgi_csr_base, size = config.wgi_csr_size }, -- WGInit
-    { addr = config.icache_csr_base, size = config.cache_csr_size }, -- StubCache (I-Cache)
-    { addr = config.dcache_csr_base, size = config.cache_csr_size }, -- L1Cache (D-Cache)
-    { addr = config.core_csr_base, size = config.core_csr_size }, -- Core Info Read-only
+    { addr = addr.wgi_csr_base, size = addr.wgi_csr_size }, -- WGInit
+    { addr = addr.icache_csr_base, size = addr.cache_csr_size }, -- StubCache (I-Cache)
+    { addr = addr.dcache_csr_base, size = addr.cache_csr_size }, -- L1Cache (D-Cache)
+    { addr = addr.core_csr_base, size = addr.core_csr_size }, -- Core Info Read-only
     {
-      addr = config.stack_remap_csr_base,
-      size = config.stack_remap_csr_size,
+      addr = addr.stack_remap_csr_base,
+      size = addr.stack_remap_csr_size,
     }, -- Stack remap descriptors
   })
 

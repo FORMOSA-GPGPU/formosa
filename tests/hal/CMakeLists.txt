@@ -15,6 +15,7 @@ if(lv IN_LIST ENABLE_PROJECTS AND hal IN_LIST ENABLE_PROJECTS)
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libcomm/include
     ${CMAKE_SOURCE_DIR}/hal/include
+    ${ILHA_GENERATED_DIR}
   )
 
   add_executable(hal_reboot_test hal_reboot_test.cc)
@@ -27,6 +28,7 @@ if(lv IN_LIST ENABLE_PROJECTS AND hal IN_LIST ENABLE_PROJECTS)
     ${CMAKE_SOURCE_DIR}
     ${CMAKE_SOURCE_DIR}/libcomm/include
     ${CMAKE_SOURCE_DIR}/hal/include
+    ${ILHA_GENERATED_DIR}
   )
 
   add_executable(hal_capture_replay_vecadd ../opencl/vecadd/main.cc)
@@ -45,15 +47,26 @@ if(lv IN_LIST ENABLE_PROJECTS AND hal IN_LIST ENABLE_PROJECTS)
   add_test(NAME hal.memory_copy
            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/run_daemon_test.sh
            $<TARGET_FILE:lv>
-           ${CMAKE_SOURCE_DIR}/tests/formosa/daemon.lua
+           ${CMAKE_SOURCE_DIR}/ilha/daemon.lua
            $<TARGET_FILE:hal_memory_copy_test>)
   set_property(TEST hal.memory_copy PROPERTY LABELS lv hal integration)
   set_property(TEST hal.memory_copy PROPERTY RESOURCE_LOCK formosa_daemon)
 
+  add_test(NAME hal.large_sm_capabilities
+           COMMAND ${CMAKE_COMMAND} -E env
+           FORMOSA_DAEMON_CONFIG=large_sm
+           FORMOSA_EXPECTED_MAX_THREADS=1024
+           ${CMAKE_CURRENT_SOURCE_DIR}/run_daemon_test.sh
+           $<TARGET_FILE:lv>
+           ${CMAKE_SOURCE_DIR}/ilha/daemon.lua
+           $<TARGET_FILE:hal_memory_copy_test>)
+  set_property(TEST hal.large_sm_capabilities PROPERTY LABELS lv hal integration)
+  set_property(TEST hal.large_sm_capabilities PROPERTY RESOURCE_LOCK formosa_daemon)
+
   add_test(NAME hal.reboot
            COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/run_daemon_test.sh
            $<TARGET_FILE:lv>
-           ${CMAKE_SOURCE_DIR}/tests/formosa/daemon.lua
+           ${CMAKE_SOURCE_DIR}/ilha/daemon.lua
            $<TARGET_FILE:hal_reboot_test>)
   set_property(TEST hal.reboot PROPERTY LABELS lv hal integration)
   set_property(TEST hal.reboot PROPERTY RESOURCE_LOCK formosa_daemon)

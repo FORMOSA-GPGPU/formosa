@@ -6,7 +6,7 @@
 
 #pragma once
 
-#include <liblv/interfaces/warp_ctrl.h>
+#include <ilha/warp_ctrl.h>
 #include <liblv/statistics.h>
 #include <systemc.h>
 
@@ -17,7 +17,7 @@
 
 namespace simtix {
 
-class BaseCore : public sc_module, public lv::formosa::WarpCtrl {
+class BaseCore : public sc_module, public ilha::WarpCtrl {
  public:
   sc_in<bool> SC_NAMED(clock);
 
@@ -292,8 +292,7 @@ class BaseCore : public sc_module, public lv::formosa::WarpCtrl {
 
   void McycleIncrement() { mcycle_ = mcycle_.read() + 1; }
 
-  virtual void ExecuteWarpCtrlCommand(
-      const lv::formosa::WarpCtrlCommand &cmd) = 0;
+  virtual void ExecuteWarpCtrlCommand(const ilha::WarpCtrlCommand &cmd) = 0;
 
   void WarpCtrlCommandThread() {
     wait(SC_ZERO_TIME);

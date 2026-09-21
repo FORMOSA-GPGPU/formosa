@@ -47,7 +47,7 @@ local simtix_test_systems = {
   opencl = {
     depends = { "formosa-pocl", "tests.opencl" },
     enabled_projects = { "fw", "simtix", "tests" },
-    enabled_tests = { "formosa", "opencl" },
+    enabled_tests = { "opencl" },
   },
   ["kernel-sim"] = {
     depends = { "tests.kernel-sim" },
@@ -109,6 +109,13 @@ end
 ---@type WorkflowConfig
 local config = {
   components = {
+    ["ilha.platform"] = {
+      paths = {
+        "ilha/**",
+        "cmake/IlhaPlatformData.cmake",
+      },
+      depends = { "lv.liblv", "lv.lua", "lv.bindings.build" },
+    },
     ["repo.cmake"] = {
       paths = {
         "CMakeLists.txt",
@@ -164,13 +171,6 @@ local config = {
     ["lv.bindings.dbg"] = make_lv_binding_component("dbg"),
     ["lv.bindings.dma"] = make_lv_binding_component("dma"),
     ["lv.bindings.dramsys"] = make_lv_binding_component("dramsys"),
-    ["lv.bindings.formosa"] = {
-      paths = {
-        "lv/src/lv/bindings/formosa/**",
-        "lv/lua/transactor_sm.lua",
-      },
-      depends = { "lv.liblv", "lv.lua", "lv.bindings.build" },
-    },
     ["lv.bindings.ipc"] = make_lv_binding_component("ipc"),
     ["lv.bindings.nic"] = make_lv_binding_component("nic"),
     ["lv.bindings.simple"] = make_lv_binding_component("simple"),
@@ -185,7 +185,6 @@ local config = {
         "lv.bindings.dbg",
         "lv.bindings.dma",
         "lv.bindings.dramsys",
-        "lv.bindings.formosa",
         "lv.bindings.ipc",
         "lv.bindings.nic",
         "lv.bindings.simple",
@@ -201,7 +200,7 @@ local config = {
         "simtix/src/tlm_extensions/**",
         "simtix/src/CMakeLists.txt",
       },
-      depends = { "lv.liblv", "repo.cmake", "repo.environment" },
+      depends = { "ilha.platform", "lv.liblv", "repo.cmake", "repo.environment" },
     },
     ["simtix.utils"] = {
       paths = { "simtix/src/utils/**" },
@@ -242,7 +241,7 @@ local config = {
         "simtix.cache",
         "simtix.mem",
         "lv.lua",
-        "lv.bindings.formosa",
+        "ilha.platform",
         "lv.bindings.simple",
       },
     },
@@ -257,7 +256,7 @@ local config = {
         "simtix.cache",
         "simtix.banked_memory",
         "lv.lua",
-        "lv.bindings.formosa",
+        "ilha.platform",
         "lv.bindings.simple",
       },
     },
@@ -361,7 +360,7 @@ local config = {
     },
     ["tests.opencl"] = {
       paths = {
-        "tests/formosa/**",
+        "ilha/**",
         "tests/opencl/**",
       },
       depends = { "formosa-pocl" },
@@ -528,6 +527,17 @@ local config = {
         },
       },
     },
+    ["ilha.unit"] = {
+      depends = { "ilha.platform" },
+      adapters = {
+        cmake = {
+          build_options = {
+            ENABLE_PROJECTS = { "ilha" },
+          },
+          selectors = { "ilha\\..*" },
+        },
+      },
+    },
     ["lv.bindings"] = {
       depends = {
         "lv.tests.unit",
@@ -560,7 +570,7 @@ local config = {
           build_options = {
             ENABLE_PROJECTS = { "hal", "lv", "simtix", "tests" },
             HAL_ENABLE_TESTING = true,
-            TESTS_ENABLE_TESTS = { "formosa", "hal" },
+            TESTS_ENABLE_TESTS = { "hal" },
           },
           selectors = { "hal", "opencl" },
         },
@@ -572,6 +582,10 @@ local config = {
       "pipelined_sm",
       { "simtix.pipelined_core.unit" }
     ),
+    ["ilha.platform"] = {
+      description = "Validate the Ilha platform configuration and bindings.",
+      test_suites = { "ilha.unit" },
+    },
     ["simtix.atomic_sm"] = make_simtix_sm_workflow("atomic_sm"),
     ["simtix.cache"] = {
       description = "Validate the simtix cache model with unit and integration tests.",

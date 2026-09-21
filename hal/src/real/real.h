@@ -19,6 +19,7 @@ int fsa_real_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
                                 size_t size);
 int fsa_real_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr,
                                   size_t size);
+int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size);
 void fsa_real_abort();
 void fsa_real_cleanup();
 }
@@ -43,5 +44,9 @@ struct ConfigurationSnapshot {
 };
 
 const ConfigurationSnapshot *configuration_snapshot() noexcept;
+// Read and validate SystemInfo after establishing a device connection.
+int load_configuration_snapshot() noexcept;
+// Discard capabilities when that connection is closed or initialization fails.
+void reset_configuration_snapshot() noexcept;
 
 }  // namespace formosa::real

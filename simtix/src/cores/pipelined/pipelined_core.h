@@ -99,9 +99,7 @@ class PipelinedCore : public BaseCore,
     return subcores;
   }
 
-  lv::formosa::WarpCtrl *warp_ctrl() {
-    return static_cast<lv::formosa::WarpCtrl *>(this);
-  }
+  ilha::WarpCtrl *warp_ctrl() { return static_cast<ilha::WarpCtrl *>(this); }
 
   pipelined::Stats *stats() override { return &stats_; }
   lv::stats::Group *stats_group() { return &stats_; }
@@ -224,7 +222,7 @@ class PipelinedCore : public BaseCore,
 
   void Tick();
   void EmitHeartbeat(uint64_t instret_now, uint64_t active_cycles_now);
-  void ExecuteWarpCtrlCommand(const lv::formosa::WarpCtrlCommand &cmd) override;
+  void ExecuteWarpCtrlCommand(const ilha::WarpCtrlCommand &cmd) override;
 
   bool enable_ghost_scheduler_;
   Frontend frontend_;

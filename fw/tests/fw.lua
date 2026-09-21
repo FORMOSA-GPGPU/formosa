@@ -2,7 +2,7 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
--- Fixed-aperture CP-private map (formosa.addr_map / formosa_addr_map.h):
+-- Fixed-aperture CP-private map (ilha.addr_map / formosa_addr_map.h):
 --
 --   0x0000_0000  CP_ROM
 --   0x0000_1000  CP_CTRL (printbuf / exit)
@@ -19,7 +19,7 @@
 --
 -- Initiator used to poll an address for sim pause
 local gu = require("util.gutil")
-local addr = require("formosa.addr_map")
+local addr = require("ilha.addr_map")
 
 -- CP CSR offsets relative to addr.cp_csr_base (struct cp_mmio)
 local CP_MMIO = {
@@ -40,7 +40,7 @@ local cp = cp.CommandProcessor("cp", 0, {
 })
 local rom = simple.Memory("rom", { size = addr.cp_rom_size, latency = 1, fifo_size = 1 })
 local tcm = simple.Memory("tcm", { size = addr.cp_tcm_size, latency = 1, fifo_size = 1 })
--- Host/firmware-visible CSR bank (same pattern as formosa.system; not cp.csr_slave)
+-- Host/firmware-visible CSR bank (same pattern as ilha.system; not cp.csr_slave)
 local cp_csr = simple.Memory("cp_csr", { size = addr.cp_csr_size, latency = 1, fifo_size = 1 })
 local initiator = simple.Initiator("initiator")
 local printbuf = simple.PrintBuf("printbuf", 1)

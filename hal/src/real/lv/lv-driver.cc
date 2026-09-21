@@ -82,6 +82,8 @@ int fsa_real_put(uintptr_t dev_addr, const void *host_ptr, size_t size) {
   return 0;
 }
 
+}  // namespace
+
 int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
   if (!client.transceiver || !client.transceiver->IsConnectionAlive()) {
     return -1;  // Return error if not connected
@@ -129,8 +131,6 @@ int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
   std::memcpy(host_ptr, response.data.data(), size);
   return 0;
 }
-
-}  // namespace
 
 int fsa_real_mmio(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr) {
   const auto *config = formosa::real::configuration_snapshot();

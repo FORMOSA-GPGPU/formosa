@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <addr_map/formosa_addr_map.h>
 #include <formosa-hal/api.h>
 #include <formosa-hal/hal.h>
+#include <formosa_addr_map.h>
 
 #include <array>
 #include <cstdint>

@@ -68,7 +68,7 @@ add_library(simtix STATIC
 lv_register_binding(simtix)
 target_include_directories(simtix PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(simtix PUBLIC liblv softfloat)
+target_link_libraries(simtix PUBLIC libilha liblv softfloat)
 
 # Use GCOV to generate host-side coverage reports for simtix.
 if(ENABLE_COVERAGE)

@@ -37,8 +37,9 @@ path = [
   "simtix/.gitignore",
   "simtix/src/cores/.clang-format-ignore",
   "simtix/src/cores/xformosa.txt",
-  "tests/formosa/apccas2026-lpddr4.json",
-  "tests/formosa/simconfig.json",
+  "ilha/configs/dram/apccas2026-lpddr4.json",
+  "ilha/configs/dram/large-sm-lpddr4.json",
+  "ilha/configs/dram/simconfig.json",
   "tests/opencl/gemma/.gitignore",
   "tests/pfreader/pfreader.sql",
 ]

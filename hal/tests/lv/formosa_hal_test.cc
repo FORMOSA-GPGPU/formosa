@@ -2,9 +2,9 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <addr_map/formosa_addr_map.h>
 #include <formosa-hal/api.h>
 #include <formosa-hal/hal.h>
+#include <formosa_addr_map.h>
 #include <real/real.h>
 
 #include <array>
@@ -121,10 +121,10 @@ void test_fsa_hal_init() {
               << std::endl;
     exit(-1);
   }
-  if (description.num_cores != 1 || description.threads_per_warp != 16 ||
+  if (description.num_cores != 1 || description.threads_per_warp != 4 ||
       description.max_threads_per_work_group != 64 ||
-      description.local_mem_size_per_core != 65536 ||
-      description.cache_size != 1048576 || description.cache_line_size != 64 ||
+      description.local_mem_size_per_core != FSA_LMEM_SIZE ||
+      description.cache_size != 0x20000 || description.cache_line_size != 64 ||
       description.global_mem_size != 2147483648ULL ||
       description.max_allocation_size != 2113929216ULL) {
     std::cerr << "[FORMOSA HAL Test] Unexpected Device Description"
@@ -141,7 +141,7 @@ void test_fsa_hal_occupancy() {
     exit(-1);
   }
   if (fsa_hal_check_occupancy(64, 0, &max_local_mem) != 0 ||
-      max_local_mem != 65536) {
+      max_local_mem != FSA_LMEM_SIZE) {
     std::cerr << "[FORMOSA HAL Test] Valid occupancy was rejected" << std::endl;
     exit(-1);
   }

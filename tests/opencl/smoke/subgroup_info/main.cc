@@ -5,7 +5,6 @@
 #include <CL/opencl.hpp>
 #include <algorithm>
 #include <array>
-#include <cstdlib>
 #include <iostream>
 #include <limits>
 #include <stdexcept>
@@ -18,12 +17,6 @@ static void check(bool valid, const char *message) {
 
 int main() {
   try {
-    const char *warp_env = std::getenv("LV_FORMOSA_THREADS_PER_WARP");
-    const char *warps_env = std::getenv("LV_FORMOSA_WARPS_PER_CORE");
-    check(warp_env && warps_env, "Run through run_opencl.lua");
-    const size_t width = std::stoul(warp_env);
-    const size_t max_groups = std::stoul(warps_env);
-    check(width > 0 && max_groups > 0, "Invalid simulator geometry");
     std::vector<cl::Platform> platforms;
     cl::Platform::get(&platforms);
     check(!platforms.empty(), "No OpenCL platform");
@@ -32,17 +25,18 @@ int main() {
     check(!devices.empty(), "No OpenCL GPU");
     const auto &device = devices.front();
     cl_uint device_max = 0;
-    check(clGetDeviceInfo(device(), CL_DEVICE_MAX_NUM_SUB_GROUPS,
-                          sizeof(device_max), &device_max,
-                          nullptr) == CL_SUCCESS &&
-              device_max == max_groups,
-          "Device subgroup limit differs from hardware warp count");
+    check(
+        clGetDeviceInfo(device(), CL_DEVICE_MAX_NUM_SUB_GROUPS,
+                        sizeof(device_max), &device_max, nullptr) == CL_SUCCESS,
+        "Failed to query the device subgroup limit");
     size_t preferred = 0;
     check(
         clGetDeviceInfo(device(), CL_DEVICE_PREFERRED_WORK_GROUP_SIZE_MULTIPLE,
-                        sizeof(preferred), &preferred, nullptr) == CL_SUCCESS &&
-            preferred == width,
-        "Preferred multiple differs from hardware warp width");
+                        sizeof(preferred), &preferred, nullptr) == CL_SUCCESS,
+        "Failed to query the preferred work-group size multiple");
+    const size_t width = preferred;
+    const size_t max_groups = device_max;
+    check(width > 0 && max_groups > 0, "Invalid device subgroup geometry");
     cl::Context context(device);
     cl::CommandQueue queue(context, device);
     cl::Program program(context, R"(

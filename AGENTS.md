@@ -46,7 +46,8 @@ feature-aware merely to simplify the current task.
   enter generic layers unless the concept belongs to their abstraction.
 - `run_opencl.lua` MUST remain a generic runner. It MUST NOT gain
   architecture-specific options; use generic paths such as `--sm-param`. The
-  runner MUST NOT know which features or parameters an SM supports.
+  runner MUST NOT know which features or parameters an SM supports. The
+  existing `--heartbeat-frequency` compatibility option is the sole exception.
 - Keep specialization in its owning implementation, make it obvious through
   naming, placement, or comments, and minimize shared-code changes.
 - “Minimal change” means the smallest coherent architectural change, not the

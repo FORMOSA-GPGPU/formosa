@@ -2,7 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <addr_map/formosa_addr_map.h>
+#include <formosa_addr_map.h>
 #include <libcomm/libcomm.h>
 #include <real/real.h>
 
@@ -34,6 +34,7 @@ bool fail_next_cmd_packet = false;
 bool fail_next_wr_ptr = false;
 bool free_ring_on_complete = false;
 bool fail_next_init_cmd_ring_base = false;
+bool fail_capability_reads = false;
 
 uint64_t test_fsa_mmio_base() {
   const auto *config = formosa::real::configuration_snapshot();
@@ -71,6 +72,30 @@ void initialize_mmio_registers() {
   const char *fail_init = std::getenv("LV_FORMOSA_FAIL_INIT_ONCE");
   fail_next_init_cmd_ring_base =
       fail_init != nullptr && std::strcmp(fail_init, "1") == 0;
+  const char *capability_failure = std::getenv("LV_FORMOSA_CAPABILITY_FAILURE");
+  const bool bad_version = capability_failure != nullptr &&
+                           std::strcmp(capability_failure, "version") == 0;
+  const bool short_length = capability_failure != nullptr &&
+                            std::strcmp(capability_failure, "length") == 0;
+  fail_capability_reads = capability_failure != nullptr &&
+                          std::strcmp(capability_failure, "read") == 0;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_ABI_VERSION] =
+      bad_version ? FSA_SYSTEM_INFO_ABI_VERSION + 1
+                  : FSA_SYSTEM_INFO_ABI_VERSION;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_LENGTH] =
+      short_length ? FSA_SYSTEM_INFO_LENGTH - sizeof(uint64_t)
+                   : FSA_SYSTEM_INFO_LENGTH;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_NUM_SM] = 1;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_THREADS_PER_WARP] =
+      4;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_WARPS_PER_CORE] =
+      16;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_LOCAL_MEM_SIZE] =
+      FSA_LMEM_SIZE;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_SHARED_CACHE_SIZE] =
+      0x20000;
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_CACHE_BLOCK_SIZE] =
+      64;
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_SIZE] =
       8;  // Example: 8 packets
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_BASE] =
@@ -234,6 +259,13 @@ void handle_mmio_message(libcomm::Transceiver *self, const libcomm::Msg &msg) {
     self->Send(resp);
     std::cout << "[MMIO Server] Sent ProbeAck response." << std::endl;
   } else if (msg.cmd() == libcomm::Cmd::Get) {
+    if (fail_capability_reads && msg.addr() >= FSA_SYSTEM_INFO_BASE &&
+        msg.addr() < FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_SIZE) {
+      std::cout << "[MMIO Server] Injected capability read failure\n";
+      self->Send(
+          libcomm::Msg::Respond(msg).status(libcomm::Status::GenericErr));
+      return;
+    }
     if (fail_next_init_cmd_ring_base &&
         msg.addr() == test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_BASE) {
       fail_next_init_cmd_ring_base = false;

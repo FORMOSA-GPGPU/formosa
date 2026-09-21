@@ -4,7 +4,6 @@
 
 #include "dma.h"
 
-#include <addr_map/formosa_addr_map.h>
 #include <liblv/binding.h>
 #include <liblv/mm/pool.h>
 #include <liblv/schema.h>
@@ -18,6 +17,12 @@
 namespace dma {
 
 namespace {
+
+constexpr uint64_t kStartOffset = 0x00;
+constexpr uint64_t kAddr0Offset = 0x08;
+constexpr uint64_t kAddr1Offset = 0x10;
+constexpr uint64_t kSizeOffset = 0x18;
+constexpr uint64_t kStatusOffset = 0x20;
 
 struct Param {
   int fifo_size = 16;
@@ -53,19 +58,19 @@ void DMA::mmio_proc() {
 
     if (cmd == tlm::TLM_READ_COMMAND) {
       switch (addr) {
-        case FSA_DMA_OFF_START:
+        case kStartOffset:
           *data_ptr = start_;
           break;
-        case FSA_DMA_OFF_ADDR0:
+        case kAddr0Offset:
           *data_ptr = addr0_;
           break;
-        case FSA_DMA_OFF_ADDR1:
+        case kAddr1Offset:
           *data_ptr = addr1_;
           break;
-        case FSA_DMA_OFF_SIZE:
+        case kSizeOffset:
           *data_ptr = static_cast<uint64_t>(size_);
           break;
-        case FSA_DMA_OFF_STATUS:
+        case kStatusOffset:
           *data_ptr = static_cast<uint64_t>(status_);
           break;
         default:
@@ -81,7 +86,7 @@ void DMA::mmio_proc() {
         continue;
       }
       switch (addr) {
-        case FSA_DMA_OFF_START:
+        case kStartOffset:
           start_ = *data_ptr ? 1 : 0;
           if (start_ && !start_transfer()) {
             trans->set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
@@ -89,16 +94,16 @@ void DMA::mmio_proc() {
             continue;
           }
           break;
-        case FSA_DMA_OFF_ADDR0:
+        case kAddr0Offset:
           addr0_ = *data_ptr;
           break;
-        case FSA_DMA_OFF_ADDR1:
+        case kAddr1Offset:
           addr1_ = *data_ptr;
           break;
-        case FSA_DMA_OFF_SIZE:
+        case kSizeOffset:
           size_ = *reinterpret_cast<int64_t *>(data_ptr);
           break;
-        case FSA_DMA_OFF_STATUS:
+        case kStatusOffset:
           trans->set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
           slave_.resp_port->write(trans);
           continue;
@@ -119,12 +124,12 @@ void DMA::mmio_proc() {
 bool DMA::start_transfer() {
   if (size_ == 0) {
     start_ = 0;
-    status_ = kDmaStatusDone;
+    status_ = Status::kDone;
     return true;
   }
   if (size_ == std::numeric_limits<int64_t>::min()) {
     start_ = 0;
-    status_ = kDmaStatusInvalidDescriptor;
+    status_ = Status::kInvalidDescriptor;
     return false;
   }
 
@@ -142,13 +147,13 @@ bool DMA::start_transfer() {
   }
 
   transfer_failed_ = false;
-  status_ = kDmaStatusBusy;
+  status_ = Status::kBusy;
   is_processing_ = true;
   start_event_.notify();
   return true;
 }
 
-void DMA::finish_transfer(DmaStatus terminal_status) {
+void DMA::finish_transfer(Status terminal_status) {
   status_ = terminal_status;
   is_processing_ = false;
   start_ = 0;
@@ -206,7 +211,7 @@ void DMA::read_proc() {
         data_map_.erase(trans);
         trans->release();
         transfer_failed_ = true;
-        status_ = kDmaStatusBusError;
+        status_ = Status::kBusError;
         trans_fifo_.write(nullptr);
         break;
       }
@@ -227,7 +232,7 @@ void DMA::write_proc() {
   while (true) {
     auto *trans = trans_fifo_.read();
     if (trans == nullptr) {
-      finish_transfer(kDmaStatusBusError);
+      finish_transfer(Status::kBusError);
       continue;
     }
     if (transfer_failed_) {
@@ -250,13 +255,13 @@ void DMA::write_proc() {
     if (!success) {
       transfer_failed_ = true;
       drain_pending_transactions();
-      finish_transfer(kDmaStatusBusError);
+      finish_transfer(Status::kBusError);
       continue;
     }
     *write_ptr_ += static_cast<uint64_t>(chunk);
     size_ -= chunk;
     if (size_ <= 0) {
-      finish_transfer(kDmaStatusDone);
+      finish_transfer(Status::kDone);
     }
   }
 }

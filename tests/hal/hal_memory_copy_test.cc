@@ -2,13 +2,14 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include <addr_map/formosa_addr_map.h>
 #include <formosa-hal/api.h>
 #include <formosa-hal/hal.h>
+#include <formosa_addr_map.h>
 
 #include <array>
 #include <chrono>
 #include <cstdint>
+#include <cstdlib>
 #include <iostream>
 #include <mutex>
 #include <thread>
@@ -110,6 +111,15 @@ int main() {
   if (fsa_probe() != 0 || fsa_hal_init(&description) != 0) {
     std::cerr << "HAL initialization failed\n";
     return 1;
+  }
+  if (const char *expected = std::getenv("FORMOSA_EXPECTED_MAX_THREADS")) {
+    const uint64_t expected_max_threads = std::strtoull(expected, nullptr, 10);
+    if (description.max_threads_per_work_group != expected_max_threads) {
+      std::cerr << "unexpected max_threads_per_work_group: "
+                << description.max_threads_per_work_group << " (expected "
+                << expected_max_threads << ")\n";
+      return 1;
+    }
   }
 
   std::array<uint8_t, kCopySize> input{};

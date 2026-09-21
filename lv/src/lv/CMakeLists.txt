@@ -45,10 +45,6 @@ add_library(${TARGET_OBJ} OBJECT
   bindings/systemc/time.cc
   bindings/systemc/signal.cc
   bindings/workload/elf.cc
-  bindings/formosa/wg_initializer.cc
-  bindings/formosa/sm_transactor.cc
-  bindings/formosa/stub_cache_mmio.cc
-  bindings/formosa/stub_warp_ctrl.cc
 )
 
 find_package(verilator CONFIG REQUIRED)

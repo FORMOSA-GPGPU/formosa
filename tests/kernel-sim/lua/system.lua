@@ -4,8 +4,8 @@
 
 local argparse = require("argparse")
 
----@type formosa.system.config
-local base_config = require("formosa.config")
+---@type ilha.config
+local Config = require("ilha.config")
 
 ---@class kernel-sim.system
 ---@field num_threads integer
@@ -16,8 +16,8 @@ local base_config = require("formosa.config")
 ---@field protected _clock sc.clock
 ---@field protected _reset_n sc.signal
 ---@field protected _mem simple.Memory
----@field protected _sm formosa.system.sm
----@field protected _config formosa.system.config
+---@field protected _sm ilha.system.sm
+---@field protected _config ilha.system_config
 local System = {}
 System.__index = System
 
@@ -42,18 +42,20 @@ function System.new(prog_name, args)
   self._mem = simple.Memory("mem", { size = 0x40000, latency = 0 })
 
   --- Configure the SM based on the provided parameters and base configuration
-  self._config = base_config
-  self._config.warps_per_core = param.num_warps
-  self._config.threads_per_warp = param.num_lanes
-  self._config.threads_per_core = param.num_warps * param.num_lanes
-  -- Scratch/info live above kernel image (see kernel-sim.runtime layout).
-  self._config.non_cacheable_regions = {
-    { addr = 0x23000, size = 0x1d000 }, -- scratch/data + WG info to 0x40000
-  }
+  local config = Config:override({
+    system = {
+      warps_per_core = param.num_warps,
+      threads_per_warp = param.num_lanes,
+      -- Scratch/info live above the kernel image (see kernel-sim.runtime layout).
+      non_cacheable_regions = { { addr = 0x23000, size = 0x1d000 } },
+    },
+    sm = { module = param.sm },
+  })
+  self._config = config.system
 
-  ---@type formosa.system.sm_ctor
-  local make_sm = require(param.sm)
-  self._sm = make_sm("SM0", self._config, 0)
+  ---@type ilha.system.sm_ctor
+  local make_sm = require(config.sm.module)
+  self._sm = make_sm("SM0", 0, self._config, config.sm.param)
   self._sm.clock = self._clock
 
   self._initiator.clock = self._clock
@@ -165,7 +167,7 @@ function System:launch(kernel_pc, info_ptr, group_size)
     return info
   end
 
-  local wgi_base = self._config.wgi_csr_base
+  local wgi_base = require("ilha.addr_map").wgi_csr_base
 
   self._initiator:add_payload(create_write_payload(wgi_base + 0x08, kernel_pc))
   self._initiator:add_payload(create_write_payload(wgi_base + 0x10, info_ptr))

@@ -15,7 +15,7 @@
 #include "command_packet.h"
 #include "dma.h"
 
-// CP Parameters — bases from addr_map/formosa_addr_map.h
+// CP Parameters — bases from generated formosa_addr_map.h
 #ifndef CP_BASE
 #define CP_BASE ((uintptr_t)FSA_CP_BASE)
 #endif
@@ -35,9 +35,8 @@
 #define PFREADER_BASE ((uintptr_t)FSA_CP_PFREADER_BASE)
 #endif
 
-#define CP_KERNEL_STATE_BUF_SIZE 4
-/* SystemInfo table lives in the CP-ROM window after the ROM payload. */
-#define SYSTEM_INFO_BASE 0x210
+#define CP_KERNEL_STATE_BUF_SIZE FSA_CP_KERNEL_STATE_BUF_SIZE
+#define SYSTEM_INFO_BASE ((uintptr_t)FSA_SYSTEM_INFO_BASE)
 
 #define CP_WGI_BUF_SIZE ((size_t)FSA_WGI_BUF_SIZE)
 #define HOST_DMA_CSR_BASE ((uintptr_t)FSA_HOST_DMA_CSR_BASE)
@@ -85,6 +84,8 @@ _Static_assert(offsetof(struct cp_mmio, FW_FAULT_CODE) ==
                "CP firmware fault offset mismatch");
 
 struct system_info_mmio {
+  volatile uint64_t ABI_VERSION;
+  volatile uint64_t LENGTH_BYTES;
   volatile uint64_t NUM_SM;
 };
 
@@ -110,10 +111,15 @@ _Static_assert(sizeof(struct dma_mmio) <= FSA_HOST_DMA_CSR_SIZE,
 _Static_assert(sizeof(struct dma_mmio) <= FSA_DEVICE_DMA_CSR_SIZE,
                "dma_mmio must fit in Device DMA aperture");
 
-_Static_assert(offsetof(struct system_info_mmio, NUM_SM) == 0x0,
-               "SystemInfo.NUM_SM must be at offset 0x0");
-_Static_assert(sizeof(struct system_info_mmio) == 0x8,
-               "SystemInfo must be 8 bytes");
+_Static_assert(offsetof(struct system_info_mmio, ABI_VERSION) ==
+                   FSA_SYSTEM_INFO_OFF_ABI_VERSION,
+               "SystemInfo ABI version offset mismatch");
+_Static_assert(offsetof(struct system_info_mmio, LENGTH_BYTES) ==
+                   FSA_SYSTEM_INFO_OFF_LENGTH,
+               "SystemInfo length offset mismatch");
+_Static_assert(offsetof(struct system_info_mmio, NUM_SM) ==
+                   FSA_SYSTEM_INFO_OFF_NUM_SM,
+               "SystemInfo NUM_SM offset mismatch");
 
 struct sm_mmio {
   // Workgroup Initializer

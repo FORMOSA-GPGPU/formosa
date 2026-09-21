@@ -28,6 +28,8 @@
 #ifndef FREERTOS_CONFIG_H
 #define FREERTOS_CONFIG_H
 
+#include <formosa_addr_map.h>
+
 /*-----------------------------------------------------------
  * Application specific definitions.
  *
@@ -41,9 +43,8 @@
  *----------------------------------------------------------*/
 
 /* See https://www.freertos.org/Using-FreeRTOS-on-RISC-V.html */
-/* CLINT window @ 0x50000 — see addr_map/formosa_addr_map.h */
-#define configMTIME_BASE_ADDRESS (0x50000 + 0xBFF8)
-#define configMTIMECMP_BASE_ADDRESS (0x50000 + 0x4000)
+#define configMTIME_BASE_ADDRESS FSA_CLINT_MTIME_BASE
+#define configMTIMECMP_BASE_ADDRESS FSA_CLINT_MTIMECMP_BASE
 
 #ifdef PICOLIBC_TLS
 #define configUSE_PICOLIBC_TLS 1

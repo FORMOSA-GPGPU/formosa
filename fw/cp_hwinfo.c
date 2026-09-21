@@ -37,6 +37,12 @@ void cp_hwinfo_init(void) {
   volatile struct system_info_mmio *system_info =
       (volatile struct system_info_mmio *)SYSTEM_INFO_BASE;
 
+  if (system_info->ABI_VERSION != FSA_SYSTEM_INFO_ABI_VERSION ||
+      system_info->LENGTH_BYTES < FSA_SYSTEM_INFO_LENGTH) {
+    cp_panic("Unsupported SystemInfo ABI version=%lu length=%lu",
+             (unsigned long)system_info->ABI_VERSION,
+             (unsigned long)system_info->LENGTH_BYTES);
+  }
   g_num_sm = system_info->NUM_SM;
   if (g_num_sm == 0) {
     cp_panic("Invalid NUM_SM=0");

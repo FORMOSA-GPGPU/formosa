@@ -4,11 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-/* CP_ROM window 4 KiB @ 0x0 — addr_map/formosa_addr_map.h */
-MEMORY
-{
-  ROM (RX): ORIGIN = 0x0, LENGTH = 4K
-}
+INCLUDE ilha_memory.ld
 
 ENTRY(start);
 

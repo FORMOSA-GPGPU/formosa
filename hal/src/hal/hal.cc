@@ -155,6 +155,7 @@ void reset_runtime_state() noexcept {
   dev_cmd_ring_base = 0;
   noncache_alloc_ready = false;
   active_configuration = nullptr;
+  formosa::real::reset_configuration_snapshot();
 }
 
 void rollback_initialization() noexcept {
@@ -902,15 +903,7 @@ int fsa_hal_init(FsaDeviceDescription *description) {
 
   FsaDeviceDescription local_description = {};
   try {
-    const auto *snapshot = formosa::real::configuration_snapshot();
-    if (snapshot == nullptr ||
-        !derive_device_description(*snapshot, local_description)) {
-      fprintf(stderr, "Invalid Formosa configuration snapshot\n");
-      return -1;
-    }
-
     rollback_initialization();
-    active_configuration = snapshot;
     recorder.InitIfNeeded();
     firmware_ready.store(false, std::memory_order_release);
     transport_failed.store(false, std::memory_order_release);
@@ -922,6 +915,20 @@ int fsa_hal_init(FsaDeviceDescription *description) {
       rollback_initialization();
       return init_status;
     }
+
+    if (formosa::real::load_configuration_snapshot() != 0) {
+      fprintf(stderr, "Failed to read Formosa SystemInfo capabilities\n");
+      rollback_initialization();
+      return -1;
+    }
+    const auto *snapshot = formosa::real::configuration_snapshot();
+    if (snapshot == nullptr ||
+        !derive_device_description(*snapshot, local_description)) {
+      fprintf(stderr, "Invalid Formosa SystemInfo capabilities\n");
+      rollback_initialization();
+      return -1;
+    }
+    active_configuration = snapshot;
 
     if (real_mmio(FSA_CP_OFF_FW_BOOT_GENERATION, 0,
                   &boot_generation_before_reset) != 0) {

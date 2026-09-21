@@ -77,19 +77,18 @@ void PipelinedCore::EmitHeartbeat(uint64_t instret_now,
       (instret_now / heartbeat_frequency_ + 1) * heartbeat_frequency_;
 }
 
-void PipelinedCore::ExecuteWarpCtrlCommand(
-    const lv::formosa::WarpCtrlCommand &cmd) {
+void PipelinedCore::ExecuteWarpCtrlCommand(const ilha::WarpCtrlCommand &cmd) {
   switch (cmd.op()) {
-    case lv::formosa::WarpCtrlCommand::Op::kActivate:
+    case ilha::WarpCtrlCommand::Op::kActivate:
       Activate(cmd.cwm(), cmd.pc(), cmd.wg_info(), cmd.cwid_base());
       break;
-    case lv::formosa::WarpCtrlCommand::Op::kResume:
+    case ilha::WarpCtrlCommand::Op::kResume:
       Resume(cmd.cwm());
       break;
-    case lv::formosa::WarpCtrlCommand::Op::kRelease:
+    case ilha::WarpCtrlCommand::Op::kRelease:
       Release(cmd.cwm());
       break;
-    case lv::formosa::WarpCtrlCommand::Op::kAbort:
+    case ilha::WarpCtrlCommand::Op::kAbort:
       Abort(cmd.cwm());
       break;
   }

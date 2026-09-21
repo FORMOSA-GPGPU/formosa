@@ -8,10 +8,10 @@ add_library(${target} STATIC
   lv-config.cc
 )
 
-if(DEFINED formosa_SOURCE_DIR)
-  set(_fsa_addr_map_dir "${formosa_SOURCE_DIR}/addr_map")
+if(DEFINED ILHA_GENERATED_DIR)
+  set(_fsa_addr_map_dir "${ILHA_GENERATED_DIR}")
 else()
-  set(_fsa_addr_map_dir "${hal_SOURCE_DIR}/../addr_map")
+  message(FATAL_ERROR "Ilha-generated platform data is required to build the LV HAL backend")
 endif()
 
 target_include_directories(${target}
@@ -27,5 +27,8 @@ target_compile_options(${target}
 target_link_libraries(${target}
   PRIVATE libcomm falloc
 )
+if(TARGET ilha-platform-data)
+  add_dependencies(${target} ilha-platform-data)
+endif()
 
 formosa_install_target(${target})

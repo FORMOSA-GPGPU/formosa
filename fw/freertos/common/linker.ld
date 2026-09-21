@@ -1,9 +1,7 @@
-/* Address map: addr_map/formosa_addr_map.h (CP_ROM + CP_TCM) */
-MEMORY
-{
-  ROM (RX): ORIGIN = 0x0, LENGTH = 4K
-  TCM (RWX): ORIGIN = 0x10000, LENGTH = 256K
-}
+/* SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University */
+/* SPDX-License-Identifier: Apache-2.0 */
+
+INCLUDE ilha_memory.ld
 
 ENTRY(_start);
 

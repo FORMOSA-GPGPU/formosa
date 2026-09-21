@@ -14,7 +14,9 @@ let
       (root + "/CMakeLists.txt")
       (root + "/FormosaConfig.cmake.in")
       (root + "/cmake")
-      (root + "/addr_map")
+      (root + "/ilha/lua/addr_map.lua")
+      (root + "/ilha/scripts/generate_header.lua")
+      (root + "/ilha/scripts/generate_linker.lua")
       (root + "/fw")
       (root + "/hal")
       (root + "/libcomm")
@@ -37,7 +39,7 @@ in pkgs.stdenv.mkDerivation {
   version = "0.1";
   inherit src;
 
-  nativeBuildInputs = with pkgs; [ cmake ninja tinyxxd llvmPackages.lld ];
+  nativeBuildInputs = with pkgs; [ cmake ninja tinyxxd llvmPackages.lld xmake ];
 
   buildInputs = [ crossPkgs.stdenv.cc crossPkgs.buildPackages.gdb ];
 

@@ -4,17 +4,20 @@
 
 local BankedMemory = require("simtix.banked_memory")
 
+---@class simtix.pipelined_sm.lsu_config
+---@field num_inflight_slots? integer Maximum number of in-flight LSU instructions.
+
 ---@class simtix.pipelined_sm.param
 ---@field core? simtix.PipelinedCore.Param
----@field icache_block_size? integer
----@field dcache_block_size? integer
+---@field icache? simtix.Cache.Param
+---@field dcache? simtix.Cache.Param
 ---@field num_lmem_banks? integer
----@field scheduler? string
----@field scheduler_config? table
+---@field scheduler? "lrr"|"gto"|"tl"
+---@field scheduler_config? simtix.TwoLevel.Param
 ---@field lsu? "simple"|"coalescing"|"coalescing_outstanding"
----@field lsu_config? table
+---@field lsu_config? simtix.pipelined_sm.lsu_config
 
----@class simtix.pipelined_sm : formosa.system.sm
+---@class simtix.pipelined_sm : ilha.system.sm
 ---@field protected _clock sc.clock
 ---@field protected _id integer
 ---@field protected _sc_module sc.Module
@@ -26,22 +29,33 @@ local BankedMemory = require("simtix.banked_memory")
 ---@field protected _dmem_xbars simple.XBar[]
 ---@field protected _local_mem simtix.BankedMemory
 ---@field protected _mux simple.Mux
----@field protected _wg_init formosa.WGInitializer
+---@field protected _wg_init ilha.WGInitializer
 ---@field protected _core_info simple.ConstantTable
 ---@field protected _stack_remap simtix.StackRemapTable
----@overload fun(name: string, config: formosa.system.config, id: integer, sm_param?: simtix.pipelined_sm.param): simtix.pipelined_sm
+---@overload fun(name: string, id: integer, config: ilha.system_config, sm_param?: simtix.pipelined_sm.param): simtix.pipelined_sm
 local PipelinedSM = {}
 
 ---@param name string
----@param config formosa.system.config
 ---@param id integer
+---@param config ilha.system_config
 ---@param sm_param? simtix.pipelined_sm.param
 ---@return simtix.pipelined_sm
-function PipelinedSM.new(name, config, id, sm_param)
+function PipelinedSM.new(name, id, config, sm_param)
   sm_param = sm_param or {}
   ---@type simtix.pipelined_sm
   local self = setmetatable({}, PipelinedSM --[[@as table]])
   self._id = id
+  local addr = require("ilha.addr_map")
+  local threads_per_core = config:threads_per_core()
+
+  ---@type simtix.Cache.Param
+  local icache_param = sm_param.icache or {}
+  icache_param.block_size_bytes = icache_param.block_size_bytes or config.cache_block_size
+
+  ---@type simtix.Cache.Param
+  local dcache_param = sm_param.dcache or {}
+  dcache_param.block_size_bytes = dcache_param.block_size_bytes or config.cache_block_size
+  dcache_param.non_cacheable_regions = config:effective_non_cacheable_regions()
 
   local core_param = {
     num_warps = config.warps_per_core,
@@ -54,48 +68,34 @@ function PipelinedSM.new(name, config, id, sm_param)
   self._core = simtix.PipelinedCore("PipelinedCore", core_param, pipe_param)
   local num_subcores = #self._core.subcores
 
-  self._icache = simtix.Cache("ICache", {
-    write_hit_policy = "WriteThrough",
-    size_bytes = config.icache_size or config.cache_size,
-    block_size_bytes = sm_param.icache_block_size or config.cache_block_size,
-    ways = 4,
-    mshrs = 4,
-  })
-
-  self._dcache = simtix.Cache("DCache", {
-    write_hit_policy = "WriteBack",
-    size_bytes = config.dcache_size or config.cache_size,
-    block_size_bytes = sm_param.dcache_block_size or config.cache_block_size,
-    non_cacheable_regions = config.non_cacheable_regions or {},
-    ways = 4,
-    mshrs = 8,
-  })
+  self._icache = simtix.Cache("ICache", icache_param)
+  self._dcache = simtix.Cache("DCache", dcache_param)
 
   self._dmem_mux = simple.Mux("DCacheMux", { fifo_size = 32 })
   -- SM-private data map: LMEM, then identity map for on-chip GMEM / DDR.
   -- Cutover is local_mem_window (64 KiB), not sizeof usable LMEM (48 KiB).
-  local lmem_window = config.local_mem_window or config.local_mem_size
+  local lmem_window = addr.lmem_window
   self._dmem_xbars = {}
   for i = 1, num_subcores do
     self._dmem_xbars[i] = simple.XBar("DMemXBar" .. (i - 1), 1, {
-      { addr = 0x0, size = config.local_mem_size }, -- usable local memory
+      { addr = 0x0, size = addr.lmem_size }, -- usable local memory
       {
         addr = lmem_window,
-        size = (config.max_size - lmem_window + 1),
+        size = (addr.max_size - lmem_window + 1),
         subtract_start_addr = false,
       }, -- system map (GMEM @ 0x100000, DDR @ 0x80000000, ...)
     })
   end
   self._local_mem = BankedMemory("LocalMem", {
-    size = config.local_mem_size,
+    size = addr.lmem_size,
     num_banks = sm_param.num_lmem_banks or num_subcores,
     num_froms = num_subcores,
-    bank_line_size = sm_param.dcache_block_size or config.cache_block_size,
+    bank_line_size = dcache_param.block_size_bytes,
   })
 
   self._mux = simple.Mux("Mux", { fifo_size = 32 })
 
-  self._wg_init = formosa.WGInitializer("wg_init", {
+  self._wg_init = ilha.WGInitializer("wg_init", {
     warps_per_core = config.warps_per_core,
     threads_per_warp = config.threads_per_warp,
     wg_resident_limit = config.wg_resident_limit,
@@ -105,26 +105,26 @@ function PipelinedSM.new(name, config, id, sm_param)
 
   self._core_info = simple.ConstantTable("CoreInfo", {
     entries = {
-      { addr = 0x00, size = 8, value = config.threads_per_core }, -- Max threads per core
+      { addr = 0x00, size = 8, value = threads_per_core }, -- Max threads per core
       { addr = 0x08, size = 8, value = config.stack_remap_entries }, -- Stack remap entries
-      { addr = 0x10, size = 8, value = config.stack_remap_group_size }, -- Stack remap group size
+      { addr = 0x10, size = 8, value = config:effective_stack_remap_group_size() },
     },
   })
 
   local stack_remap = simtix.StackRemapTable("StackRemapTable", {
     entries = config.stack_remap_entries,
-    region_size = config.stack_size_per_thread * config.threads_per_core,
+    region_size = addr.per_thread_stack_size * threads_per_core,
   })
   self._stack_remap = stack_remap
 
   self._router = simple.XBar("SMRouter", 1, {
-    { addr = config.wgi_csr_base, size = config.wgi_csr_size }, -- WGInit
-    { addr = config.icache_csr_base, size = config.cache_csr_size }, -- I-Cache
-    { addr = config.dcache_csr_base, size = config.cache_csr_size }, -- D-Cache
-    { addr = config.core_csr_base, size = config.core_csr_size }, -- Core Info Read-only
+    { addr = addr.wgi_csr_base, size = addr.wgi_csr_size }, -- WGInit
+    { addr = addr.icache_csr_base, size = addr.cache_csr_size }, -- I-Cache
+    { addr = addr.dcache_csr_base, size = addr.cache_csr_size }, -- D-Cache
+    { addr = addr.core_csr_base, size = addr.core_csr_size }, -- Core Info Read-only
     {
-      addr = config.stack_remap_csr_base,
-      size = config.stack_remap_csr_size,
+      addr = addr.stack_remap_csr_base,
+      size = addr.stack_remap_csr_size,
     }, -- Stack remap descriptors
   })
 
@@ -141,7 +141,18 @@ function PipelinedSM.new(name, config, id, sm_param)
   -- Subcore (backends) configuration
   local scheduler = sm_param.scheduler or "tl"
   local scheduler_config = sm_param.scheduler_config or {}
+
+  assert(
+    scheduler == "tl" or next(scheduler_config) == nil,
+    "sm.param.scheduler_config requires the tl scheduler"
+  )
+  local lsu_kind = sm_param.lsu or "coalescing_outstanding"
   local lsu_config = sm_param.lsu_config or {}
+
+  assert(
+    lsu_kind == "coalescing_outstanding" or next(lsu_config) == nil,
+    "sm.param.lsu_config requires the coalescing_outstanding LSU"
+  )
   for i = 1, #self._core.subcores do
     local subcore = self._core.subcores[i]
     subcore:sched_init(function(name)
@@ -157,17 +168,16 @@ function PipelinedSM.new(name, config, id, sm_param)
     end)
 
     subcore:lsu_init(function(name)
-      local lsu_kind = sm_param.lsu or "coalescing_outstanding"
       if lsu_kind == "simple" then return simtix.SimpleLsu(name, core_param) end
 
       local lsu_param = {
-        cache_block_size = sm_param.dcache_block_size or config.cache_block_size,
+        cache_block_size = dcache_param.block_size_bytes,
         enable_stack_remap = true,
         granularity = 8,
-        stack_group_size = config.stack_remap_group_size,
-        stack_start = 0x81000000,
-        stack_end = 0x81FFFFFF,
-        stack_size_per_thread = config.stack_size_per_thread,
+        stack_group_size = config:effective_stack_remap_group_size(),
+        stack_start = addr.stack_base,
+        stack_end = addr.global_alloc_base - 1,
+        stack_size_per_thread = addr.per_thread_stack_size,
       }
       local lsu
       if lsu_kind == "coalescing" then

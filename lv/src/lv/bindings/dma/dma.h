@@ -15,8 +15,6 @@
 #include <systemc>
 #include <unordered_map>
 
-#include "hal/dma.h"
-
 namespace dma {
 
 /**
@@ -43,9 +41,17 @@ class DMA : public sc_core::sc_module {
   Source *slave_port() const;
 
  private:
+  enum class Status : uint64_t {
+    kIdle = 0,
+    kBusy = 1,
+    kDone = 2,
+    kBusError = 3,
+    kInvalidDescriptor = 4,
+  };
+
   void mmio_proc();
   bool start_transfer();
-  void finish_transfer(DmaStatus terminal_status);
+  void finish_transfer(Status terminal_status);
   void drain_pending_transactions();
   void read_proc();
   void write_proc();
@@ -58,7 +64,7 @@ class DMA : public sc_core::sc_module {
   uint64_t addr0_ = 0;
   uint64_t addr1_ = 0;
   int64_t size_ = 0;
-  DmaStatus status_ = kDmaStatusIdle;
+  Status status_ = Status::kIdle;
 
   sc_core::sc_event start_event_;
   bool is_processing_ = false;

@@ -68,8 +68,9 @@ add_executable(gpufw.elf
 target_include_directories(gpufw.elf PRIVATE
   ${formosa_SOURCE_DIR}/hal/include
   ${formosa_SOURCE_DIR}/hal/src/hal
-  ${formosa_SOURCE_DIR}/addr_map
+  ${ILHA_GENERATED_DIR}
 )
+add_dependencies(gpufw.elf ilha-platform-data)
 target_link_libraries(gpufw.elf PRIVATE
   nnlc
 )
@@ -100,6 +101,7 @@ target_link_options(gpufw.elf PRIVATE
   -static
   -Wl,--gc-sections
   -T "${FW_LINKER_SCRIPT}"
+  -L "${ILHA_GENERATED_DIR}"
 )
 
 # Pull in the FreeRTOS helper and source. The source path remains overridable
@@ -121,6 +123,8 @@ add_freertos_instance(gpufw_freertos
   HEAP_FILE ${FREERTOS_PATH}/portable/MemMang/heap_4.c
   EXTRA_COMPILER_FLAGS ${RISCV_ARCH_FLAGS} -ffreestanding -Os
 )
+target_include_directories(gpufw_freertos PUBLIC ${ILHA_GENERATED_DIR})
+add_dependencies(gpufw_freertos ilha-platform-data)
 
 # nnlc
 add_library(nnlc
@@ -166,8 +170,9 @@ add_executable(fwrom.elf
 target_include_directories(fwrom.elf PRIVATE
   ${formosa_SOURCE_DIR}/hal/include
   ${formosa_SOURCE_DIR}/hal/src/hal
-  ${formosa_SOURCE_DIR}/addr_map
+  ${ILHA_GENERATED_DIR}
 )
+add_dependencies(fwrom.elf ilha-platform-data)
 
 target_compile_options(fwrom.elf PRIVATE
   ${RISCV_ARCH_FLAGS}
@@ -186,4 +191,5 @@ target_link_options(fwrom.elf PRIVATE
   -static
   -Wl,--gc-sections
   -T "${CMAKE_CURRENT_LIST_DIR}/rom/linker.ld"
+  -L "${ILHA_GENERATED_DIR}"
 )

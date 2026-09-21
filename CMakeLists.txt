@@ -51,7 +51,7 @@ endif()
 ###################
 # Enable projects #
 ###################
-set(ALL_PROJECTS "hal;libcomm;lv;simtix;tests;fw")
+set(ALL_PROJECTS "hal;libcomm;lv;simtix;ilha;tests;fw")
 set(ENABLE_PROJECTS "" CACHE STRING
     "Semicolon-separated list of projects to build (${ALL_PROJECTS}), or \"all\".")
 
@@ -103,7 +103,10 @@ while (NOT DEPENDENCY_RESOLVED)
   if(SIMTIX_ENABLE_TESTING)
     make_dependency(simtix THIRD_PARTY Catch2)
   endif()
-  make_dependency(simtix SUBPROJECT lv)
+  make_dependency(simtix SUBPROJECT ilha)
+  make_dependency(ilha SUBPROJECT lv)
+  make_dependency(tests SUBPROJECT ilha)
+  make_dependency(tests SUBPROJECT simtix)
   make_dependency(lv SUBPROJECT libcomm)
   make_dependency(lv THIRD_PARTY argparse)
   make_dependency(lv THIRD_PARTY elfio)
@@ -119,6 +122,11 @@ while (NOT DEPENDENCY_RESOLVED)
   make_dependency(tests THIRD_PARTY riscv-tests)
   # TODO: Declare dependencies here.
 endwhile()
+
+if("hal" IN_LIST ENABLE_PROJECTS OR "fw" IN_LIST ENABLE_PROJECTS OR
+   "ilha" IN_LIST ENABLE_PROJECTS)
+  include(cmake/IlhaPlatformData.cmake)
+endif()
 
 lv_register_project_lua_roots(${ENABLE_PROJECTS})
 

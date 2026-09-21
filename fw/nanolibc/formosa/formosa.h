@@ -15,7 +15,7 @@
 #define FORMOSA_SERIAL_BASE 0x8030
 #define FORMOSA_EXIT_BASE 0x8038
 #else
-/* CP_CTRL page: printbuf @ +0, exit @ +8 (see addr_map/formosa_addr_map.h) */
+/* CP_CTRL page: printbuf @ +0, exit @ +8 (see generated formosa_addr_map.h) */
 #define FORMOSA_SERIAL_BASE 0x1000
 #define FORMOSA_EXIT_BASE 0x1008
 #endif

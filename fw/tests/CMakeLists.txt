@@ -13,11 +13,12 @@ add_executable(cp_lmem_allocator_test
   cp_lmem_allocator_test.c
   ${FW_SOURCE_PATH}/cp_lmem_allocator.c
 )
+add_dependencies(cp_lmem_allocator_test ilha-platform-data)
 target_include_directories(cp_lmem_allocator_test PRIVATE
   ${FW_SOURCE_PATH}
   ${formosa_SOURCE_DIR}/hal/include
   ${formosa_SOURCE_DIR}/hal/src/hal
-  ${formosa_SOURCE_DIR}/addr_map
+  ${ILHA_GENERATED_DIR}
 )
 
 if(ENABLE_COVERAGE)
@@ -33,11 +34,12 @@ add_executable(cp_stack_remap_test
   cp_stack_remap_test.c
   ${FW_SOURCE_PATH}/cp_stack_remap.c
 )
+add_dependencies(cp_stack_remap_test ilha-platform-data)
 target_include_directories(cp_stack_remap_test PRIVATE
   ${FW_SOURCE_PATH}
   ${formosa_SOURCE_DIR}/hal/include
   ${formosa_SOURCE_DIR}/hal/src/hal
-  ${formosa_SOURCE_DIR}/addr_map
+  ${ILHA_GENERATED_DIR}
 )
 
 if(ENABLE_COVERAGE)

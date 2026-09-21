@@ -14,9 +14,10 @@ function(add_formosa_hal name)
       $<BUILD_INTERFACE:${hal_SOURCE_DIR}/include>
       $<INSTALL_INTERFACE:include>
     PRIVATE "${hal_SOURCE_DIR}/src"
-    PRIVATE "${formosa_SOURCE_DIR}/addr_map"
+    PRIVATE "${ILHA_GENERATED_DIR}"
     PRIVATE $<TARGET_PROPERTY:gpufw_elf_carr,INTERFACE_INCLUDE_DIRECTORIES>
   )
+  add_dependencies(${target} ilha-platform-data)
   target_compile_options(${target}
     PRIVATE -Wall -Wextra -Wno-unused-parameter -g
   )

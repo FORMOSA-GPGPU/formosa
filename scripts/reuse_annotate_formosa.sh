@@ -76,13 +76,13 @@ owned_roots=(
   formosa-pocl
   fw
   hal
+  ilha
   libcomm
   lv
   scripts
   simtix
   tests/CMakeLists.txt
   tests/cp
-  tests/formosa
   tests/hal
   tests/ipc
   tests/kernel-sim
