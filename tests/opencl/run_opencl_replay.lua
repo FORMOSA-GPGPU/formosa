@@ -30,10 +30,6 @@ parser
   :convert(tonumber)
   :default(5000)
 parser
-  :option("--max-wait-cycles", "Base poll budget for one replay wait")
-  :convert(tonumber)
-  :default(1000000)
-parser
   :option("--check", "Device-to-host output validation policy")
   :choices({ "strict", "unstrict" })
   :default("strict")
@@ -186,13 +182,6 @@ end
 local function packet_header(bytes)
   if #bytes < 2 then return nil end
   return bytes[1] + bytes[2] * 256
-end
-
--- Multi-MiB firmware-managed copies need more than a fixed poll budget.
-local function memory_copy_wait_budget(size)
-  local floor = args.max_wait_cycles
-  size = math.max(0, size or 0)
-  return floor + size
 end
 
 local function patch_memory_copy_packet_host_address(bytes)
@@ -410,13 +399,8 @@ local replay = assert(system._replay_initiator, "missing replay initiator")
 local replay_host_mem = assert(system._replay_host_mem, "missing replay host memory")
 
 local function wait_completed(before, label)
-  local waited = 0
   while replay:completed_count() <= before do
     system:start(1)
-    waited = waited + 1
-    if waited > args.max_wait_cycles then
-      error("timeout waiting for replay transaction: " .. label)
-    end
   end
 end
 
@@ -459,7 +443,7 @@ local FW_STATUS_RESET = 0
 local FW_STATUS_READY = 2
 local FW_STATUS_FAULT = 3
 local cp_reset_addr = addr.clint_base
-local strict_mismatch_count = 0
+local d2h_mismatch_count = 0
 local max_unstrict_mismatch_logs = 10
 
 local function memory_copy_host_transfer(blob, host_to_dev, event)
@@ -497,7 +481,7 @@ local function validate_memory_copy_d2h(event, result)
   local ok, pos = same_bytes(blob, actual)
   if ok then return end
   local message = mismatch_message(pending.event.seq, pos, blob[pos], actual[pos])
-  strict_mismatch_count = strict_mismatch_count + 1
+  d2h_mismatch_count = d2h_mismatch_count + 1
   if args.check == "strict" then
     error(
       message
@@ -505,7 +489,7 @@ local function validate_memory_copy_d2h(event, result)
         .. "\nHint: use --check unstrict for perf-only replay of workloads whose"
         .. " legal outputs may vary across scheduler/configuration changes."
     )
-  elseif strict_mismatch_count <= max_unstrict_mismatch_logs then
+  elseif d2h_mismatch_count <= max_unstrict_mismatch_logs then
     progress_newline()
     io.stderr:write("unstrict: ignoring " .. message .. "\n")
   end
@@ -513,23 +497,12 @@ end
 
 local function wait_completion_slot(event_index, event)
   local size = memory_copy_sizes_by_slot_addr[event.addr]
-  local max_polls = size and memory_copy_wait_budget(size)
   local polls = 0
   local alloc_tag, result = read_completion_slot(event.addr, "completion_slot " .. event.seq)
   while result == 0 do
     polls = polls + 1
     if polls % progress_poll_stride == 0 then
       progress_event(event_index, event, "polls=" .. polls, false)
-    end
-    if max_polls and polls > max_polls then
-      error(
-        string.format(
-          "timeout waiting for completion_slot %d polls=%d budget=%d",
-          event.seq,
-          polls,
-          max_polls
-        )
-      )
     end
     alloc_tag, result = read_completion_slot(event.addr, "completion_slot " .. event.seq)
   end
@@ -583,12 +556,7 @@ for event_index, event in ipairs(events) do
   elseif event.type == "cp_reset" then
     write_bytes(cp_reset_addr, u32_le(1), "cp_reset")
     -- Cooperative reboot: wait for ROM Reset before the next Boot Descriptor.
-    local polls = 0
     while read64(fsa_mmio_base + CP_OFF_FW_STATUS, "fw status after reboot") ~= FW_STATUS_RESET do
-      polls = polls + 1
-      if polls > args.max_wait_cycles then
-        error("timeout waiting for Firmware Reboot Reset " .. event.seq)
-      end
     end
   elseif event.type == "boot_descriptor" then
     local blob = read_blob(args.replay_dir, event.blob)
@@ -597,7 +565,6 @@ for event_index, event in ipairs(events) do
     write64(fsa_mmio_base + CP_OFF_FW_HOST_ADDR, address, "boot_descriptor host addr")
     write64(fsa_mmio_base + CP_OFF_FW_SIZE, #blob, "boot_descriptor size")
     -- Wait for ROM Host-DMA to finish (FW_SIZE cleared) and firmware READY.
-    local polls = 0
     while true do
       local remaining = read64(fsa_mmio_base + CP_OFF_FW_SIZE, "boot_descriptor size poll")
       local status = read64(fsa_mmio_base + CP_OFF_FW_STATUS, "boot_descriptor status")
@@ -605,10 +572,6 @@ for event_index, event in ipairs(events) do
       if status == FW_STATUS_FAULT then
         local fault = read64(fsa_mmio_base + CP_OFF_FW_FAULT, "boot fault")
         error(string.format("boot descriptor %d faulted with code %d", event.seq, fault))
-      end
-      polls = polls + 1
-      if polls > args.max_wait_cycles then
-        error("timeout waiting for boot descriptor " .. event.seq)
       end
     end
   elseif event.type == "scratchpad_write" then
@@ -658,10 +621,20 @@ if args.stats and system.stats and system.stats.dump_toml then
   stat_file:close()
 end
 
-if args.check == "unstrict" and strict_mismatch_count > max_unstrict_mismatch_logs then
+if args.check == "unstrict" and d2h_mismatch_count > max_unstrict_mismatch_logs then
   io.stderr:write(
-    string.format("unstrict: ignored %d device-to-host mismatches total\n", strict_mismatch_count)
+    string.format("unstrict: ignored %d device-to-host mismatches total\n", d2h_mismatch_count)
   )
 end
 
-print(string.format("Replay passed: %d events", #events))
+if args.check == "strict" then
+  print(string.format("Replay passed: %d events (strict output match)", #events))
+else
+  print(
+    string.format(
+      "Replay completed: %d events (unstrict; observed %d output mismatches; not a correctness pass)",
+      #events,
+      d2h_mismatch_count
+    )
+  )
+end

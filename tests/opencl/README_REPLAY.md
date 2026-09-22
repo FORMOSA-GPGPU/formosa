@@ -67,7 +67,7 @@ firmware-managed D2H transfers, with `--check strict` by default. A successful
 run prints:
 
 ```text
-Replay passed: N events
+Replay passed: N events (strict output match)
 ```
 
 Replay prints progress to stderr by default. TTY output uses a single colored
@@ -104,6 +104,8 @@ where the returned old values can be a different valid permutation.
 
 `unstrict` does not prove semantic correctness. It only keeps the fixed replay
 trace running so the resulting stats can be used for architecture exploration.
+An unstrict run prints `Replay completed` and is intentionally never reported
+as a correctness pass.
 
 ## Determinism Check
 
