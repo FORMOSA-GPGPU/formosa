@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <utility>
+
 #include "cache_module_test_common.h"
 
 namespace {
@@ -29,6 +31,22 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
                             MakeParam(WriteMissPolicy::kWriteAllocate,
                                       WriteHitPolicy::kWriteBack, 1, 2, 1, 4)),
         non_cacheable_bench_("non_cacheable_bench", MakeNonCacheableParam()),
+        core_bypass_bench_("core_bypass_bench",
+                           [] {
+                             auto param = MakeNonCacheableParam();
+                             param.pipeline_queue_size = 2;
+                             return param;
+                           }()),
+        boundary_bench_("boundary_bench",
+                        [] {
+                          auto param = MakeNonCacheableParam();
+                          param.non_cacheable_regions[0].size = 0x20;
+                          return param;
+                        }()),
+        pending_cacheable_bench_("pending_cacheable_bench", MakeParam()),
+        pending_bypass_bench_("pending_bypass_bench", MakeNonCacheableParam()),
+        pending_bypass_reverse_bench_("pending_bypass_reverse_bench",
+                                      MakeNonCacheableParam()),
         arbitration_bench_("arbitration_bench",
                            MakeParam(WriteMissPolicy::kWriteNoAllocate)) {
     SC_THREAD(Run);
@@ -44,6 +62,11 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
     write_through_bench_.clock_.write(false);
     dirty_victim_bench_.clock_.write(false);
     non_cacheable_bench_.clock_.write(false);
+    core_bypass_bench_.clock_.write(false);
+    boundary_bench_.clock_.write(false);
+    pending_cacheable_bench_.clock_.write(false);
+    pending_bypass_bench_.clock_.write(false);
+    pending_bypass_reverse_bench_.clock_.write(false);
     arbitration_bench_.clock_.write(false);
     wait(sc_core::SC_ZERO_TIME);
 
@@ -70,6 +93,22 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
     });
     RunBench("non_cacheable_bench", [this] {
       TestNonCacheableBypassPriority();
+    });
+    RunBench("core_bypass_bench", [this] {
+      TestCoreBypassDoesNotDelayMiss();
+    });
+    RunBench("boundary_bench", [this] {
+      TestCoreRequestBoundaries();
+    });
+    RunBench("pending_cacheable_bench", [this] {
+      TestPendingInputDoesNotDelayMiss(pending_cacheable_bench_, false, false);
+    });
+    RunBench("pending_bypass_bench", [this] {
+      TestPendingInputDoesNotDelayMiss(pending_bypass_bench_, true, false);
+    });
+    RunBench("pending_bypass_reverse_bench", [this] {
+      TestPendingInputDoesNotDelayMiss(pending_bypass_reverse_bench_, true,
+                                       true);
     });
     RunBench("arbitration_bench", [this] {
       TestMemoryRequestPriority();
@@ -430,7 +469,21 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
 
     auto *cacheable_read = non_cacheable_bench_.core_.SendRead(0x00, 4);
     auto *non_cacheable_read = non_cacheable_bench_.core_.SendRead(0x20, 4);
-    (void)cacheable_read;
+
+    // Hold the clock and advance stages explicitly until both output queues
+    // are ready; requests in earlier pipeline stages do not participate.
+    wait(sc_core::sc_time(1, sc_core::SC_NS));
+    view.AcceptCoreRequest();
+    wait(sc_core::sc_time(1, sc_core::SC_NS));
+    view.AccessTagArrayStage();
+    wait(sc_core::sc_time(1, sc_core::SC_NS));
+    view.AcceptCoreRequest();
+    wait(sc_core::sc_time(1, sc_core::SC_NS));
+    view.AccessTagArrayStage();
+    wait(sc_core::sc_time(1, sc_core::SC_NS));
+    Expect(
+        view.Queues().bypass_req == 1 && view.Queues().mshr_file_mem_req == 1,
+        "queued bypass and MSHR read compete for memory output");
 
     Expect(non_cacheable_bench_.WaitForMemoryRequests(2),
            "cacheable and non-cacheable requests both reach memory");
@@ -472,6 +525,194 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
            "non-cacheable read response uses memory data directly");
     Expect(!view.CachedLine(0x20).has_value(),
            "non-cacheable response still does not install a cache line");
+
+    non_cacheable_bench_.memory_.RespondAt(1, Sequence(16, 0x30));
+    Expect(non_cacheable_bench_.WaitForCoreResponses(2, 32),
+           "cacheable read also completes after bypass wins arbitration");
+    Expect(non_cacheable_bench_.core_.HasResponse(cacheable_read) &&
+               PayloadData(cacheable_read) == Sequence(4, 0x30),
+           "cacheable response retains its original payload and data");
+    Expect(non_cacheable_bench_.core_.response_count() == 2 &&
+               non_cacheable_bench_.memory_.request_count() == 2,
+           "bypass priority neither duplicates nor loses requests/responses");
+  }
+
+  void TestCoreBypassDoesNotDelayMiss() {
+    auto &bench = core_bypass_bench_;
+    CacheModuleTester view(bench.cache_);
+    auto *miss = bench.core_.SendRead(0x00, 4);
+    auto *bypass = bench.core_.SendRead(0x20, 4);
+    wait(sc_core::sc_time(1, sc_core::SC_NS));
+    bench.AdvanceCycle();  // Cycle 1: accept A.
+    bench.AdvanceCycle();  // Cycle 2: allocate A's miss and accept B.
+    Expect(view.Queues().mshr_file_mem_req == 1 &&
+               view.Queues().core_req == 1 && view.Queues().bypass_req == 0 &&
+               bench.cache_.source()->req_port->num_free() > 0,
+           "ready MSHR competes with core-queue bypass without backpressure");
+    for (size_t cycle = 3; cycle <= 5; ++cycle) {
+      bench.AdvanceCycle();
+      if (cycle == 3) {
+        ExpectReadRequest(bench, 0, 0x00, 16,
+                          "core-queue bypass must not delay cycle-3 miss");
+      }
+      if (cycle == 4) {
+        Expect(bench.memory_.request_count() == 2,
+               "both requests issue by cycle 4 without a reserved bubble");
+      }
+    }
+    ExpectReadRequest(bench, 1, 0x20, 4,
+                      "bypass issues on its first ready output opportunity");
+    if (bench.memory_.request_count() != 2) {
+      return;
+    }
+    // Return the bypass first, independent of memory issue order.
+    for (uint64_t address : {0x20, 0x00}) {
+      for (size_t index = 0; index < 2; ++index) {
+        auto *request = bench.memory_.request(index);
+        if (request->get_address() == address) {
+          bench.memory_.Respond(request,
+                                Sequence(request->get_data_length(),
+                                         address == 0x00 ? 0x30 : 0x90));
+        }
+      }
+    }
+    Expect(bench.WaitForCoreResponses(2, 32), "both reordered requests finish");
+    Expect(bench.core_.HasResponse(miss) && bench.core_.HasResponse(bypass) &&
+               PayloadData(miss) == Sequence(4, 0x30) &&
+               PayloadData(bypass) == Sequence(4, 0x90),
+           "miss and bypass retain their own payloads and data");
+    for (size_t cycle = 0; cycle < 4; ++cycle) {
+      bench.AdvanceCycle();
+    }
+    Expect(bench.memory_.request_count() == 2 &&
+               bench.core_.response_count() == 2 &&
+               view.Queues().mem_inflight_packets == 0 &&
+               view.Mshr().invalid_entries == 2 &&
+               view.CachedLine(0x00).has_value() &&
+               !view.CachedLine(0x20).has_value(),
+           "reordered traffic drains and only the cacheable line is installed");
+  }
+
+  void TestCoreRequestBoundaries() {
+    auto &bench = boundary_bench_;
+    CacheModuleTester view(bench.cache_);
+    // Cacheable, cacheable->bypass, bypass->bypass, bypass->cacheable,
+    // overflow, and zero-length cached/bypass accesses.
+    const std::pair<uint64_t, size_t> invalid_requests[] = {
+        {0x0f, 2},
+        {0x1f, 2},
+        {0x2f, 2},
+        {0x3f, 2},
+        {std::numeric_limits<uint64_t>::max(), 2},
+        {0x00, 0},
+        {0x20, 0},
+        {std::numeric_limits<uint64_t>::max(), 0}};
+    for (const auto &[address, length] : invalid_requests) {
+      for (bool write : {false, true}) {
+        auto *payload =
+            write ? bench.core_.SendWrite(address, Sequence(length, 0xA0))
+                  : bench.core_.SendRead(address, length);
+        // Disabled bytes cannot make a cross-line request valid.
+        unsigned char mask[2] = {TLM_BYTE_ENABLED, TLM_BYTE_DISABLED};
+        payload->set_byte_enable_ptr(mask);
+        payload->set_byte_enable_length(2);
+        wait(sc_core::sc_time(1, sc_core::SC_NS));
+        bool threw = false;
+        try {
+          view.AcceptCoreRequest();
+        } catch (const lv::fatal_error &) {
+          threw = true;
+        }
+        payload->set_byte_enable_ptr(nullptr);
+        payload->set_byte_enable_length(0);
+        wait(sc_core::sc_time(1, sc_core::SC_NS));
+        Expect(threw,
+               "cross-line, overflowing, or zero-length request is "
+               "rejected on input");
+        Expect(view.Queues().core_req == 0 &&
+                   view.Queues().mem_inflight_packets == 0 &&
+                   view.Mshr().invalid_entries == 2 &&
+                   bench.memory_.request_count() == 0 &&
+                   bench.core_.response_count() == 0 &&
+                   !view.CachedLine(address).has_value(),
+               "invalid input has no cache or memory side effects");
+        if (!threw) {
+          return;  // Do not run a deliberately invalid packet through Tick.
+        }
+      }
+    }
+    for (uint64_t address : {uint64_t{0x1c}, uint64_t{0x2c},
+                             std::numeric_limits<uint64_t>::max() - 3}) {
+      const size_t index = bench.memory_.request_count();
+      const bool bypass = address == 0x2c;
+      auto *payload = bench.core_.SendRead(address, 4);
+      Expect(bench.WaitForMemoryRequests(index + 1),
+             "request ending exactly at the line boundary is accepted");
+      ExpectReadRequest(bench, index, bypass ? address : address - 12,
+                        bypass ? 4 : 16,
+                        "boundary request has correct routing");
+      bench.memory_.RespondAt(index, Sequence(bypass ? 4 : 16, 0x40));
+      Expect(bench.WaitForCoreResponses(index + 1, 32),
+             "valid boundary request completes");
+      Expect(bench.core_.HasResponse(payload) &&
+                 PayloadData(payload) == Sequence(4, bypass ? 0x40 : 0x4c),
+             "valid boundary request returns correct bytes");
+    }
+  }
+
+  void TestPendingInputDoesNotDelayMiss(CacheBench &bench,
+                                        bool second_is_bypass,
+                                        bool reverse_responses) {
+    CacheModuleTester view(bench.cache_);
+    auto *first = bench.core_.SendRead(0x00, 4);
+    auto *second = bench.core_.SendRead(0x20, 4);
+    wait(sc_core::sc_time(1, sc_core::SC_NS));
+    bench.AdvanceCycle();  // Cycle 1: accept the first request.
+    bench.AdvanceCycle();  // Cycle 2: allocate its primary miss.
+    Expect(view.Queues().core_req == 0 &&
+               view.Queues().mshr_file_mem_req == 1 &&
+               bench.cache_.sink()->req_port->num_available() == 1 &&
+               bench.cache_.source()->req_port->num_free() > 0,
+           "pending sink input competes with a ready, unblocked MSHR read");
+    bench.AdvanceCycle();  // Cycle 3: issue the miss and accept the next input.
+    ExpectReadRequest(bench, 0, 0x00, 16,
+                      "pending sink input must not delay the cycle-3 read");
+    bench.AdvanceCycle();  // Cycle 4: classify the second request at the tag.
+    bench.AdvanceCycle();  // Cycle 5: issue its memory request.
+    Expect(bench.memory_.request_count() == 2,
+           "both requests issue by cycle 5 without an input deferral bubble");
+    if (bench.memory_.request_count() != 2) {
+      return;
+    }
+    ExpectReadRequest(bench, 1, 0x20, second_is_bypass ? 4 : 16,
+                      "second request keeps the correct bypass/refill size");
+
+    // Select response data by transaction address, not by arbitration order.
+    for (size_t response = 0; response < 2; ++response) {
+      const size_t index = reverse_responses ? 1 - response : response;
+      auto *request = bench.memory_.request(index);
+      bench.memory_.Respond(
+          request, Sequence(request->get_data_length(),
+                            request->get_address() == 0x00 ? 0x30 : 0x90));
+    }
+    Expect(bench.WaitForCoreResponses(2, 32),
+           "both requests complete with either read-response order");
+    Expect(bench.core_.HasResponse(first) && bench.core_.HasResponse(second),
+           "each original core payload receives a successful response");
+    Expect(PayloadData(first) == Sequence(4, 0x30) &&
+               PayloadData(second) == Sequence(4, 0x90),
+           "responses retain their own data after request reordering");
+    for (size_t cycle = 0; cycle < 4; ++cycle) {
+      bench.AdvanceCycle();
+    }
+    Expect(bench.core_.response_count() == 2 &&
+               bench.memory_.request_count() == 2 &&
+               view.Queues().mem_inflight_packets == 0 &&
+               view.Mshr().invalid_entries == 2,
+           "transactions drain without duplication or leaked MSHR entries");
+    Expect(view.CachedLine(0x00).has_value() &&
+               view.CachedLine(0x20).has_value() == !second_is_bypass,
+           "only cacheable reads install cache lines");
   }
 
   CacheBench read_bench_;
@@ -482,6 +723,11 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
   CacheBench write_through_bench_;
   CacheBench dirty_victim_bench_;
   CacheBench non_cacheable_bench_;
+  CacheBench core_bypass_bench_;
+  CacheBench boundary_bench_;
+  CacheBench pending_cacheable_bench_;
+  CacheBench pending_bypass_bench_;
+  CacheBench pending_bypass_reverse_bench_;
   CacheBench arbitration_bench_;
 };
 

@@ -53,7 +53,8 @@ struct Param {
   // Pipeline config
   size_t pipeline_queue_size = 2;
 
-  // Non-cacheable regions
+  // Non-empty regions must contain whole cache lines without address overflow.
+  // Empty regions are ignored. Core payloads must not cross a cache line.
   std::vector<NonCacheableEntry> non_cacheable_regions;
 
   // Atomic requests bypass when false and serialize at this cache when true.
@@ -123,7 +124,9 @@ struct Param {
       LV_FIELD(victim_buffer_entries,
                "Number of reserved or active dirty-victim entries"),
       LV_FIELD(pipeline_queue_size, "Size of all the pipeline queue"),
-      LV_FIELD(non_cacheable_regions, "Non-cacheable regions"),
+      LV_FIELD(
+          non_cacheable_regions,
+          "Non-cacheable regions (whole cache lines; empty entries ignored)"),
       LV_FIELD(atomic_linearization,
                "Serialize atomic requests at this cache level"),
       LV_FIELD(pftrace, "Enable Perfetto trace"),

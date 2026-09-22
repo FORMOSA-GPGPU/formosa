@@ -41,6 +41,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
 
   void set_clock(sc_clock *clk) { clock.bind(*clk); }
 
+  // Core payloads, including bypass, must fit in one cache line.
   lv::TlmSink *sink() { return &sink_; }
 
   lv::TlmSink *mmio_sink() { return &mmio_sink_; }
@@ -56,16 +57,6 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   void set_target(lv::TlmSource::Target *target) { source_.set_target(target); }
 
   lv::stats::Group *stats() const { return &stats_; }
-
-  /**
-   * @brief Allocate a cache packet that borrows a core-owned TLM payload.
-   *
-   * @param payload Borrowed core-side TLM payload.
-   * @return Packet wrapper for the borrowed payload.
-   */
-  Packet *AllocatePacketWithCorePayload(tlm::tlm_generic_payload *payload) {
-    return packet_pool_.Acquire(payload);
-  }
 
   /**
    * @brief Allocate a packet with cache-owned memory payload storage.
@@ -259,6 +250,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   bool IsNonCacheableRequest(const tlm::tlm_generic_payload &payload) const;
   bool IsAtomicRequest(const tlm::tlm_generic_payload &payload) const;
   bool IsValidAtomicRequest(const tlm::tlm_generic_payload &payload) const;
+  Packet *AllocateCoreRequestPacket(tlm::tlm_generic_payload *payload);
   Packet *AllocateWriteBufferPacketFrom(const Packet *source_packet);
   Packet *AllocateVictimPacketFrom(const Packet *refill_packet);
   MshrFile::AcceptStatus TryAcceptReadMiss(Packet *packet);
@@ -274,8 +266,6 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   bool TryProcessDataArrayHit(Packet *packet);
   bool HasLineEscapeHazard(uint64_t line_address) const;
   bool ShouldStallForLineEscapeHazard(const Packet *packet) const;
-  bool CoreBypassCanEnterMemoryRequestQueue();
-  bool CoreInputCanFillEmptyRequestQueue();
   bool WriteBufferInputBackpressured() const;
   bool ShouldPrioritizeWriteBufferMemRequest() const;
   bool ShouldDeferMshrMemRequestForWriteBuffer() const;
@@ -364,7 +354,6 @@ class Cache : public sc_module, public PacketLifecycleIntf {
 
   uint64_t progress_epoch_ = 0;
   DeadlockWatchdog deadlock_watchdog_;
-  bool defer_mshr_mem_req_for_core_input_ = false;
   bool defer_mshr_mem_req_for_write_buffer_ = false;
   size_t defer_tag_arbitration_for_refill_replay_cycles_ = 0;
   std::unordered_map<uint64_t, size_t> line_escape_hazards_;

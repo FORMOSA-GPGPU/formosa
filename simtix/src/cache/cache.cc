@@ -12,6 +12,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <string_view>
 
@@ -210,6 +211,20 @@ Cache::Cache(const sc_module_name &name, const Param &p)
                                     config_.pipeline_queue_size),
       bypass_req_queue_("bypass_req_queue", config_.pipeline_queue_size),
       mem_resp_queue_("mem_resp_queue", config_.pipeline_queue_size) {
+  for (const auto &region : non_cacheable_regions_) {
+    if (region.size == 0) {
+      continue;
+    }
+    if (region.addr % config_.block_size_bytes != 0 ||
+        region.size % config_.block_size_bytes != 0 ||
+        region.size - 1 > std::numeric_limits<uint64_t>::max() - region.addr) {
+      LV_FATAL(
+          "Cache {}: non-cacheable region must contain whole cache "
+          "lines without address overflow: addr={:#x}, size={}, "
+          "block_size={}",
+          this->name(), region.addr, region.size, config_.block_size_bytes);
+    }
+  }
   if (config_.atomic_linearization &&
       (config_.write_hit_policy != WriteHitPolicy::kWriteBack ||
        config_.write_miss_policy != WriteMissPolicy::kWriteAllocate)) {
@@ -264,8 +279,9 @@ void Cache::Tick() {
  * @brief Check whether a core payload targets a non-cacheable region.
  *
  * @param payload Core-side TLM payload to inspect.
- * @return true when the payload address falls inside a configured
- * non-cacheable region.
+ * Regions contain whole lines and accepted requests cannot cross a line,
+ * so the starting address determines cacheability for the entire payload.
+ * @return true when the payload targets a configured non-cacheable region.
  */
 bool Cache::IsNonCacheableRequest(
     const tlm::tlm_generic_payload &payload) const {
@@ -308,6 +324,23 @@ bool Cache::IsValidAtomicRequest(
          (length == sizeof(uint32_t) || length == sizeof(uint64_t));
 }
 
+/**
+ * @brief Allocate and classify a packet for a validated core request.
+ *
+ * @param payload Borrowed core-side TLM payload.
+ * @return Packet with atomic metadata and cached/bypass routing initialized.
+ */
+Packet *Cache::AllocateCoreRequestPacket(tlm::tlm_generic_payload *payload) {
+  auto *packet = packet_pool_.Acquire(payload);
+  assert(packet != nullptr);
+  packet->is_atomic = IsAtomicRequest(*payload);
+  packet->type = (IsNonCacheableRequest(*payload) ||
+                  (packet->is_atomic && !config_.atomic_linearization))
+                     ? PacketType::kBypassCoreReq
+                     : PacketType::kCoreReq;
+  return packet;
+}
+
 void Cache::AcceptCoreRequest() {
   if (mmio_sequencer_.IsBusy()) {
     if (sink_.req_port->num_available() > 0) {
@@ -331,14 +364,20 @@ void Cache::AcceptCoreRequest() {
   assert(success);
   assert(trans != nullptr);
 
-  // Convert the tlm payload to cache packet
-  auto packet = AllocatePacketWithCorePayload(trans);
-  assert(packet != nullptr);
-  packet->is_atomic = IsAtomicRequest(*trans);
-  packet->type = (IsNonCacheableRequest(*trans) ||
-                  (packet->is_atomic && !config_.atomic_linearization))
-                     ? PacketType::kBypassCoreReq
-                     : PacketType::kCoreReq;
+  // Both cached accesses and escape hazards operate on a single cache line.
+  // Validate before allocating a packet or allowing any memory side effects.
+  const uint64_t address = trans->get_address();
+  const size_t length = trans->get_data_length();
+  if (length == 0 ||
+      length > config_.block_size_bytes - address % config_.block_size_bytes ||
+      length - 1 > std::numeric_limits<uint64_t>::max() - address) {
+    LV_FATAL(
+        "Cache {}: core request has zero length, crosses a cache line, or "
+        "overflows the address range: addr={:#x}, length={}, block_size={}",
+        name(), address, length, config_.block_size_bytes);
+  }
+
+  auto *packet = AllocateCoreRequestPacket(trans);
 
   // Enqueue the packet to core request queue
   success = core_req_queue_.nb_put(packet);
@@ -506,40 +545,6 @@ void Cache::AcceptMemResponse() {
  */
 uint64_t Cache::ToLineAddress(uint64_t address) const {
   return address / config_.block_size_bytes;
-}
-
-/**
- * @brief Check whether the core queue head can become bypass memory traffic.
- *
- * SendMemRequest runs before the tag stage in a tick. Treating an immediately
- * admissible bypass core request as pending high-priority traffic preserves
- * bypass-before-MSHR arbitration without adding another MSHR input stage.
- */
-bool Cache::CoreBypassCanEnterMemoryRequestQueue() {
-  if (atomic_sequencer_.IsBusy() || !core_req_queue_.nb_can_peek() ||
-      !bypass_req_queue_.nb_can_put()) {
-    return false;
-  }
-
-  Packet *packet = nullptr;
-  const bool success = core_req_queue_.nb_peek(packet);
-  assert(success);
-  assert(packet != nullptr);
-  return packet->type == PacketType::kBypassCoreReq &&
-         !ShouldStallForLineEscapeHazard(packet);
-}
-
-/**
- * @brief Check whether a sink request can fill an empty core queue this tick.
- *
- * The sink FIFO does not expose a request peek interface, so this is a narrow
- * one-cycle deferral used only when the core queue is empty. It gives an
- * immediately pending core request a chance to become visible to tag-stage
- * arbitration before a lower-priority MSHR memory request is sent.
- */
-bool Cache::CoreInputCanFillEmptyRequestQueue() {
-  return !mmio_sequencer_.IsBusy() && core_req_queue_.used() == 0 &&
-         core_req_queue_.nb_can_put() && sink_.req_port->num_available() > 0;
 }
 
 /**
@@ -871,10 +876,6 @@ void Cache::AccessTagArrayStage() {
                        "core_miss", tag_array_packet);
         return;
       }
-      if (accept_status == MshrFile::AcceptStatus::kAcceptedPrimary) {
-        defer_mshr_mem_req_for_core_input_ = true;
-      }
-
       Packet *dequeued_packet = nullptr;
       success = core_req_queue_.nb_get(dequeued_packet);
       assert(success);
@@ -1052,9 +1053,6 @@ bool Cache::TryProbeAtomicSequencer() {
         LogPacketEvent(cache_log::Category::kArb, "blocked", "mshr_reject",
                        "atomic_miss", packet);
         return false;
-      }
-      if (accept_status == MshrFile::AcceptStatus::kAcceptedPrimary) {
-        defer_mshr_mem_req_for_core_input_ = true;
       }
       atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitReplay;
       MarkProgress("atomic_mshr_accept");
@@ -1507,8 +1505,7 @@ void Cache::SendMemRequest() {
     if (bypass_req_queue_.nb_can_get() ||
         mshr_file_mem_req_queue_.nb_can_get() ||
         victim_buffer_mem_req_out_queue_.nb_can_get() ||
-        write_buffer_mem_req_out_queue_.nb_can_get() ||
-        CoreBypassCanEnterMemoryRequestQueue()) {
+        write_buffer_mem_req_out_queue_.nb_can_get()) {
       MarkBlockReason("memory_req_full", true);
     }
     // Memory cannot accept request, do nothing
@@ -1519,31 +1516,14 @@ void Cache::SendMemRequest() {
   const char *request_source = "none";
   bool success = false;
 
-  // Bypass has absolute priority, including the one-cycle stall while
-  // CoreBypassCanEnterMemoryRequestQueue moves a request toward the bypass
-  // queue. Saturated non-cacheable traffic can therefore indefinitely delay
-  // victim, MSHR, and write-buffer requests. This is intentional for now; use
-  // aging or round-robin if cores may saturate the non-cacheable path.
-  // Memory-request arbitration is encoded by branch order.
+  // Requests in sink/core input stages do not reserve memory output slots.
+  // Ready bypass requests take precedence over all other request queues.
+  // A continuously ready bypass queue can therefore starve the others.
   if (bypass_req_queue_.nb_can_get()) {
     // Core-request bypass path.
     success = bypass_req_queue_.nb_get(packet);
     assert(success);
     request_source = "bypass";
-  } else if (CoreBypassCanEnterMemoryRequestQueue()) {
-    MarkBlockReason("core_bypass_pending", false);
-    LogPacketEvent(cache_log::Category::kMem, "blocked", "core_bypass_pending",
-                   "mshr", nullptr);
-    return;
-  } else if (defer_mshr_mem_req_for_core_input_ &&
-             CoreInputCanFillEmptyRequestQueue()) {
-    defer_mshr_mem_req_for_core_input_ = false;
-    MarkBlockReason("defer_mshr_for_core_input", false);
-    LogPacketEvent(cache_log::Category::kMem, "blocked",
-                   "defer_mshr_for_core_input", "mshr", nullptr);
-    return;
-  } else {
-    defer_mshr_mem_req_for_core_input_ = false;
   }
 
   if (packet == nullptr && victim_buffer_mem_req_out_queue_.nb_can_get()) {

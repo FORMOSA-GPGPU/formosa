@@ -86,28 +86,7 @@ class Packet {
    *
    * @return true when the backing TLM payload is a write command.
    */
-  bool is_write() const {
-    switch (payload_type_) {
-      case PayloadType::kCorePayload:
-        assert(core_payload_ != nullptr);
-        if (core_payload_ == nullptr) {
-          lv::Fatal("Core payload packet has null payload\n");
-        }
-        return core_payload_->is_write();
-      case PayloadType::kCacheOwnedPayload:
-        assert(cache_owned_payload_ != nullptr);
-        if (cache_owned_payload_ == nullptr) {
-          lv::Fatal("Cache-owned payload packet has null payload\n");
-        }
-        return cache_owned_payload_->gp.is_write();
-      case PayloadType::kNone:
-        break;
-    }
-
-    assert(false && "Packet has no payload");
-    lv::Fatal("Packet has no payload\n");
-    return false;
-  }
+  bool is_write() const { return GetTlmGp()->is_write(); }
 
   /**
    * @brief Return the TLM generic payload carried by this packet.

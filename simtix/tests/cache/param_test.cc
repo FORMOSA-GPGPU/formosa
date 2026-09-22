@@ -5,7 +5,9 @@
 #include "cache/param.h"
 
 #include <cstddef>
+#include <limits>
 
+#include "cache/cache.h"
 #include "catch2/catch_session.hpp"
 #include "catch2/catch_test_macros.hpp"
 #include "sol/sol.hpp"
@@ -60,6 +62,32 @@ SCENARIO("Cache Param canonical names override legacy aliases",
 
   CHECK(param.cache_size_bytes == 32768);
   CHECK(param.mshr_entries == 10);
+}
+
+SCENARIO("Cache rejects invalid non-cacheable regions", "[cache][param]") {
+  Param param;
+  SECTION("unaligned start") { param.non_cacheable_regions = {{1, 64}}; }
+  SECTION("unaligned size") { param.non_cacheable_regions = {{64, 63}}; }
+  SECTION("last byte overflows") {
+    param.non_cacheable_regions = {
+        {std::numeric_limits<uint64_t>::max() - 63, 128}};
+  }
+  CHECK_THROWS_AS(
+      simtix::cache::Cache(sc_core::sc_gen_unique_name("cache"), param),
+      lv::fatal_error);
+}
+
+SCENARIO("Cache accepts whole-line non-cacheable regions", "[cache][param]") {
+  Param param;
+  // Empty entries are ignored, including unaligned addresses. Overlap and
+  // ordering do not change cacheability; the last address may be UINT64_MAX.
+  param.non_cacheable_regions = {
+      {std::numeric_limits<uint64_t>::max() - 63, 64},
+      {128, 128},
+      {64, 128},
+      {1, 0}};
+  CHECK_NOTHROW(
+      simtix::cache::Cache(sc_core::sc_gen_unique_name("cache"), param));
 }
 
 int sc_main(int argc, char *argv[]) { return Catch::Session().run(argc, argv); }

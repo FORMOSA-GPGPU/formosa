@@ -73,7 +73,7 @@ end
 function SystemConfig:effective_non_cacheable_regions()
   if #self.non_cacheable_regions > 0 then return self.non_cacheable_regions end
   return {
-    { addr = addr.sm_printbuf_base, size = self:threads_per_core() },
+    { addr = addr.sm_printbuf_base, size = addr.sm_printbuf_window },
     { addr = addr.noncache_region_base, size = addr.noncache_region_size },
   }
 end
