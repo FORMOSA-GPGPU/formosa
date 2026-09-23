@@ -220,4 +220,43 @@ test_scenario("MultipleDispatch")
 test_scenario("CannotActivate")
 test_scenario("CannotRelease")
 test_scenario("CannotResume")
+
+-- Hold dequeue acknowledgements until its FIFO fills. Other warps must
+-- complete while the initializer is blocked publishing an earlier result.
+core:set_scenario("StaggeredEcall")
+local group_count = 8
+for i = 1, group_count do
+  initiator:add_payload(create_write_payload(0x8, 0x1000))
+  initiator:add_payload(create_write_payload(0x10, 0x2000 + i))
+  initiator:add_payload(create_write_payload(0x18, threads_per_warp))
+  initiator:add_payload(create_write_payload(0x0, 1))
+  sc.start(sc.time(30, sc.time_unit.NS))
+end
+sc.start(sc.time(2000, sc.time_unit.NS))
+
+local function read_csr(addr)
+  initiator:add_payload(create_read_payload(addr))
+  sc.start(sc.time(20, sc.time_unit.NS))
+  local bytes = assert(initiator:get_read_data(), "CSR read did not complete")
+  return get_read_bytes_to_int(bytes)
+end
+
+local seen = {}
+for _ = 1, group_count do
+  local ready = false
+  for _ = 1, 100 do
+    if read_csr(0x20) == 1 then
+      ready = true
+      break
+    end
+  end
+  assert(ready, "work-group completion lost under dequeue backpressure")
+  assert(read_csr(0x28) == 0, "work-group failed")
+  local id = read_csr(0x38) - 0x2000
+  assert(id >= 1 and id <= group_count and not seen[id], "unexpected or duplicate work-group")
+  seen[id] = true
+  initiator:add_payload(create_write_payload(0x20, 0))
+  sc.start(sc.time(20, sc.time_unit.NS))
+end
+assert(read_csr(0x20) == 0, "unexpected extra completion")
 print("Pass!")

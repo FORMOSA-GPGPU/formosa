@@ -18,6 +18,7 @@ class StubWarpCtrl : public sc_module, public WarpCtrl {
  public:
   enum class Scenario {
     kAllEcall,
+    kStaggeredEcall,
     kAllBarrier,
     kMixedError,
     kMultipleDispatch,
@@ -45,7 +46,9 @@ class StubWarpCtrl : public sc_module, public WarpCtrl {
 
   void SetScenario(sol::string_view scenario_str) {
     cmd_ready_ = true;
-    if (scenario_str == "AllBarrier") {
+    if (scenario_str == "StaggeredEcall") {
+      scenario_ = StubWarpCtrl::Scenario::kStaggeredEcall;
+    } else if (scenario_str == "AllBarrier") {
       scenario_ = StubWarpCtrl::Scenario::kAllBarrier;
     } else if (scenario_str == "MixedError") {
       scenario_ = StubWarpCtrl::Scenario::kMixedError;
@@ -67,18 +70,21 @@ class StubWarpCtrl : public sc_module, public WarpCtrl {
 
   void CompleteActiveWarps(sc_dt::sc_bv_base *next_active_mask) {
     wait(sc_time(100, SC_NS));  // Simulate some delay
+    *next_active_mask = active_mask_;
     for (uint32_t i = 0; i < warps_per_core_; ++i) {
       if (active_mask_[i].to_bool() == true) {
         (*next_active_mask)[i] = 0;
         exception_mask_[i] = 1;
         mcause_[i] = 11;  // Ecall
         exception_mask_changed_event_.notify();
+        if (scenario_ == Scenario::kStaggeredEcall) break;
       }
     }
   }
 
   void BarrierActiveWarps(sc_dt::sc_bv_base *next_active_mask) {
     wait(sc_time(100, SC_NS));  // Simulate some delay
+    *next_active_mask = active_mask_;
     for (uint32_t i = 0; i < warps_per_core_; ++i) {
       if (active_mask_[i].to_bool() == true) {
         (*next_active_mask)[i] = 0;
@@ -127,6 +133,7 @@ class StubWarpCtrl : public sc_module, public WarpCtrl {
 
       sc_dt::sc_bv_base next_active_mask = active_mask_;
       if (scenario_ == Scenario::kAllEcall ||
+          scenario_ == Scenario::kStaggeredEcall ||
           scenario_ == Scenario::kMultipleDispatch ||
           scenario_ == Scenario::kCannotActivate ||
           scenario_ == Scenario::kCannotRelease) {

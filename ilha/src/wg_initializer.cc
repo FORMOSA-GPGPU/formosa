@@ -84,6 +84,7 @@ WGInitializer::WGInitializer(const sc_module_name &name, const Param &param)
   SC_THREAD(ProcessRequestThread);
   SC_THREAD(EnqueueWG);
   SC_THREAD(DequeueWG);
+  SC_THREAD(StateChangeThread);
   SC_THREAD(ProcessThread);
 
   pf_packets_.reserve(param.wg_resident_limit);
@@ -204,12 +205,23 @@ void WGInitializer::DequeueWG() {
   }
 }
 
-void WGInitializer::ProcessThread() {
+void WGInitializer::StateChangeThread() {
   while (true) {
     wait(core_->idle_mask_changed_event() | core_->active_mask_changed_event() |
          core_->barrier_mask_changed_event() |
          core_->exception_mask_changed_event() |
          dispatch_fifo_.data_written_event());
+    // ProcessThread can block on full command/dequeue FIFOs. Preserve state
+    // changes during those waits so completed warps are not left unhandled.
+    process_pending_ = true;
+    process_event_.notify();
+  }
+}
+
+void WGInitializer::ProcessThread() {
+  while (true) {
+    if (!process_pending_) wait(process_event_);
+    process_pending_ = false;
     HandleExceptionWarps();
     HandleBarrierWarps();
     DispatchRemainingWarps();

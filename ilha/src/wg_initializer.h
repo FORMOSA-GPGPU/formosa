@@ -165,6 +165,7 @@ class WGInitializer : public sc_module {
   unsigned int ProcessRequest(tlm::tlm_generic_payload *trans);
   void EnqueueWG();
   void DequeueWG();
+  void StateChangeThread();
   void ProcessThread();
 
  private:
@@ -175,6 +176,8 @@ class WGInitializer : public sc_module {
   std::vector<std::pair<int, WGDequeueInfo>> retire_infos_scratch_;
   std::vector<lv::trace::Track> pf_packets_;
   sc_event enqueue_event_, dequeue_event_;
+  sc_event process_event_;
+  bool process_pending_ = false;
 
   std::optional<sol::safe_function> on_wg_dispatch_;
   std::optional<sol::safe_function> on_wg_retire_;

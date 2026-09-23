@@ -50,9 +50,8 @@ if(BUILD_TESTING)
       "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
   set_property(TEST ilha.config PROPERTY LABELS unit ilha)
   set_property(TEST ilha.config PROPERTY WORKING_DIRECTORY "/")
-  set(_generator_test_dir "${CMAKE_CURRENT_BINARY_DIR}/generator-test")
-  set(_generator_test_header "${_generator_test_dir}/formosa_addr_map.h")
-  set(_generator_test_linker "${_generator_test_dir}/ilha_memory.ld")
+  set(_generator_test_header "${CMAKE_CURRENT_BINARY_DIR}/generator-header-test/formosa_addr_map.h")
+  set(_generator_test_linker "${CMAKE_CURRENT_BINARY_DIR}/generator-linker-test/ilha_memory.ld")
   add_test(NAME ilha.generate_header
     COMMAND "${XMAKE_EXECUTABLE}" lua
       "${CMAKE_CURRENT_SOURCE_DIR}/scripts/generate_header.lua"
