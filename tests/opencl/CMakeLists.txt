@@ -49,6 +49,7 @@ function(add_lv_opencl_integration_test PROGRAM)
     )
     set_tests_properties(${TEST_NAME} PROPERTIES
       ENVIRONMENT "POCL_CACHE_DIR=${TEST_OUTPUT}/pocl-cache"
+      PROCESSORS 2
     )
   endforeach()
 endfunction()
