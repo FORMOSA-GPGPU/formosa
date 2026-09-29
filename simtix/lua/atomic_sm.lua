@@ -42,7 +42,7 @@ function AtomicSM.new(name, id, config, sm_param)
 
   self._l1cache = simtix.Cache("L1Cache", {
     write_hit_policy = "WriteBack",
-    size_bytes = 0x1000,
+    cache_size_bytes = 0x1000,
     block_size_bytes = config.cache_block_size,
     non_cacheable_regions = sm_param.non_cacheable_regions
       or config:effective_non_cacheable_regions(),

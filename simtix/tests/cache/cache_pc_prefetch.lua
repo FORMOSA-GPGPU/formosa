@@ -60,7 +60,7 @@ end
 
 -- Cache with PC-based prefetcher
 local cache_pc_pf = simtix.Cache("cache_pc_pf", {
-  size_bytes = 4096,
+  cache_size_bytes = 4096,
   ways = 4,
   block_size_bytes = 64,
   replacement_policy = "lru",
@@ -72,7 +72,7 @@ local cache_pc_pf = simtix.Cache("cache_pc_pf", {
 
 -- Cache without prefetching for baseline comparison
 local cache_no_pf = simtix.Cache("cache_no_pf", {
-  size_bytes = 4096,
+  cache_size_bytes = 4096,
   ways = 4,
   block_size_bytes = 64,
   replacement_policy = "lru",

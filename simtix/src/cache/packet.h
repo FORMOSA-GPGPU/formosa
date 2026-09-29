@@ -66,8 +66,9 @@ class Packet {
 
   // cache lookup metadata
   bool is_hit = false;
-  // whether this cache refill will trigger a victim eviction and the victim
-  // cache line is dirty
+  // Whether this cache refill displaced a valid line, and whether that victim
+  // line is dirty.
+  bool has_victim = false;
   bool is_victim_dirty = false;
   uint64_t victim_address = 0;
   Location location;
@@ -177,6 +178,7 @@ class Packet {
     cache_owned_payload_ = nullptr;
     is_hit = false;
     location = {};
+    has_victim = false;
     is_victim_dirty = false;
     victim_address = 0;
     mshr_id = std::nullopt;

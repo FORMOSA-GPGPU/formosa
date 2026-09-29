@@ -289,12 +289,12 @@ function System.new(name, config, opts)
   self._l2cache_dummy_init = simple.Initiator("l2cache_dummy_init")
   self._l2cache = simtix.Cache("L2Cache", {
     write_hit_policy = "WriteBack",
-    size_bytes = shared_cache_size,
+    cache_size_bytes = shared_cache_size,
     block_size_bytes = system.cache_block_size,
     atomic_linearization = true,
     non_cacheable_regions = system:effective_non_cacheable_regions(),
     ways = 8,
-    mshrs = 16,
+    mshr_entries = 16,
   })
   self._aligner = simple.BlockAligner("Aligner" .. system.cache_block_size, system.cache_block_size)
   self._gmem = simple.Memory("gmem", { size = onchip_gmem_size })

@@ -190,6 +190,7 @@ TagArray::AccessStatus TagArray::Refill(Packet *packet) {
 
     packet->location = {.set = set, .way = way};
     packet->is_hit = true;
+    packet->has_victim = false;
     packet->is_victim_dirty = false;
     packet->victim_address = 0;
     FillTagEntry(tag_entry, address);
@@ -208,6 +209,7 @@ TagArray::AccessStatus TagArray::Refill(Packet *packet) {
 
   packet->location = {.set = set, .way = way};
   packet->is_hit = true;
+  packet->has_victim = true;
   packet->is_victim_dirty = tag_entry->dirty;
   packet->victim_address = tag_entry->tag * config_.block_size_bytes;
   FillTagEntry(tag_entry, address);

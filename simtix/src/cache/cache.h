@@ -8,7 +8,6 @@
 
 #include <liblv/common/tlm_sink.h>
 #include <liblv/common/tlm_source.h>
-#include <liblv/statistics.h>
 #include <systemc.h>
 #include <tlm_core/tlm_2/tlm_generic_payload/tlm_gp.h>
 
@@ -25,6 +24,7 @@
 #include "cache/packet_lifecycle_intf.h"
 #include "cache/packet_pool.h"
 #include "cache/param.h"
+#include "cache/stats.h"
 #include "cache/tag_array.h"
 #include "cache/victim_buffer.h"
 #include "cache/write_buffer.h"
@@ -254,6 +254,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   Packet *AllocateWriteBufferPacketFrom(const Packet *source_packet);
   Packet *AllocateVictimPacketFrom(const Packet *refill_packet);
   MshrFile::AcceptStatus TryAcceptReadMiss(Packet *packet);
+  void RecordAcceptedMshrMiss(MshrFile::AcceptStatus status);
   Packet *SelectTagArrayPacket(Packet *mem_resp_packet, bool *selected_refill);
   uint64_t ToLineAddress(uint64_t address) const;
   bool TryRejectInvalidAtomicRequest(Packet *packet);
@@ -301,7 +302,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   lv::TlmSink sink_;       // core side port
   lv::TlmSink mmio_sink_;  // mmio port
   lv::TlmSource source_;   // memory side port
-  mutable lv::stats::Group stats_;
+  mutable Stats stats_;
 
   // Cache packet
   PacketPool packet_pool_;

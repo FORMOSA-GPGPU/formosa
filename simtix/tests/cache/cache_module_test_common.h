@@ -213,6 +213,21 @@ class CacheModuleTester {
     size_t capacity = 0;
   };
 
+  struct StatisticsSnapshot {
+    int64_t total_reads = 0;
+    int64_t total_writes = 0;
+    int64_t total_atomics = 0;
+    int64_t total_cacheable_requests = 0;
+    int64_t total_non_cacheable_requests = 0;
+    int64_t total_hits = 0;
+    int64_t total_misses = 0;
+    int64_t primary_misses = 0;
+    int64_t secondary_misses = 0;
+    int64_t total_evictions = 0;
+    int64_t total_requests = 0;
+    double hit_rate = 0.0;
+  };
+
   explicit CacheModuleTester(Cache &dut) : dut_(dut) {}
 
   void StartMmioOperation(uint64_t operation, uint64_t address, uint64_t size) {
@@ -302,6 +317,25 @@ class CacheModuleTester {
         .pending_entries = write_buffer.pending_entries_.size(),
         .inflight_entries = write_buffer.inflight_map_.size(),
         .capacity = write_buffer.config_.write_buffer_entries,
+    };
+  }
+
+  StatisticsSnapshot Statistics() const {
+    return StatisticsSnapshot{
+        .total_reads = static_cast<int64_t>(dut_.stats_.total_reads),
+        .total_writes = static_cast<int64_t>(dut_.stats_.total_writes),
+        .total_atomics = static_cast<int64_t>(dut_.stats_.total_atomics),
+        .total_cacheable_requests =
+            static_cast<int64_t>(dut_.stats_.total_cacheable_requests),
+        .total_non_cacheable_requests =
+            static_cast<int64_t>(dut_.stats_.total_non_cacheable_requests),
+        .total_hits = static_cast<int64_t>(dut_.stats_.total_hits),
+        .total_misses = static_cast<int64_t>(dut_.stats_.total_misses),
+        .primary_misses = static_cast<int64_t>(dut_.stats_.primary_misses),
+        .secondary_misses = static_cast<int64_t>(dut_.stats_.secondary_misses),
+        .total_evictions = static_cast<int64_t>(dut_.stats_.total_evictions),
+        .total_requests = static_cast<int64_t>(dut_.stats_.total_requests),
+        .hit_rate = static_cast<double>(dut_.stats_.hit_rate),
     };
   }
 

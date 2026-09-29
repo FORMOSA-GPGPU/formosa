@@ -90,10 +90,7 @@ struct Param {
   }
 
   LV_SCHEMA(
-      Cache, Param,
-      lv::field("size_bytes", &Self::cache_size_bytes, d.cache_size_bytes,
-                "Cache size in bytes (legacy alias)"),
-      LV_FIELD(cache_size_bytes, "Cache size in bytes"),
+      Cache, Param, LV_FIELD(cache_size_bytes, "Cache size in bytes"),
       LV_FIELD(block_size_bytes, "Block size in bytes"),
       LV_FIELD(ways, "Number of ways in the cache"),
       LV_FIELD(random_seed, "Seed for random replacement policy"),
@@ -116,8 +113,6 @@ struct Param {
                         {WriteMissPolicy::kWriteAllocate, "WriteAllocate"},
                         {WriteMissPolicy::kWriteNoAllocate, "WriteNoAllocate"},
                     }),
-      lv::field("mshrs", &Self::mshr_entries, d.mshr_entries,
-                "Number of MSHR entries (legacy alias)"),
       LV_FIELD(mshr_entries, "Number of MSHR entries"),
       LV_FIELD(mshr_subentries, "Number of sub-entries per MSHR entry"),
       LV_FIELD(write_buffer_entries, "Number of write buffer inflight entries"),

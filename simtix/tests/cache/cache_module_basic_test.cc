@@ -214,6 +214,25 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
     }
     Expect(read_hit_bench_.memory_.request_count() == request_count,
            "second same-line read hit does not issue a memory request");
+
+    const auto stats = view.Statistics();
+    Expect(stats.total_reads == 2, "statistics count both ordinary reads");
+    Expect(stats.total_writes == 0, "read test records no writes");
+    Expect(stats.total_atomics == 0, "read test records no atomics");
+    Expect(stats.total_cacheable_requests == 2,
+           "both reads are routed through the cache");
+    Expect(stats.total_non_cacheable_requests == 0,
+           "read test records no bypass requests");
+    Expect(stats.total_hits == 1, "statistics count the demand hit");
+    Expect(stats.total_misses == 1, "statistics count the demand miss");
+    Expect(stats.primary_misses == 1,
+           "the first read allocates one primary MSHR entry");
+    Expect(stats.secondary_misses == 0,
+           "different-cycle read hit does not merge into the MSHR");
+    Expect(stats.total_requests == 2,
+           "total requests include all cache routing classes");
+    Expect(stats.hit_rate == 50.0,
+           "hit rate is reported as the legacy percentage");
   }
 
   void TestMshrSecondaryMissReplay() {
@@ -237,6 +256,13 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
            "merged same-line misses share one MSHR entry");
     Expect(mshr.tracked_sub_entries == 2,
            "merged same-line misses keep both replay packets");
+    auto stats = view.Statistics();
+    Expect(stats.total_misses == 2,
+           "both primary and secondary demand misses are counted");
+    Expect(stats.primary_misses == 1,
+           "first same-line miss allocates the primary MSHR entry");
+    Expect(stats.secondary_misses == 1,
+           "second same-line miss merges into the existing MSHR entry");
 
     merge_bench_.memory_.RespondAt(0, block);
     Expect(merge_bench_.WaitForCoreResponses(2, 32),
@@ -255,6 +281,9 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
            "MSHR entry is released after both replays drain");
     Expect(mshr.tracked_sub_entries == 0,
            "MSHR has no tracked sub-entries after replay drain");
+    stats = view.Statistics();
+    Expect(stats.total_hits == 0,
+           "MSHR replay hits are excluded from demand hit statistics");
   }
 
   void TestWriteBufferBackpressure() {
@@ -334,6 +363,16 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
            "read after write-no-allocate miss still misses in cache");
     ExpectReadRequest(write_no_allocate_bench_, 1, 0x00, 16,
                       "read after write-no-allocate miss issues block read");
+
+    const auto stats = view.Statistics();
+    Expect(stats.total_reads == 1, "statistics count the cacheable read");
+    Expect(stats.total_writes == 1, "statistics count the cacheable write");
+    Expect(stats.total_misses == 2,
+           "write-no-allocate and read misses are both counted");
+    Expect(stats.primary_misses == 1,
+           "only the allocating read miss creates an MSHR entry");
+    Expect(stats.secondary_misses == 0,
+           "write-no-allocate miss does not merge into an MSHR entry");
   }
 
   void TestWriteThroughHitUpdatesCacheAndMemory() {
@@ -446,6 +485,8 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
              "replacement line data is stored in the cache");
       Expect(!line->tag.dirty, "replacement read refill installs a clean line");
     }
+    Expect(view.Statistics().total_evictions == 1,
+           "replacement of a valid line counts as one eviction");
   }
 
   void TestMemoryRequestPriority() {
@@ -525,7 +566,6 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
            "non-cacheable read response uses memory data directly");
     Expect(!view.CachedLine(0x20).has_value(),
            "non-cacheable response still does not install a cache line");
-
     non_cacheable_bench_.memory_.RespondAt(1, Sequence(16, 0x30));
     Expect(non_cacheable_bench_.WaitForCoreResponses(2, 32),
            "cacheable read also completes after bypass wins arbitration");
@@ -535,6 +575,17 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
     Expect(non_cacheable_bench_.core_.response_count() == 2 &&
                non_cacheable_bench_.memory_.request_count() == 2,
            "bypass priority neither duplicates nor loses requests/responses");
+    const auto stats = view.Statistics();
+    Expect(stats.total_reads == 2,
+           "operation totals include cacheable and bypass reads");
+    Expect(stats.total_cacheable_requests == 1,
+           "cacheable read is counted in the cache route");
+    Expect(stats.total_non_cacheable_requests == 1,
+           "non-cacheable read is counted in the bypass route");
+    Expect(stats.total_requests == 2,
+           "total requests include cacheable and non-cacheable traffic");
+    Expect(stats.total_misses == 1,
+           "only the cacheable read contributes a cache miss");
   }
 
   void TestCoreBypassDoesNotDelayMiss() {

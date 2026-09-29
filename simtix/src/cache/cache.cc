@@ -379,6 +379,24 @@ void Cache::AcceptCoreRequest() {
 
   auto *packet = AllocateCoreRequestPacket(trans);
 
+  // Count every accepted upstream demand request once in both the operation
+  // and cache-routing breakdowns. Replays and cache-owned traffic never enter
+  // through this path.
+  if (packet->is_atomic) {
+    stats_.total_atomics++;
+  } else if (packet->is_write()) {
+    stats_.total_writes++;
+  } else {
+    stats_.total_reads++;
+  }
+
+  if (packet->type == PacketType::kCoreReq) {
+    stats_.total_cacheable_requests++;
+  } else {
+    assert(packet->type == PacketType::kBypassCoreReq);
+    stats_.total_non_cacheable_requests++;
+  }
+
   // Enqueue the packet to core request queue
   success = core_req_queue_.nb_put(packet);
   assert(success);
@@ -853,6 +871,10 @@ void Cache::AccessTagArrayStage() {
     }
     assert(status == TagArray::AccessStatus::kHit);
 
+    if (tag_array_packet->has_victim) {
+      stats_.total_evictions++;
+    }
+
     Packet *dequeued_packet = nullptr;
     success = mem_resp_queue_.nb_get(dequeued_packet);
     assert(success);
@@ -876,6 +898,7 @@ void Cache::AccessTagArrayStage() {
                        "core_miss", tag_array_packet);
         return;
       }
+      RecordAcceptedMshrMiss(accept_status);
       Packet *dequeued_packet = nullptr;
       success = core_req_queue_.nb_get(dequeued_packet);
       assert(success);
@@ -894,6 +917,12 @@ void Cache::AccessTagArrayStage() {
         config_.write_hit_policy == WriteHitPolicy::kWriteThrough;
     if (write_no_allocate_miss || write_through_hit) {
       IncrementLineEscapeHazard(tag_array_packet);
+    }
+
+    if (status == TagArray::AccessStatus::kHit) {
+      stats_.total_hits++;
+    } else {
+      stats_.total_misses++;
     }
 
     Packet *dequeued_packet = nullptr;
@@ -999,6 +1028,18 @@ MshrFile::AcceptStatus Cache::TryAcceptReadMiss(Packet *packet) {
   return status;
 }
 
+/** Record one successfully admitted MSHR miss. */
+void Cache::RecordAcceptedMshrMiss(MshrFile::AcceptStatus status) {
+  assert(status == MshrFile::AcceptStatus::kAcceptedPrimary ||
+         status == MshrFile::AcceptStatus::kAcceptedSecondary);
+  if (status == MshrFile::AcceptStatus::kAcceptedPrimary) {
+    stats_.primary_misses++;
+  } else {
+    stats_.secondary_misses++;
+  }
+  stats_.total_misses++;
+}
+
 /**
  * @brief Start the atomic sequencer from the core request queue head.
  *
@@ -1041,6 +1082,7 @@ bool Cache::TryProbeAtomicSequencer() {
       MarkBlockReason("atomic_locked", false);
       return true;
     case TagArray::AccessStatus::kHit:
+      stats_.total_hits++;
       tag_array_.LockEntry(packet->location);
       atomic_sequencer_.location = packet->location;
       atomic_sequencer_.phase = AtomicSequencer::Phase::kReadOld;
@@ -1054,6 +1096,7 @@ bool Cache::TryProbeAtomicSequencer() {
                        "atomic_miss", packet);
         return false;
       }
+      RecordAcceptedMshrMiss(accept_status);
       atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitReplay;
       MarkProgress("atomic_mshr_accept");
       return true;

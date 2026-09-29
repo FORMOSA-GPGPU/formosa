@@ -84,6 +84,19 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
            "non-linearized atomic response uses memory data directly");
     Expect(!view.CachedLine(0x04).has_value(),
            "non-linearized atomic response still does not install a line");
+    const auto stats = view.Statistics();
+    Expect(stats.total_reads == 0,
+           "atomic request is not classified as a plain read");
+    Expect(stats.total_writes == 0,
+           "atomic request is not classified as a plain write");
+    Expect(stats.total_atomics == 1,
+           "non-linearized atomic is counted as one atomic request");
+    Expect(stats.total_cacheable_requests == 0,
+           "non-linearized atomic does not use the cache route");
+    Expect(stats.total_non_cacheable_requests == 1,
+           "non-linearized atomic is counted in the bypass route");
+    Expect(stats.total_requests == 1,
+           "bypassed atomic contributes to total requests");
   }
 
   void TestAtomicLinearizedHitRmw() {
@@ -130,6 +143,15 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
     }
     Expect(atomic_hit_bench_.memory_.request_count() == request_count,
            "atomic hit does not issue a memory request");
+    const auto stats = view.Statistics();
+    Expect(stats.total_reads == 1,
+           "line-fill request remains classified as a plain read");
+    Expect(stats.total_atomics == 1,
+           "atomic hit is classified separately from reads");
+    Expect(stats.total_cacheable_requests == 2,
+           "line fill and atomic hit both use the cache route");
+    Expect(stats.total_requests == 2,
+           "line fill and atomic hit both contribute to total requests");
   }
 
   void TestAtomicLinearizedMissRefillReplayRmw() {
@@ -168,6 +190,21 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
     }
     Expect(atomic_miss_bench_.memory_.request_count() == 1,
            "linearized atomic miss does not emit a full-line atomic write");
+    const auto stats = view.Statistics();
+    Expect(stats.total_reads == 0,
+           "atomic miss is not classified as a plain read");
+    Expect(stats.total_atomics == 1,
+           "atomic miss is counted as one atomic request");
+    Expect(stats.total_cacheable_requests == 1,
+           "linearized atomic miss uses the cache route");
+    Expect(stats.total_non_cacheable_requests == 0,
+           "linearized atomic miss does not use the bypass route");
+    Expect(stats.total_requests == 1,
+           "atomic miss contributes to total requests");
+    Expect(stats.primary_misses == 1,
+           "atomic miss allocates one primary MSHR entry");
+    Expect(stats.secondary_misses == 0,
+           "single atomic miss does not merge into an MSHR entry");
   }
 
   void TestAtomicBlockedBypassDoesNotStarveMshrRead() {
