@@ -275,20 +275,39 @@ local config = {
       paths = { "simtix/tests/utils/**" },
       depends = { "simtix.tests.build" },
     },
-    ["tests.simtix.scalar_core"] = {
+    ["tests.cp.common"] = {
       paths = {
         "tests/cp/CMakeLists.txt",
-        "tests/cp/scalar_core.lua",
+        "tests/cp/system.lua",
+        "tests/cp/cores.lua",
+        "tests/cp/platform.lua",
+        "tests/cp/README.md",
+        "tests/cp/runtime_test.lua",
         "tests/cp/riscv-test/**",
+        "tests/cp/interrupt/**",
+        "third-party/riscv-tests",
+        "third-party/riscv-tests/**",
+      },
+      depends = {
+        "lv.executable",
+        "lv.lua",
+        "lv.bindings.dbg",
+        "lv.bindings.simple",
+        "lv.bindings.systemc",
+        "lv.bindings.workload",
       },
     },
-    ["tests.cp"] = {
+    ["tests.simtix.scalar_core"] = {
       paths = {
-        "tests/cp/CMakeLists.txt",
-        "tests/cp/cp.lua",
-        "tests/cp/riscv-test/**",
+        "tests/cp/cores/simtix/scalar_core.lua",
       },
-      depends = { "lv.executable", "lv.bindings.workload" },
+      depends = { "tests.cp.common" },
+    },
+    ["tests.cp.command_processor"] = {
+      paths = {
+        "tests/cp/cores/cp/command_processor.lua",
+      },
+      depends = { "tests.cp.common", "lv.bindings.cp" },
     },
     ["libcomm"] = {
       paths = {
@@ -471,8 +490,9 @@ local config = {
           build_options = {
             ENABLE_PROJECTS = { "simtix", "tests" },
             TESTS_ENABLE_TESTS = { "cp" },
+            CP_TEST_CORES = { "simtix.scalar_core" },
           },
-          selectors = { "scalar_core_riscv_test" },
+          selectors = { "^cp\\.riscv-test\\.simtix\\.scalar_core$", "^cp\\.harness$" },
         },
       },
     },
@@ -541,7 +561,7 @@ local config = {
     ["lv.bindings"] = {
       depends = {
         "lv.tests.unit",
-        "tests.cp",
+        "tests.cp.command_processor",
         "tests.ipc",
         "tests.pfreader",
       },
@@ -552,11 +572,14 @@ local config = {
             LV_ENABLE_PERFETTO = true,
             LV_ENABLE_TESTING = true,
             TESTS_ENABLE_TESTS = { "cp", "ipc", "pfreader" },
+            CP_TEST_CORES = { "cp.command_processor" },
           },
           selectors = {
             ".*/.*\\.lua",
             "lv.unit.log",
-            "cp",
+            "^cp\\.riscv-test\\.cp\\.command_processor$",
+            "^cp\\.interrupt\\.cp\\.command_processor$",
+            "^cp\\.harness$",
             "pfreader",
             "ipc_test",
           },

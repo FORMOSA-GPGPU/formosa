@@ -296,6 +296,7 @@
     {
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CP_TEST_CORES": "simtix.scalar_core",
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "simtix;tests",
         "TESTS_ENABLE_TESTS": "cp"
@@ -306,6 +307,7 @@
     {
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug",
+        "CP_TEST_CORES": "simtix.scalar_core",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "simtix;tests",
         "TESTS_ENABLE_TESTS": "cp"
@@ -316,6 +318,7 @@
     {
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
+        "CP_TEST_CORES": "simtix.scalar_core",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "simtix;tests",
         "TESTS_ENABLE_TESTS": "cp"
@@ -602,7 +605,7 @@
       },
       "filter": {
         "include": {
-          "name": "scalar_core_riscv_test"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.harness$"
         }
       },
       "name": "simtix.scalar_core.coverage",
@@ -617,7 +620,7 @@
       },
       "filter": {
         "include": {
-          "name": "scalar_core_riscv_test"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.harness$"
         }
       },
       "name": "simtix.scalar_core.debug",
@@ -632,7 +635,7 @@
       },
       "filter": {
         "include": {
-          "name": "scalar_core_riscv_test"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.harness$"
         }
       },
       "name": "simtix.scalar_core.release",

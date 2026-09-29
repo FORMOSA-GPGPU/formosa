@@ -1,0 +1,38 @@
+/* SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+ * SPDX-License-Identifier: Apache-2.0 */
+
+MEMORY {
+    RAM (RWX): ORIGIN = @IMAGE_RAM_BASE@, LENGTH = @IMAGE_RAM_SIZE@
+}
+
+ENTRY(start);
+_stack_start = @IMAGE_STACK_BASE@;
+_serial_base = @IMAGE_SERIAL_BASE@;
+
+SECTIONS {
+  .text @IMAGE_TEXT_BASE@ : {
+    KEEP(*(.text.start))
+    *(.text)
+    *(.text.*)
+    *(.rodata)
+    *(.rodata.*)
+  } > RAM
+
+  .data : {
+    *(.data)
+    *(.data.*)
+  } > RAM
+
+  .bss : {
+    *(.bss)
+    *(.bss.*)
+    *(COMMON)
+  } > RAM
+
+  _end = .;
+}
+
+ASSERT(ADDR(.text) >= ORIGIN(RAM) && ADDR(.text) < ORIGIN(RAM) + LENGTH(RAM),
+       "text_base must be inside RAM");
+ASSERT(_stack_start > ORIGIN(RAM) && _stack_start <= ADDR(.text),
+       "stack_base must be inside RAM at or below text_base");

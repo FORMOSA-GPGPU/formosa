@@ -1,0 +1,64 @@
+# SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+# SPDX-License-Identifier: Apache-2.0
+
+#if __riscv_xlen == 64
+#define STORE_REG sd
+#define LOAD_REG ld
+#else
+#define STORE_REG sw
+#define LOAD_REG lw
+#endif
+
+.section .text.start, "ax"
+.globl start
+.globl serial_putchar
+.globl print_string
+.globl green_code
+.globl red_code
+.globl reset_code
+.globl ok_string
+.globl err_string
+
+#define TEST(n) \
+  .global n; \
+  jal zero, n; \
+  .global n##_ret; \
+  n##_ret:
+
+start:
+    la sp, _stack_start
+@TEST_CALLS@
+    la a1, done_string
+    call print_string
+1:
+    j 1b
+
+# serial_putchar(char c)
+serial_putchar:
+    la t2, _serial_base
+    sb a0, 0(t2)
+    ret
+
+# Print a null-terminated string at address in a1.
+print_string:
+    addi sp, sp, -16
+    STORE_REG ra, 0(sp)
+1:
+    lb a0, 0(a1)
+    beqz a0, 2f
+    call serial_putchar
+    addi a1, a1, 1
+    j 1b
+2:
+    LOAD_REG ra, 0(sp)
+    addi sp, sp, 16
+    ret
+
+.section .data
+.balign 8
+done_string: .string "RISC-V test done\n"
+green_code:  .string "\x1B[32m"
+red_code:    .string "\x1B[31m"
+reset_code:  .string "\x1B[0m"
+ok_string:   .string "OK\n"
+err_string:  .string "ERR\n"
