@@ -18,12 +18,12 @@ stdenv.mkDerivation {
   configurePhase = ''
     ./configure --prefix=$out \
     --target=riscv64-unknown-elf \
-    CC_FOR_TARGET="${formosa-llvm}/bin/clang -march="rv64im_zicsr_zicond" -mabi=lp64 \
+    CC_FOR_TARGET="${formosa-llvm}/bin/clang -mcpu=formosa-gpgpu -mabi=lp64 \
     -mno-relax -mcmodel=medany \
     -Wno-error-implicit-function-declaration \
     -Wno-unused-command-line-argument \
     -Wno-error=int-conversion" \
-    AS_FOR_TARGET="${formosa-llvm}/bin/llvm-as -march="rv64im_zicsr_zicond" -mabi=lp64" \
+    AS_FOR_TARGET="${formosa-llvm}/bin/llvm-as -march="rv64im_zicsr_zicond_zdinx" -mabi=lp64" \
     AR_FOR_TARGET=${formosa-llvm}/bin/llvm-ar \
     LD_FOR_TARGET=${formosa-llvm}/bin/llvm-ld \
     RANLIB_FOR_TARGET=${formosa-llvm}/bin/llvm-ranlib
