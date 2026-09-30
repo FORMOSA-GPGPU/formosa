@@ -30,3 +30,5 @@ add_lv_unit_test(workload/elf.lua)
 
 # Native (non-Lua) unit tests.
 add_subdirectory(log)
+
+add_subdirectory(axi)

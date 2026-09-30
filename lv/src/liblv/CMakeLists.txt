@@ -5,6 +5,8 @@
 set(TARGET liblv)
 
 add_library(${TARGET} STATIC
+  axi/axi_helpers.cc
+  axi/axi_response_order.cc
   binding.cc
   common/tlm_sink.cc
   common/tlm_source.cc
