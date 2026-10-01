@@ -126,15 +126,19 @@ int main() {
     queue.flush();
     for (cl::Event &event : outstanding) event.wait();
 
-    // Rectangular transfers are not represented by the current 1D firmware
-    // packet. The backend must fail the event instead of entering PoCL's
-    // generic executor with null callbacks.
-    const size_t rect_origin[3] = {0, 0, 0};
-    const size_t rect_region[3] = {1, 1, 1};
+    queue.enqueueWriteBuffer(destination, CL_TRUE, 0, destination_data.size(),
+                             destination_data.data());
+    const size_t rect_source_origin[3] = {3, 1, 0};
+    const size_t rect_destination_origin[3] = {5, 1, 0};
+    const size_t rect_region[3] = {7, 2, 2};
+    constexpr size_t kSourceRowPitch = 16, kSourceSlicePitch = 64;
+    constexpr size_t kDestinationRowPitch = 20, kDestinationSlicePitch = 80;
     cl_event rect_event = nullptr;
     const cl_int enqueue_status = clEnqueueCopyBufferRect(
-        queue(), source(), destination(), rect_origin, rect_origin, rect_region,
-        0, 0, 0, 0, 0, nullptr, &rect_event);
+        queue(), source(), destination(), rect_source_origin,
+        rect_destination_origin, rect_region, kSourceRowPitch,
+        kSourceSlicePitch, kDestinationRowPitch, kDestinationSlicePitch, 0,
+        nullptr, &rect_event);
     if (enqueue_status != CL_SUCCESS || rect_event == nullptr) {
       std::cerr << "CopyBufferRect enqueue failed with " << enqueue_status
                 << '\n';
@@ -142,9 +146,25 @@ int main() {
     }
     const cl_int wait_status = clWaitForEvents(1, &rect_event);
     clReleaseEvent(rect_event);
-    if (wait_status != CL_EXEC_STATUS_ERROR_FOR_EVENTS_IN_WAIT_LIST) {
-      std::cerr << "CopyBufferRect did not report unsupported execution: "
-                << wait_status << '\n';
+    if (wait_status != CL_SUCCESS) {
+      std::cerr << "CopyBufferRect execution failed: " << wait_status << '\n';
+      return 1;
+    }
+    queue.enqueueReadBuffer(destination, CL_TRUE, 0, result.size(),
+                            result.data());
+    auto expected_rect = destination_data;
+    for (size_t z = 0; z < rect_region[2]; ++z)
+      for (size_t y = 0; y < rect_region[1]; ++y)
+        for (size_t x = 0; x < rect_region[0]; ++x) {
+          const size_t src = z * kSourceSlicePitch + (y + 1) * kSourceRowPitch +
+                             rect_source_origin[0] + x;
+          const size_t dst = z * kDestinationSlicePitch +
+                             (y + 1) * kDestinationRowPitch +
+                             rect_destination_origin[0] + x;
+          expected_rect[dst] = source_data[src];
+        }
+    if (result != expected_rect) {
+      std::cerr << "CopyBufferRect data or untouched bytes mismatch\n";
       return 1;
     }
   } catch (const cl::Error &error) {

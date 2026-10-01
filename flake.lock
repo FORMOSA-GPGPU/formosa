@@ -39,17 +39,17 @@
     "formosa-pocl-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1789804215,
-        "narHash": "sha256-MrX+VcuDXhKMZltbbvT8qDliDMmYHgn1tuPVkh3q46E=",
+        "lastModified": 1790780074,
+        "narHash": "sha256-hX8vVUBE+gJ6Lkng04RP3SzcjRCn2G9SPSRZEos7Mdo=",
         "ref": "refs/heads/formosa/main",
-        "rev": "cd1754b87f2f4e5e6f3c88312be4d2fb6bc3a461",
+        "rev": "ec5c0332a6444d2fc33833e84a910acc652c75a8",
         "shallow": true,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-pocl.git"
       },
       "original": {
-        "rev": "cd1754b87f2f4e5e6f3c88312be4d2fb6bc3a461",
+        "rev": "ec5c0332a6444d2fc33833e84a910acc652c75a8",
         "shallow": true,
         "submodules": true,
         "type": "git",
