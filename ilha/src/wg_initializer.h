@@ -171,6 +171,7 @@ class WGInitializer : public sc_module {
  private:
   sc_dt::sc_bv_base cwm_;
   sc_dt::sc_bv_base release_cwm_;
+  sc_dt::sc_bv_base pending_resume_mask_;
   std::vector<uint32_t> completed_warps_scratch_;
   std::vector<int> wg_scratch_;
   std::vector<std::pair<int, WGDequeueInfo>> retire_infos_scratch_;

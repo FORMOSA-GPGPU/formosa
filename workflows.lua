@@ -570,6 +570,24 @@ local config = {
         },
       },
     },
+    ["ilha.integration"] = {
+      depends = {
+        "ilha.platform",
+        "simtix.pipelined_core",
+        "lv.executable",
+        "lv.lua",
+        "lv.bindings.simple",
+        "lv.bindings.systemc",
+      },
+      adapters = {
+        cmake = {
+          build_options = {
+            ENABLE_PROJECTS = { "ilha", "simtix" },
+          },
+          selectors = { "^ilha\\.wg_lifecycle$" },
+        },
+      },
+    },
     ["lv.bindings"] = {
       depends = {
         "lv.tests.unit",
@@ -615,11 +633,11 @@ local config = {
   workflows = {
     ["simtix.pipelined_sm"] = make_simtix_sm_workflow(
       "pipelined_sm",
-      { "simtix.pipelined_core.unit" }
+      { "simtix.pipelined_core.unit", "ilha.integration" }
     ),
     ["ilha.platform"] = {
-      description = "Validate the Ilha platform configuration and bindings.",
-      test_suites = { "ilha.unit" },
+      description = "Validate the Ilha platform configuration, bindings, and work-group lifecycle.",
+      test_suites = { "ilha.unit", "ilha.integration" },
     },
     ["simtix.atomic_sm"] = make_simtix_sm_workflow("atomic_sm"),
     ["simtix.cache"] = {

@@ -73,4 +73,8 @@ if(BUILD_TESTING)
   foreach(_test wg_init.lua cache_controller.lua sm_transactor.lua)
     add_lv_test_script("ilha.${_test}" "tests/unit/${_test}" LABELS unit ilha)
   endforeach()
+  if("simtix" IN_LIST ENABLE_PROJECTS)
+    add_lv_test_script(ilha.wg_lifecycle tests/integration/wg_lifecycle.lua
+      LABELS integration ilha)
+  endif()
 endif()

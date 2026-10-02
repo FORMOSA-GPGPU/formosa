@@ -72,12 +72,14 @@ WGInitializer::WGInitializer(const sc_module_name &name, const Param &param)
       processing_wg_ids_(param.warps_per_core, -1),
       cwm_(static_cast<int>(kWarpsPerCore)),
       release_cwm_(static_cast<int>(kWarpsPerCore)),
+      pending_resume_mask_(static_cast<int>(kWarpsPerCore)),
       completed_warps_scratch_(param.wg_resident_limit, 0),
       pf_packets_(),
       on_wg_dispatch_(param.on_wg_dispatch),
       on_wg_retire_(param.on_wg_retire) {
   // Initialize the hardware info CSR
   csr_.wg_resident_limit = param.wg_resident_limit;
+  pending_resume_mask_ = 0;
   wg_scratch_.reserve(param.wg_resident_limit);
   retire_infos_scratch_.reserve(param.wg_resident_limit);
 
@@ -211,6 +213,9 @@ void WGInitializer::StateChangeThread() {
          core_->barrier_mask_changed_event() |
          core_->exception_mask_changed_event() |
          dispatch_fifo_.data_written_event());
+    // A queued Resume is no longer pending once its warps leave the barrier.
+    // Keep observing the core while ProcessThread is blocked.
+    pending_resume_mask_ = pending_resume_mask_ & core_->barrier_mask();
     // ProcessThread can block on full command/dequeue FIFOs. Preserve state
     // changes during those waits so completed warps are not left unhandled.
     process_pending_ = true;
@@ -320,6 +325,7 @@ void WGInitializer::HandleExceptionWarps() {
   for (int i = 0; i < cwm_.length(); ++i) {
     if (cwm_[i].to_bool() || release_cwm_[i].to_bool()) {
       processing_wg_ids_[i] = -1;
+      pending_resume_mask_[i] = 0;
     }
   }
 
@@ -365,13 +371,16 @@ void WGInitializer::HandleBarrierWarps() {
 
     // The number of warps reaching this WG's barrier.
     uint32_t barrier_count = 0;
+    bool has_pending_resume = false;
     for (int i = 0; i < barrier_mask.length(); ++i) {
-      if (barrier_mask[i].to_bool()) {
-        barrier_count += (processing_wg_ids_[i] == wg_idx);
+      if (processing_wg_ids_[i] == wg_idx) {
+        barrier_count += barrier_mask[i].to_bool();
+        has_pending_resume |= pending_resume_mask_[i].to_bool();
       }
     }
 
-    if (barrier_count != processing_wg_info_[wg_idx].warp_count) {
+    if (barrier_count != processing_wg_info_[wg_idx].warp_count ||
+        has_pending_resume) {
       continue;
     }
 
@@ -387,6 +396,8 @@ void WGInitializer::HandleBarrierWarps() {
     return;
   }
 
+  // Reserve before put(), which can wait for command FIFO capacity.
+  pending_resume_mask_ |= cwm_;
   EmitWarpCtrlCommand(WarpCtrlCommand::Resume(cwm_));
   for (int wg_idx : wg_scratch_) {
     TraceWGSlotInstant(wg_idx, "Barrier resume");
