@@ -5,7 +5,7 @@
 ---@field private _native simtix.ScalarCore
 ---@field private _sc_module sc.Module
 ---@overload fun(name: string): simtix.scalar_core
-local ScalarCore = { isa = "rv64im", num_mem_ports = 2, has_ext_int = false }
+local ScalarCore = { isa = "rv64im", num_mem_ports = 2, has_ext_int = false, has_reset = false }
 ScalarCore.__index = ScalarCore
 
 ---@param _ string Module name, consumed by lv.sc_module.wrap.
@@ -27,6 +27,9 @@ function ScalarCore:__newindex(key, value)
     self._native.imem = value
   elseif key == "dmem_target" then
     self._native.dmem = value
+  elseif key == "reset_n" then
+    -- This model has no reset input.
+    return
   else
     rawset(self, key, value)
   end

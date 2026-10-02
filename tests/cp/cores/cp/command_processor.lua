@@ -6,7 +6,8 @@
 ---@field private _gnd sc.signal
 ---@field private _sc_module sc.Module
 ---@overload fun(name: string): cp.command_processor
-local CommandProcessor = { isa = "rv64im", num_mem_ports = 1, has_ext_int = true }
+local CommandProcessor =
+  { isa = "rv64im", num_mem_ports = 1, has_ext_int = true, has_reset = false }
 CommandProcessor.__index = CommandProcessor
 
 ---@param _ string Module name, consumed by lv.sc_module.wrap.
@@ -37,6 +38,9 @@ function CommandProcessor:__newindex(key, value)
     self._native.target = value
   elseif key == "ext_int" then
     self._native.ext_int = value
+  elseif key == "reset_n" then
+    -- This model has no reset input.
+    return
   else
     rawset(self, key, value)
   end

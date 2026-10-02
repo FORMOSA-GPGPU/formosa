@@ -112,4 +112,55 @@ run(
 system = new_system({ "" })
 function system:output() error("UART unavailable") end
 run(system, function() error("original failure") end, "original failure")
+
+-- Reset belongs to the platform and follows its clock, including non-10 ns
+-- clocks. Observe the actual signal on rising edges through System:boot.
+local period = sc.time(7, sc.time_unit.NS)
+local clock = sc.clock("reset_clock", period)
+local reset_n = sc.signal("reset_n")
+reset_n:write(true)
+local booted, reset_edges = false, 0
+local observer = dbg.TickAgent("reset_observer", function()
+  if booted then
+    assert(not reset_n:read(), "reset released before the reset interval ended")
+    reset_edges = reset_edges + 1
+  end
+end)
+observer.clock = clock
+sc.start(sc.time(1, sc.time_unit.NS))
+local start = sc.time_stamp()
+
+-- A core that ignores reset must not execute outside the run's cycle budget.
+local without_reset_booted = false
+System.boot({
+  _period = period,
+  _reset_n = reset_n,
+  step = System.step,
+  core = {
+    has_reset = false,
+    boot = function(_, entry)
+      assert(entry == 0x10000)
+      without_reset_booted = true
+    end,
+  },
+}, 0x10000)
+assert(without_reset_booted, "entry was not prepared for the core without reset")
+assert(sc.time_stamp() == start, "boot advanced a core without reset support")
+
+System.boot({
+  _period = period,
+  _reset_n = reset_n,
+  step = System.step,
+  core = {
+    has_reset = true,
+    boot = function(_, entry)
+      assert(entry == 0x10000)
+      booted = true
+    end,
+  },
+}, 0x10000)
+assert(sc.time_stamp() - start == period * require("cp.platform").reset_cycles)
+assert(reset_edges == require("cp.platform").reset_cycles, "incorrect reset pulse length")
+sc.start(sc.time(0, sc.time_unit.NS))
+assert(reset_n:read(), "reset was not released after boot")
 print("cp.harness: program execution, result validation and timeout checks passed")

@@ -22,7 +22,7 @@ matching `.tests` file beside it. CTest runs these same scripts.
 
 - `cores/`: modules with the shared [cp.core interface](system.lua), wrapped
   with `lv.sc_module`. They expose capabilities, ports, and `boot(entry)`.
-- `platform.lua`: the test platform's memory layout.
+- `platform.lua`: the test platform's memory layout and reset duration in cycles.
 - `system.lua`: builds memory and UART, wires the core, and runs an ELF.
 - Each program directory owns its sources, runner, and result checks.
   Programs select compatible cores by capability; `interrupt/` requires `has_ext_int`.
@@ -30,10 +30,17 @@ matching `.tests` file beside it. CTest runs these same scripts.
 ## Add a core
 
 1. Copy [a core adapter](cores/simtix/scalar_core.lua) into `cores/<namespace>/<name>.lua` and
-   wrap its native LV model. Set `isa`, `num_mem_ports`, and `has_ext_int`.
+   wrap its native LV model. Set `isa`, `num_mem_ports`, `has_ext_int`, and `has_reset`.
 2. Implement `clock`, `boot(entry)`, and either `mem_target` or
    `imem_target`/`dmem_target`. These port properties accept memory targets.
    Provide `ext_int` when supported; the system creates and connects its signal.
+   Accept `reset_n` as an active-low reset signal, or ignore it if the model has
+   no reset input (`has_reset = false`). The system owns the signal. For cores
+   with `has_reset = true`, it holds reset low for `platform.reset_cycles` clock
+   periods during boot; other cores boot without advancing simulation time.
+   `boot(entry)` prepares the entry point or trampoline without advancing
+   simulation or driving reset. It runs before the reset interval, so preparation
+   must survive that reset. The run's cycle budget starts after boot completes.
 3. Add `<namespace>.<name>` to the available cores in `CMakeLists.txt` when its
    model is enabled. Rebuild and run with `--core <namespace>.<name>`.
 

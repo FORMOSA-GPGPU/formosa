@@ -105,7 +105,7 @@ local function validate_config_value(value, location, errors)
   elseif type(value) == "boolean" then
     return
   elseif type(value) == "table" then
-    validate_string_array(value, location, errors, false)
+    validate_string_array(value, location, errors, true)
   else
     add_error(errors, location, "must be a string, boolean, or array of strings")
   end

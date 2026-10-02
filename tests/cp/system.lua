@@ -2,6 +2,7 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 require("cp.cores")
+local platform = require("cp.platform")
 
 -- Memory ports are writable target-socket properties, like SM.target.
 -- A core has either mem_target (one port), or imem_target and dmem_target (two).
@@ -10,7 +11,9 @@ require("cp.cores")
 ---@field isa string
 ---@field num_mem_ports 1|2
 ---@field has_ext_int boolean
+---@field has_reset boolean Whether reset_n prevents execution during the reset interval.
 ---@field clock sc.clock
+---@field reset_n sc.signal Active-low reset input; adapters without reset support ignore it.
 ---@field mem_target? sc.Socket Unified memory target; only for num_mem_ports == 1.
 ---@field imem_target? sc.Socket Instruction target; only for num_mem_ports == 2.
 ---@field dmem_target? sc.Socket Data target; only for num_mem_ports == 2.
@@ -24,6 +27,7 @@ require("cp.cores")
 ---@field ext_int? sc.signal Signal driven by interrupt tests.
 ---@field private _period sc.time
 ---@field private _clock sc.clock
+---@field private _reset_n sc.signal
 ---@field private _ram simple.Memory
 ---@field private _log_path string
 ---@field private _uart simple.PrintBuf
@@ -39,7 +43,6 @@ System.__index = System
 ---@return cp.system
 function System.new(_, core_module)
   local self = setmetatable({}, System --[[@as table]])
-  local platform = require("cp.platform")
   ---@type cp.core_ctor
   local Core = require(core_module)
   self.core = Core("core")
@@ -47,6 +50,8 @@ function System.new(_, core_module)
   assert(ports == 1 or ports == 2, "expected one or two memory ports")
   self._period = sc.time(10, sc.time_unit.NS)
   self._clock = sc.clock("clock", self._period)
+  self._reset_n = sc.signal("reset_n")
+  self._reset_n:write(false)
   self._ram = simple.Memory("ram", { size = platform.ram_size, latency = 1, fifo_size = 1 })
   self._log_path = os.tmpname()
   self._uart = simple.PrintBuf("uart", 1, self._log_path)
@@ -62,6 +67,7 @@ function System.new(_, core_module)
   self._loader = dbg.MemoryDebugger("loader")
   self._loader.target = self._bus.core_side[ports + 1].port
   self.core.clock = self._clock
+  self.core.reset_n = self._reset_n
   if ports == 1 then
     self.core.mem_target = self._bus.core_side[1].port
   else
@@ -92,7 +98,13 @@ end
 function System:read_bytes(addr, size) return self._loader:read_bytes(addr, size) end
 
 ---@param entry integer
-function System:boot(entry) self.core:boot(assert(tonumber(entry), "invalid entry address")) end
+function System:boot(entry)
+  entry = assert(tonumber(entry), "invalid entry address")
+  self._reset_n:write(false)
+  self.core:boot(entry)
+  if self.core.has_reset then self:step(platform.reset_cycles) end
+  self._reset_n:write(true)
+end
 
 ---@param cycles integer
 function System:step(cycles) sc.start(cycles * self._period) end

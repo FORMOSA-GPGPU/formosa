@@ -3,6 +3,7 @@
 
 -- Execution platform shared by CPU test programs and their build scripts.
 return {
+  reset_cycles = 5,
   ram_base = 0,
   ram_size = 0x200000,
   text_base = 0x10000,
