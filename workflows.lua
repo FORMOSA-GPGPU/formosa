@@ -295,6 +295,7 @@ local config = {
         "tests/cp/runtime_test.lua",
         "tests/cp/riscv-test/**",
         "tests/cp/interrupt/**",
+        "tests/cp/prog0/**",
         "third-party/riscv-tests",
         "third-party/riscv-tests/**",
       },
@@ -488,7 +489,7 @@ local config = {
         },
       },
     },
-    ["simtix.scalar_core.riscv-test"] = {
+    ["simtix.scalar_core"] = {
       depends = {
         "simtix.scalar_core",
         "tests.simtix.scalar_core",
@@ -504,7 +505,11 @@ local config = {
             TESTS_ENABLE_TESTS = { "cp" },
             CP_TEST_CORES = { "simtix.scalar_core" },
           },
-          selectors = { "^cp\\.riscv-test\\.simtix\\.scalar_core$", "^cp\\.harness$" },
+          selectors = {
+            "^cp\\.riscv-test\\.simtix\\.scalar_core$",
+            "^cp\\.prog0\\.simtix\\.scalar_core$",
+            "^cp\\.harness$",
+          },
         },
       },
     },
@@ -609,6 +614,7 @@ local config = {
             "lv.unit.log",
             "^cp\\.riscv-test\\.cp\\.command_processor$",
             "^cp\\.interrupt\\.cp\\.command_processor$",
+            "^cp\\.prog0\\.cp\\.command_processor$",
             "^cp\\.harness$",
             "pfreader",
             "ipc_test",
@@ -651,9 +657,9 @@ local config = {
       },
     },
     ["simtix.scalar_core"] = {
-      description = "Validate the simtix scalar core with the RV64 riscv-test workload.",
+      description = "Validate the simtix scalar core with the CPU test programs.",
       test_suites = {
-        "simtix.scalar_core.riscv-test",
+        "simtix.scalar_core",
       },
     },
     ["opencl"] = {

@@ -605,7 +605,7 @@
       },
       "filter": {
         "include": {
-          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.harness$"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.harness$"
         }
       },
       "name": "simtix.scalar_core.coverage",
@@ -620,7 +620,7 @@
       },
       "filter": {
         "include": {
-          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.harness$"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.harness$"
         }
       },
       "name": "simtix.scalar_core.debug",
@@ -635,7 +635,7 @@
       },
       "filter": {
         "include": {
-          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.harness$"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.harness$"
         }
       },
       "name": "simtix.scalar_core.release",
@@ -899,7 +899,7 @@
       ]
     },
     {
-      "displayName": "Validate the simtix scalar core with the RV64 riscv-test workload.",
+      "displayName": "Validate the simtix scalar core with the CPU test programs.",
       "name": "simtix.scalar_core.coverage",
       "steps": [
         {
@@ -913,7 +913,7 @@
       ]
     },
     {
-      "displayName": "Validate the simtix scalar core with the RV64 riscv-test workload.",
+      "displayName": "Validate the simtix scalar core with the CPU test programs.",
       "name": "simtix.scalar_core.debug",
       "steps": [
         {
@@ -927,7 +927,7 @@
       ]
     },
     {
-      "displayName": "Validate the simtix scalar core with the RV64 riscv-test workload.",
+      "displayName": "Validate the simtix scalar core with the CPU test programs.",
       "name": "simtix.scalar_core.release",
       "steps": [
         {

@@ -30,5 +30,6 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
 
 add_subdirectory(riscv-test)
 add_subdirectory(interrupt)
+add_subdirectory(prog0)
 add_lv_test_script(cp.harness runtime_test.lua LABELS cp unit)
 set_tests_properties(cp.harness PROPERTIES TIMEOUT 30)

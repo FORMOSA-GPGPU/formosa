@@ -12,11 +12,18 @@ build/bin/lv tests/cp/riscv-test/run.lua -h
 build/bin/lv tests/cp/riscv-test/run.lua --core cp.command_processor
 build/bin/lv tests/cp/riscv-test/run.lua --core simtix.scalar_core
 build/bin/lv tests/cp/interrupt/run.lua --core cp.command_processor
+build/bin/lv tests/cp/prog0/run.lua --core simtix.scalar_core --golden tests/cp/prog0/rv64.golden
 ```
 
 `--core` is a Lua module name, passed directly to `require`. The runner finds
 its ELF automatically. Use `--elf` for another ELF; the ISA test also needs a
 matching `.tests` file beside it. CTest runs these same scripts.
+
+`prog0` compares 45 memory words against the golden file passed with `--golden`.
+Choose `rv32.golden` or `rv64.golden` to match the core. Its fixed
+layout (code at zero, completion at `0x7ffc`, results at `0x8000`) is part of the
+program: the AUIPC golden depends on instruction addresses. Supply a matching
+golden file when using a custom ELF.
 
 ## How it works
 
