@@ -46,9 +46,13 @@ values and `override()` validates structural overrides. SM-specific fields stay
 in the owning module, such as `simtix.pipelined_sm.param`. Annotate SM parameter
 files with the selected module's type for editor checks; runtime construction
 checks hardware constraints without maintaining a second SM field whitelist.
-I-cache and D-cache parameters use `simtix.Cache.Param`; unspecified fields use
-the Cache `LV_SCHEMA` defaults. APCCAS2026 explicitly selects the D-cache values
-that differ from those generic component defaults.
+I-cache parameters use `simtix.Cache.Param`. D-cache parameters use
+`simtix.banked_cache.param`, which includes the Cache fields plus banked
+composition keys such as `num_banks`. Unspecified fields use the Cache
+`LV_SCHEMA` defaults and BankedCache composition defaults. APCCAS2026
+explicitly selects the D-cache values that differ from those generic
+component defaults. CacheController is wired inside the SM; it is not an
+`sm.param` field.
 
 Software-visible platform data is generated from `lua/addr_map.lua` into the
 build tree. CMake invokes the xmake Lua generator automatically, including for

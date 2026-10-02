@@ -41,17 +41,22 @@ local cache = simtix.Cache("cache", {
 
 local initiator = simple.OutstandingInitiator("initiator")
 local mmio_initiator = simple.Initiator("mmio_initiator")
+local cache_controller = ilha.CacheController("cache_controller", {
+  num_banks = 1,
+})
 local core_mon = dbg.Monitor("core_mon")
 local mem_mon = dbg.Monitor("mem_mon")
 
 initiator.target = core_mon.from
 core_mon.to = cache.port
-mmio_initiator.target = cache.mmio_port
+mmio_initiator.target = cache_controller.mmio_port
+cache_controller.bank = cache.cmd_port
 cache.target = mem_mon.from
 mem_mon.to = memory.port
 
 memory.clock = clock
 cache.clock = clock
+cache_controller.clock = clock
 mmio_initiator.clock = clock
 
 local function wait_until_completed(target_count, max_cycles, label)

@@ -6,29 +6,29 @@
 
 namespace simtix::cache {
 
-const char *Cache::MmioOperationName(MmioOperation operation) {
-  switch (operation) {
-    case MmioOperation::kNop:
+const char *Cache::CommandOpcodeName(CommandOpcode opcode) {
+  switch (opcode) {
+    case CommandOpcode::kNop:
       return "nop";
-    case MmioOperation::kFlush:
+    case CommandOpcode::kFlush:
       return "flush";
-    case MmioOperation::kInvalidate:
+    case CommandOpcode::kInvalidate:
       return "invalidate";
   }
   return "unknown";
 }
 
-const char *Cache::MmioPhaseName(MmioSequencer::Phase phase) {
+const char *Cache::CommandPhaseName(CommandSequencer::Phase phase) {
   switch (phase) {
-    case MmioSequencer::Phase::kIdle:
+    case CommandSequencer::Phase::kIdle:
       return "idle";
-    case MmioSequencer::Phase::kWaitPipelineDrain:
+    case CommandSequencer::Phase::kWaitPipelineDrain:
       return "wait_pipeline_drain";
-    case MmioSequencer::Phase::kScan:
+    case CommandSequencer::Phase::kScan:
       return "scan";
-    case MmioSequencer::Phase::kWaitWritebackDrain:
+    case CommandSequencer::Phase::kWaitWritebackDrain:
       return "wait_writeback_drain";
-    case MmioSequencer::Phase::kComplete:
+    case CommandSequencer::Phase::kComplete:
       return "complete";
   }
   return "unknown";
@@ -84,17 +84,16 @@ void Cache::LogQueueSnapshot(cache_log::Category category, const char *event,
                              const char *reason) const {
   SIMTIX_CACHE_LOG_DEBUG(
       name(), category,
-      "event={} reason={} phase={} start={} op={} addr={:#x} size={:#x} "
+      "event={} reason={} phase={} active={} opcode={} addr={:#x} size={:#x} "
       "scan_addr={:#x} scan_index={} q_core_req={} q_core_resp={} "
-      "q_mmio_resp={} q_tag_resp={} q_mshr_mem={} q_mshr_notify={} "
-      "q_mshr_replay={} q_wb_in={} q_wb_out={} q_wb_resp={} q_bypass={} "
-      "q_mem_resp={} inflight={} hazards={} mshr_pending={} wb_pending={} "
-      "victim_reserved={} victim_committed={} victim_inflight={} "
-      "atomic_busy={}",
-      event, reason, MmioPhaseName(mmio_sequencer_.phase), mmio_start_,
-      MmioOperationName(mmio_op_), mmio_addr_, mmio_size_,
-      mmio_sequencer_.scan_address, mmio_sequencer_.scan_index,
-      core_req_queue_.used(), core_resp_queue_.used(), mmio_resp_queue_.used(),
+      "q_tag_resp={} q_mshr_mem={} q_mshr_notify={} q_mshr_replay={} "
+      "q_wb_in={} q_wb_out={} q_wb_resp={} q_bypass={} q_mem_resp={} "
+      "inflight={} hazards={} mshr_pending={} wb_pending={} victim_reserved={} "
+      "victim_committed={} victim_inflight={} atomic_busy={}",
+      event, reason, CommandPhaseName(cmd_sequencer_.phase), cmd_active_,
+      CommandOpcodeName(cmd_opcode_), cmd_addr_, cmd_size_,
+      cmd_sequencer_.scan_address, cmd_sequencer_.scan_index,
+      core_req_queue_.used(), core_resp_queue_.used(),
       tag_array_resp_queue_.used(), mshr_file_mem_req_queue_.used(),
       mshr_file_refill_notify_queue_.used(), mshr_file_replay_queue_.used(),
       write_buffer_mem_req_queue_.used(),

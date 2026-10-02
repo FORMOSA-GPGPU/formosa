@@ -88,7 +88,7 @@ class TagArray {
   }
 
   uint64_t ToSetIndex(uint64_t address) const {
-    return ToLineAddress(address) % num_sets_;
+    return (ToLineAddress(address) >> set_index_shift_) % num_sets_;
   }
 
   TagEntry *GetSet(uint64_t address) {
@@ -109,6 +109,8 @@ class TagArray {
 
   // Storage layout: [sets][ways].
   std::vector<TagEntry> tag_array_;
+
+  const size_t set_index_shift_;
 };
 
 }  // namespace simtix::cache

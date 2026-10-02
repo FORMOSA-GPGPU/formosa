@@ -14,7 +14,7 @@ target_link_libraries(libilha INTERFACE systemc)
 
 add_library(ilha STATIC
   src/sm_transactor.cc
-  src/stub_cache_mmio.cc
+  src/cache_controller.cc
   src/stub_warp_ctrl.cc
   src/wg_initializer.cc
 )
@@ -42,6 +42,7 @@ foreach(_cfg
 endforeach()
 
 if(BUILD_TESTING)
+  target_sources(ilha PRIVATE tests/unit/cache_command_endpoint.cc)
   find_program(LUAJIT_EXECUTABLE NAMES luajit luajit-2.1 REQUIRED)
   add_test(NAME ilha.config
     COMMAND "${CMAKE_COMMAND}" -E env
@@ -69,7 +70,7 @@ if(BUILD_TESTING)
       "${_generator_test_header}" "${_generator_test_linker}")
   set_property(TEST ilha.platform_data PROPERTY FIXTURES_REQUIRED ilha-generator)
   set_property(TEST ilha.platform_data PROPERTY LABELS unit ilha)
-  foreach(_test wg_init.lua stub_cache_mmio.lua sm_transactor.lua)
+  foreach(_test wg_init.lua cache_controller.lua sm_transactor.lua)
     add_lv_test_script("ilha.${_test}" "tests/unit/${_test}" LABELS unit ilha)
   endforeach()
 endif()

@@ -111,21 +111,24 @@ cache_no_pf.clock = clock
 
 memory_no_pf.clock = clock
 
--- The 'mmio_port' must be bound, even if unused. We create dummy initiators
-
--- to terminate these ports.
-
 local mmio_initiator_pc_pf = simple.Initiator("mmio_initiator_pc_pf")
-
 local mmio_initiator_no_pf = simple.Initiator("mmio_initiator_no_pf")
+local cache_controller_pc_pf = ilha.CacheController("cache_controller_pc_pf", {
+  num_banks = 1,
+})
+local cache_controller_no_pf = ilha.CacheController("cache_controller_no_pf", {
+  num_banks = 1,
+})
 
-mmio_initiator_pc_pf.target = cache_pc_pf.mmio_port
-
-mmio_initiator_no_pf.target = cache_no_pf.mmio_port
+mmio_initiator_pc_pf.target = cache_controller_pc_pf.mmio_port
+cache_controller_pc_pf.bank = cache_pc_pf.cmd_port
+mmio_initiator_no_pf.target = cache_controller_no_pf.mmio_port
+cache_controller_no_pf.bank = cache_no_pf.cmd_port
 
 mmio_initiator_pc_pf.clock = clock
-
 mmio_initiator_no_pf.clock = clock
+cache_controller_pc_pf.clock = clock
+cache_controller_no_pf.clock = clock
 
 ----------------------------------------------------------------------
 

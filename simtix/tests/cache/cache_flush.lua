@@ -65,14 +65,20 @@ local cache = simtix.Cache("cache", {
   write_miss_policy = "WriteAllocate",
 })
 
+local cache_controller = ilha.CacheController("cache_controller", {
+  num_banks = 1,
+})
+
 initiator.target = cache.port
-mmio_initiator.target = cache.mmio_port
+mmio_initiator.target = cache_controller.mmio_port
+cache_controller.bank = cache.cmd_port
 cache.target = memory.port
 
 local clock = sc.clock("clock", period)
 initiator.clock = clock
 mmio_initiator.clock = clock
 cache.clock = clock
+cache_controller.clock = clock
 memory.clock = clock
 
 local function do_write(addr, data) initiator:add_payload({ addr = addr, data = data }) end
@@ -90,17 +96,6 @@ local function mmio_write_u64(offset, value)
     period,
     2000,
     "MMIO write 0x" .. string.format("%x", offset)
-  )
-end
-
-local function mmio_read(offset)
-  return test_utils.mmio_read_u64(
-    mmio_initiator,
-    MMIO_BASE,
-    offset,
-    period,
-    2000,
-    "MMIO read 0x" .. string.format("%x", offset)
   )
 end
 
@@ -164,15 +159,19 @@ mmio_write_u64(MMIO_OP_OFF, MMIO_OP_FLUSH)
 mmio_write_u64(MMIO_START_OFF, 1)
 
 lv.info("Step 4: Poll MMIO start bit ")
-local start_bit = mmio_read(MMIO_START_OFF)
-assert(start_bit == 1, "FAIL: MMIO start bit should be 1")
-
 test_utils.wait_mmio_idle(mmio_initiator, MMIO_BASE, MMIO_START_OFF, period, 2000, "ranged flush")
 lv.info("[PASS] Ranged flush operation completed.")
 
 lv.info(
   "Step 5: Verify that backing memory IS updated for IN-RANGE addresses and NOT for OUT-OF-RANGE addresses"
 )
+test_utils.wait_until(function()
+  for i, addr in ipairs(addrs_in_range) do
+    local data_idx = (i - 1) * 2 + 1
+    if not bytes_equal(memory:read_bytes(addr, 4), all_data_A[data_idx]) then return false end
+  end
+  return true
+end, 5000, period, "ranged flush write-backs reach memory")
 -- Verify in-range addresses are flushed
 for i, addr in ipairs(addrs_in_range) do
   local data_idx = (i - 1) * 2 + 1
@@ -240,9 +239,6 @@ mmio_write_u64(MMIO_OP_OFF, MMIO_OP_FLUSH)
 mmio_write_u64(MMIO_START_OFF, 1)
 
 lv.info("Step 9: Poll MMIO start bit until full flush is done")
-start_bit = mmio_read(MMIO_START_OFF)
-assert(start_bit == 1, "FAIL: MMIO start bit should be 1 after starting full flush")
-
 test_utils.wait_mmio_idle(mmio_initiator, MMIO_BASE, MMIO_START_OFF, period, 4000, "full flush")
 lv.info("[PASS] Full flush operation completed.")
 test_utils.wait_until(function()

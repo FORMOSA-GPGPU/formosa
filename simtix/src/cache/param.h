@@ -60,6 +60,12 @@ struct Param {
   // Atomic requests bypass when false and serialize at this cache when true.
   bool atomic_linearization = false;
 
+  // Low bits of the line address skipped when computing the set index.
+  // 0 indexes consecutive lines into consecutive sets. A non-zero value
+  // skips that many bits after the block offset, which is the generic
+  // mapping used when those bits identify an interleaved destination.
+  size_t set_index_shift = 0;
+
   // Trace config
   bool pftrace = false;
   std::optional<std::string> konata_trace_out = std::nullopt;
@@ -124,6 +130,9 @@ struct Param {
           "Non-cacheable regions (whole cache lines; empty entries ignored)"),
       LV_FIELD(atomic_linearization,
                "Serialize atomic requests at this cache level"),
+      LV_FIELD(set_index_shift,
+               "Low bits of the line address skipped when computing the set "
+               "index"),
       LV_FIELD(pftrace, "Enable Perfetto trace"),
       LV_FIELD(konata_trace_out, "Output path for Konata trace (optional)"));
 };

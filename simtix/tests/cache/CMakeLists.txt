@@ -44,6 +44,7 @@ function(add_simtix_cache_systemc_test NAME)
 
   target_link_libraries(${TARGET}
     PRIVATE simtix
+    PRIVATE libilha
   )
 
   add_test(
@@ -74,7 +75,7 @@ add_simtix_cache_systemc_test(cache_module_memory_response
   cache_module_memory_response_test.cc)
 add_simtix_cache_systemc_test(cache_module_hazard cache_module_hazard_test.cc)
 add_simtix_cache_systemc_test(cache_module_atomic cache_module_atomic_test.cc)
-add_simtix_cache_systemc_test(cache_module_mmio cache_module_mmio_test.cc)
+add_simtix_cache_systemc_test(cache_module_command cache_module_command_test.cc)
 add_simtix_cache_systemc_test(cache_module_watchdog cache_module_watchdog_test.cc)
 
 add_custom_target(simtix_cache_cache_module_test
@@ -83,7 +84,7 @@ add_custom_target(simtix_cache_cache_module_test
     simtix_cache_cache_module_memory_response_test
     simtix_cache_cache_module_hazard_test
     simtix_cache_cache_module_atomic_test
-    simtix_cache_cache_module_mmio_test
+    simtix_cache_cache_module_command_test
     simtix_cache_cache_module_watchdog_test
 )
 
@@ -103,6 +104,8 @@ add_simtix_cache_lua_test(cache_read cache_read.lua)
 add_simtix_cache_lua_test(cache_non_cacheable cache_non_cacheable.lua)
 add_simtix_cache_lua_test(cache_flush cache_flush.lua)
 add_simtix_cache_lua_test(cache_invalidate cache_invalidate.lua)
+add_simtix_cache_lua_test(cache_banked_mmio banked_cache_mmio.lua)
+add_simtix_cache_lua_test(cache_banked banked_cache.lua)
 
 # cache_write: only fifo/lru (exclude random)
 foreach(REPL IN LISTS REPLACEMENT_POLICIES_NO_RANDOM)

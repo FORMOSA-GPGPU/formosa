@@ -14,7 +14,8 @@
 ---@field protected _dmem_xbar simple.XBar
 ---@field protected _local_mem simtix.AtomicMemory
 ---@field protected _l1cache simtix.Cache
----@field protected _stub_cache ilha.StubCacheMmio
+---@field protected _icache_controller ilha.CacheController
+---@field protected _dcache_controller ilha.CacheController
 ---@field protected _wg_init ilha.WGInitializer
 ---@field protected _core_info simple.ConstantTable
 ---@field protected _stack_remap simple.DummyTarget
@@ -60,9 +61,15 @@ function AtomicSM.new(name, id, config, sm_param)
     size = addr.lmem_size,
   })
 
-  self._stub_cache = ilha.StubCacheMmio("StubCache", {
+  self._icache_controller = ilha.CacheController("ICacheController", {
     verbose = false,
+    num_banks = 0,
   })
+  self._dcache_controller = ilha.CacheController("DCacheController", {
+    verbose = false,
+    num_banks = 1,
+  })
+  self._dcache_controller.bank = self._l1cache.cmd_port
 
   self._wg_init = ilha.WGInitializer("wg_init", {
     warps_per_core = config.warps_per_core,
@@ -85,7 +92,7 @@ function AtomicSM.new(name, id, config, sm_param)
 
   self._router = simple.XBar("SMRouter", 1, {
     { addr = addr.wgi_csr_base, size = addr.wgi_csr_size }, -- WGInit
-    { addr = addr.icache_csr_base, size = addr.cache_csr_size }, -- StubCache (I-Cache)
+    { addr = addr.icache_csr_base, size = addr.cache_csr_size }, -- CacheController (I-Cache)
     { addr = addr.dcache_csr_base, size = addr.cache_csr_size }, -- L1Cache (D-Cache)
     { addr = addr.core_csr_base, size = addr.core_csr_size }, -- Core Info Read-only
     {
@@ -95,8 +102,8 @@ function AtomicSM.new(name, id, config, sm_param)
   })
 
   self._router.mem_side[1].target = self._wg_init.port
-  self._router.mem_side[2].target = self._stub_cache.mmio_port
-  self._router.mem_side[3].target = self._l1cache.mmio_port
+  self._router.mem_side[2].target = self._icache_controller.mmio_port
+  self._router.mem_side[3].target = self._dcache_controller.mmio_port
   self._router.mem_side[4].target = self._core_info.port
   self._router.mem_side[5].target = self._stack_remap.port
 
@@ -123,7 +130,8 @@ function AtomicSM:set_clock(clock)
   self._clock = clock
   self._core.clock = clock
   self._router.clock = clock
-  self._stub_cache.clock = clock
+  self._icache_controller.clock = clock
+  self._dcache_controller.clock = clock
   self._l1cache.clock = clock
   self._dmem_xbar.clock = clock
   self._local_mem.clock = clock

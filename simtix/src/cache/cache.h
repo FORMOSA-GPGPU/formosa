@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <ilha/cache_command.h>
 #include <liblv/common/tlm_sink.h>
 #include <liblv/common/tlm_source.h>
 #include <systemc.h>
+#include <tlm_core/tlm_1/tlm_req_rsp/tlm_channels/tlm_req_rsp_channels/tlm_req_rsp_channels.h>
 #include <tlm_core/tlm_2/tlm_generic_payload/tlm_gp.h>
 
 #include <array>
@@ -35,6 +37,9 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   friend class CacheModuleTester;
 
  public:
+  using CacheCommandChannel =
+      tlm::tlm_req_rsp_channel<ilha::CacheCommand, bool>;
+
   sc_in<bool> SC_NAMED(clock);
 
   Cache(const sc_module_name &name, const Param &p);
@@ -44,13 +49,13 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   // Core payloads, including bypass, must fit in one cache line.
   lv::TlmSink *sink() { return &sink_; }
 
-  lv::TlmSink *mmio_sink() { return &mmio_sink_; }
-
   lv::TlmSource *source() { return &source_; }
 
   auto port() const { return &sink_.port; }
 
-  auto mmio_port() const { return &mmio_sink_.port; }
+  tlm::tlm_master_if<ilha::CacheCommand, bool> *cmd_port() {
+    return cmd_channel_.master_export.operator->();
+  }
 
   lv::TlmSource::Target *target() const { return source_.target(); }
 
@@ -83,13 +88,13 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   }
 
  private:
-  enum class MmioOperation : uint64_t {
+  enum class CommandOpcode : uint64_t {
     kNop = 0,
     kFlush = 1,
     kInvalidate = 2,
   };
 
-  struct MmioSequencer {
+  struct CommandSequencer {
     enum class Phase {
       kIdle,
       kWaitPipelineDrain,
@@ -101,17 +106,17 @@ class Cache : public sc_module, public PacketLifecycleIntf {
     bool IsBusy() const { return phase != Phase::kIdle; }
     void Reset() {
       phase = Phase::kIdle;
-      operation = MmioOperation::kNop;
+      opcode = CommandOpcode::kNop;
       full_cache = false;
       scan_address = 0;
       end_address = 0;
       scan_index = 0;
       entry_count = 0;
     }
-    void Start(MmioOperation new_operation, uint64_t address, uint64_t size,
+    void Start(CommandOpcode new_opcode, uint64_t address, uint64_t size,
                size_t block_size, size_t new_entry_count) {
       assert(!IsBusy());
-      operation = new_operation;
+      opcode = new_opcode;
       full_cache = size == 0;
       scan_index = 0;
       entry_count = new_entry_count;
@@ -127,12 +132,12 @@ class Cache : public sc_module, public PacketLifecycleIntf {
         end_address = rounded;
       }
 
-      phase = operation == MmioOperation::kNop ? Phase::kComplete
-                                               : Phase::kWaitPipelineDrain;
+      phase = opcode == CommandOpcode::kNop ? Phase::kComplete
+                                            : Phase::kWaitPipelineDrain;
     }
 
     Phase phase = Phase::kIdle;
-    MmioOperation operation = MmioOperation::kNop;
+    CommandOpcode opcode = CommandOpcode::kNop;
     bool full_cache = false;
     uint64_t scan_address = 0;
     uint64_t end_address = 0;
@@ -181,7 +186,6 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   struct WatchdogSnapshot {
     int core_req = 0;
     int core_resp = 0;
-    int mmio_resp = 0;
     int tag_array_resp = 0;
     int mshr_file_mem_req = 0;
     int mshr_file_refill_notify = 0;
@@ -203,11 +207,11 @@ class Cache : public sc_module, public PacketLifecycleIntf {
     size_t victim_buffer_committed_entries = 0;
     size_t victim_buffer_inflight_entries = 0;
     bool atomic_busy = false;
-    bool mmio_busy = false;
-    MmioSequencer::Phase mmio_phase = MmioSequencer::Phase::kIdle;
-    uint64_t mmio_start = 0;
-    uint64_t mmio_scan_address = 0;
-    size_t mmio_scan_index = 0;
+    bool cmd_busy = false;
+    CommandSequencer::Phase cmd_phase = CommandSequencer::Phase::kIdle;
+    uint64_t cmd_active = 0;
+    uint64_t cmd_scan_address = 0;
+    size_t cmd_scan_index = 0;
   };
 
   struct DeadlockWatchdog {
@@ -227,26 +231,22 @@ class Cache : public sc_module, public PacketLifecycleIntf {
 
   void Tick();
   void AcceptCoreRequest();
-  void AcceptMmioRequest();
+  void AcceptCommand();
   void AcceptMemResponse();
   void ValidateMemoryResponseOrFatal(
       const Packet *packet, const tlm::tlm_generic_payload *transaction) const;
   void AccessTagArrayStage();
   void AccessDataArrayStage();
   void SendCoreResponse();
-  void SendMmioResponse();
   void SendMemRequest();
 
   // Helper
-  void HandleMmioRequest(tlm::tlm_generic_payload *payload);
-  uint64_t ReadMmioRegister(uint64_t offset) const;
-  void WriteMmioRegister(uint64_t offset, uint64_t value);
-  void StartMmioSequencer();
-  void AdvanceMmioSequencer();
+  void StartCommandSequencer();
+  void AdvanceCommandSequencer();
   bool HasPendingPipelineWork() const;
-  bool HasPendingMmioWritebackWork() const;
-  bool TryAdvanceMmioScan();
-  bool TryIssueMmioFlushWriteback(const TagArray::DirtyLine &line);
+  bool HasPendingCommandWritebackWork() const;
+  bool TryAdvanceCommandScan();
+  bool TryIssueCommandFlushWriteback(const TagArray::DirtyLine &line);
   bool IsNonCacheableRequest(const tlm::tlm_generic_payload &payload) const;
   bool IsAtomicRequest(const tlm::tlm_generic_payload &payload) const;
   bool IsValidAtomicRequest(const tlm::tlm_generic_payload &payload) const;
@@ -291,17 +291,16 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   bool HasWatchdogPendingWork(const WatchdogSnapshot &snapshot) const;
   static bool WatchdogSnapshotsEqual(const WatchdogSnapshot &lhs,
                                      const WatchdogSnapshot &rhs);
-  static const char *MmioOperationName(MmioOperation operation);
-  static const char *MmioPhaseName(MmioSequencer::Phase phase);
+  static const char *CommandOpcodeName(CommandOpcode opcode);
+  static const char *CommandPhaseName(CommandSequencer::Phase phase);
 
   // Configs
   const Param config_;
   const std::vector<NonCacheableEntry> non_cacheable_regions_;
 
   // Ports
-  lv::TlmSink sink_;       // core side port
-  lv::TlmSink mmio_sink_;  // mmio port
-  lv::TlmSource source_;   // memory side port
+  lv::TlmSink sink_;      // core side port
+  lv::TlmSource source_;  // memory side port
   mutable Stats stats_;
 
   // Cache packet
@@ -320,7 +319,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   // Pipelined queues
   tlm::tlm_fifo<Packet *> core_req_queue_;
   tlm::tlm_fifo<Packet *> core_resp_queue_;
-  tlm::tlm_fifo<tlm::tlm_generic_payload *> mmio_resp_queue_;
+  CacheCommandChannel cmd_channel_;
 
   tlm::tlm_fifo<Packet *> tag_array_resp_queue_;
 
@@ -340,18 +339,18 @@ class Cache : public sc_module, public PacketLifecycleIntf {
 
   AtomicSequencer atomic_sequencer_;
 
-  // MMIO
-  MmioSequencer mmio_sequencer_;
-  // MMIO control registers
-  uint64_t mmio_start_ = 0;
-  uint64_t mmio_addr_ = 0;
-  uint64_t mmio_size_ = 0;
-  MmioOperation mmio_op_ = MmioOperation::kNop;
-  // Log counters for MMIO sequencer phases
+  // Cache maintenance
+  CommandSequencer cmd_sequencer_;
+  // Active maintenance command
+  uint64_t cmd_active_ = 0;
+  uint64_t cmd_addr_ = 0;
+  uint64_t cmd_size_ = 0;
+  CommandOpcode cmd_opcode_ = CommandOpcode::kNop;
+  // Log counters for command sequencer phases
   // Tracks pipeline drain wait cycles
-  uint64_t mmio_pipeline_wait_log_count_ = 0;
+  uint64_t cmd_pipeline_wait_log_count_ = 0;
   // Tracks writeback drain wait cycles
-  uint64_t mmio_writeback_wait_log_count_ = 0;
+  uint64_t cmd_writeback_wait_log_count_ = 0;
 
   uint64_t progress_epoch_ = 0;
   DeadlockWatchdog deadlock_watchdog_;

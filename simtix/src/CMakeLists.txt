@@ -6,7 +6,7 @@ add_library(simtix STATIC
   cache/cache.cc
   cache/cache_hazard.cc
   cache/cache_logging.cc
-  cache/cache_mmio.cc
+  cache/cache_command.cc
   cache/cache_watchdog.cc
   cache/mshr_file.cc
   cache/write_buffer.cc

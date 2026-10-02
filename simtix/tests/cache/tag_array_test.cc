@@ -25,7 +25,8 @@ using simtix::cache::WriteHitPolicy;
 
 Param MakeParam(size_t cache_size, size_t block_size, size_t ways,
                 ReplacementPolicy replacement_policy,
-                WriteHitPolicy write_hit_policy, uint64_t random_seed = 0) {
+                WriteHitPolicy write_hit_policy, uint64_t random_seed = 0,
+                size_t set_index_shift = 0) {
   Param param;
   param.cache_size_bytes = cache_size;
   param.block_size_bytes = block_size;
@@ -33,6 +34,7 @@ Param MakeParam(size_t cache_size, size_t block_size, size_t ways,
   param.replacement_policy = replacement_policy;
   param.write_hit_policy = write_hit_policy;
   param.random_seed = random_seed;
+  param.set_index_shift = set_index_shift;
   return param;
 }
 
@@ -553,6 +555,39 @@ SCENARIO("Tag array refill does not evict locked entries",
           CHECK_FALSE(driver.CoreReq(addr_a).packet()->is_hit);
           CHECK(driver.CoreReq(addr_b).packet()->is_hit);
         }
+      }
+    }
+  }
+}
+
+SCENARIO("Tag array set index can skip low line-address bits",
+         "[cache][tag_array]") {
+  GIVEN("a two-set array that skips two bits after the block offset") {
+    TagArray tag_array(MakeParam(256, 64, 2, ReplacementPolicy::kFIFO,
+                                 WriteHitPolicy::kWriteBack, 0, 2));
+    TagArrayTester driver(tag_array);
+    const uint64_t addr_a = 0x00;
+    const uint64_t addr_b = 0x40;
+    const uint64_t addr_c = 0x100;
+
+    REQUIRE(driver.ToLineAddress(addr_a) != driver.ToLineAddress(addr_b));
+    REQUIRE(driver.ToSetIndex(addr_a) == driver.ToSetIndex(addr_b));
+    REQUIRE(driver.ToSetIndex(addr_c) != driver.ToSetIndex(addr_a));
+
+    WHEN("two lines that differ only in the skipped bits are refilled") {
+      auto refill_a = driver.Refill(addr_a);
+      auto refill_b = driver.Refill(addr_b);
+
+      THEN("both occupy the same set as distinct tags") {
+        CHECK(refill_a.packet()->is_hit);
+        CHECK(refill_b.packet()->is_hit);
+        CHECK(refill_a.packet()->location.set == driver.ToSetIndex(addr_a));
+        CHECK(refill_b.packet()->location.set == driver.ToSetIndex(addr_b));
+        CHECK(refill_a.packet()->location.way !=
+              refill_b.packet()->location.way);
+        CHECK(driver.CoreReq(addr_a).packet()->is_hit);
+        CHECK(driver.CoreReq(addr_b).packet()->is_hit);
+        CHECK_FALSE(driver.CoreReq(addr_c).packet()->is_hit);
       }
     }
   }

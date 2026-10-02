@@ -44,18 +44,29 @@ local mmio_initiator_no_pf = simple.Initiator("mmio_initiator_no_pf")
 local memory_pf = simple.Memory("memory_pf", { size = MEM_SIZE, latency = MEM_LATENCY })
 local memory_no_pf = simple.Memory("memory_no_pf", { size = MEM_SIZE, latency = MEM_LATENCY })
 
+local cache_controller_pf = ilha.CacheController("cache_controller_pf", {
+  num_banks = 1,
+})
+local cache_controller_no_pf = ilha.CacheController("cache_controller_no_pf", {
+  num_banks = 1,
+})
+
 initiator_pf.target = cache_pf.port
 cache_pf.target = memory_pf.port
 initiator_no_pf.target = cache_no_pf.port
 cache_no_pf.target = memory_no_pf.port
-mmio_initiator_pf.target = cache_pf.mmio_port
-mmio_initiator_no_pf.target = cache_no_pf.mmio_port
+mmio_initiator_pf.target = cache_controller_pf.mmio_port
+cache_controller_pf.bank = cache_pf.cmd_port
+mmio_initiator_no_pf.target = cache_controller_no_pf.mmio_port
+cache_controller_no_pf.bank = cache_no_pf.cmd_port
 
 initiator_pf.clock = clock
 cache_pf.clock = clock
+cache_controller_pf.clock = clock
 memory_pf.clock = clock
 initiator_no_pf.clock = clock
 cache_no_pf.clock = clock
+cache_controller_no_pf.clock = clock
 memory_no_pf.clock = clock
 mmio_initiator_pf.clock = clock
 mmio_initiator_no_pf.clock = clock

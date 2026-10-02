@@ -2,6 +2,7 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
+local BankedCache = require("simtix.banked_cache")
 local BankedMemory = require("simtix.banked_memory")
 
 ---@class simtix.pipelined_sm.lsu_config
@@ -10,7 +11,7 @@ local BankedMemory = require("simtix.banked_memory")
 ---@class simtix.pipelined_sm.param
 ---@field core? simtix.PipelinedCore.Param
 ---@field icache? simtix.Cache.Param
----@field dcache? simtix.Cache.Param
+---@field dcache? simtix.banked_cache.param
 ---@field num_lmem_banks? integer
 ---@field scheduler? "lrr"|"gto"|"tl"
 ---@field scheduler_config? simtix.TwoLevel.Param
@@ -24,8 +25,8 @@ local BankedMemory = require("simtix.banked_memory")
 ---@field protected _router simple.XBar
 ---@field protected _core simtix.PipelinedCore
 ---@field protected _icache simtix.Cache
----@field protected _dcache simtix.Cache
----@field protected _dmem_mux simple.Mux
+---@field protected _icache_controller ilha.CacheController
+---@field protected _dcache simtix.BankedCache
 ---@field protected _dmem_xbars simple.XBar[]
 ---@field protected _local_mem simtix.BankedMemory
 ---@field protected _mux simple.Mux
@@ -52,7 +53,7 @@ function PipelinedSM.new(name, id, config, sm_param)
   local icache_param = sm_param.icache or {}
   icache_param.block_size_bytes = icache_param.block_size_bytes or config.cache_block_size
 
-  ---@type simtix.Cache.Param
+  ---@type simtix.banked_cache.param
   local dcache_param = sm_param.dcache or {}
   dcache_param.block_size_bytes = dcache_param.block_size_bytes or config.cache_block_size
   dcache_param.non_cacheable_regions = config:effective_non_cacheable_regions()
@@ -68,10 +69,17 @@ function PipelinedSM.new(name, id, config, sm_param)
   self._core = simtix.PipelinedCore("PipelinedCore", core_param, pipe_param)
   local num_subcores = #self._core.subcores
 
-  self._icache = simtix.Cache("ICache", icache_param)
-  self._dcache = simtix.Cache("DCache", dcache_param)
+  -- D-cache is mastered by every subcore.
+  dcache_param.num_froms = num_subcores
+  dcache_param.total_size = dcache_param.total_size or (addr.max_size + 1)
+  dcache_param.num_banks = dcache_param.num_banks or num_subcores
 
-  self._dmem_mux = simple.Mux("DCacheMux", { fifo_size = 32 })
+  self._icache = simtix.Cache("ICache", icache_param)
+  self._icache_controller = ilha.CacheController("ICacheController", {
+    num_banks = 1,
+  })
+  self._icache_controller.bank = self._icache.cmd_port
+  self._dcache = BankedCache("DCache", dcache_param)
   -- SM-private data map: LMEM, then identity map for on-chip GMEM / DDR.
   -- Cutover is local_mem_window (64 KiB), not sizeof usable LMEM (48 KiB).
   local lmem_window = addr.lmem_window
@@ -130,13 +138,12 @@ function PipelinedSM.new(name, id, config, sm_param)
 
   -- Connections
   self._router.mem_side[1].target = self._wg_init.port
-  self._router.mem_side[2].target = self._icache.mmio_port
+  self._router.mem_side[2].target = self._icache_controller.mmio_port
   self._router.mem_side[3].target = self._dcache.mmio_port
   self._router.mem_side[4].target = self._core_info.port
   self._router.mem_side[5].target = self._stack_remap.mmio_port
 
   self._core.imem = self._icache.port
-  self._dmem_mux.to = self._dcache.port
 
   -- Subcore (backends) configuration
   local scheduler = sm_param.scheduler or "tl"
@@ -207,10 +214,12 @@ function PipelinedSM.new(name, id, config, sm_param)
         })
       end
     )
+    -- Each DMemXBar is a BankedCache master so address interleave happens
+    -- before miss serialization. BankedCache muxes bank misses into one stream.
     local dmem_xbar = self._dmem_xbars[i]
     self._core.subcores[i].dmem = dmem_xbar.core_side[1].port
     dmem_xbar.mem_side[1].target = self._local_mem.port
-    dmem_xbar.mem_side[2].target = self._dmem_mux.from
+    dmem_xbar.mem_side[2].target = self._dcache.port
   end
 
   self._wg_init.warp_ctrl_target = self._core.warp_ctrl
@@ -220,6 +229,7 @@ function PipelinedSM.new(name, id, config, sm_param)
   self.stats:add_sub_group(self._core.stats)
   self.stats:add_sub_group(self._icache.stats)
   self.stats:add_sub_group(self._dcache.stats)
+  self.stats:add_sub_group(self._local_mem.stats)
 
   self._icache.target = self._mux.from
   self._dcache.target = self._mux.from
@@ -231,6 +241,7 @@ function PipelinedSM:set_clock(clock)
   self._clock = clock
   self._core.clock = clock
   self._icache.clock = clock
+  self._icache_controller.clock = clock
   self._dcache.clock = clock
   for _, dmem_xbar in ipairs(self._dmem_xbars) do
     dmem_xbar.clock = clock

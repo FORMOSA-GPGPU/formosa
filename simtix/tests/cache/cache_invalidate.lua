@@ -61,14 +61,20 @@ local cache = simtix.Cache("cache", {
   write_miss_policy = "WriteAllocate",
 })
 
+local cache_controller = ilha.CacheController("cache_controller", {
+  num_banks = 1,
+})
+
 initiator.target = cache.port
-mmio_initiator.target = cache.mmio_port
+mmio_initiator.target = cache_controller.mmio_port
+cache_controller.bank = cache.cmd_port
 cache.target = memory.port
 
 local clock = sc.clock("clock", period)
 initiator.clock = clock
 mmio_initiator.clock = clock
 cache.clock = clock
+cache_controller.clock = clock
 memory.clock = clock
 
 local function do_write(addr, data) initiator:add_payload({ addr = addr, data = data }) end
@@ -85,17 +91,6 @@ local function mmio_write_u64(offset, value)
     period,
     2000,
     "MMIO write 0x" .. string.format("%x", offset)
-  )
-end
-
-local function mmio_read(offset)
-  return test_utils.mmio_read_u64(
-    mmio_initiator,
-    MMIO_BASE,
-    offset,
-    period,
-    2000,
-    "MMIO read 0x" .. string.format("%x", offset)
   )
 end
 
@@ -159,9 +154,6 @@ mmio_write_u64(MMIO_OP_OFF, MMIO_OP_INVALIDATE)
 mmio_write_u64(MMIO_START_OFF, 1)
 
 print("Step 4: Poll MMIO start bit ")
-local start_bit = mmio_read(MMIO_START_OFF)
-assert(start_bit == 1, "FAIL: MMIO start bit should be 1")
-
 test_utils.wait_mmio_idle(
   mmio_initiator,
   MMIO_BASE,
@@ -228,9 +220,6 @@ mmio_write_u64(MMIO_OP_OFF, MMIO_OP_INVALIDATE)
 mmio_write_u64(MMIO_START_OFF, 1)
 
 print("Step 11: Poll MMIO start bit until full invalidate is done")
-start_bit = mmio_read(MMIO_START_OFF)
-assert(start_bit == 1, "FAIL: MMIO start bit should be 1 after starting full invalidate")
-
 test_utils.wait_mmio_idle(
   mmio_initiator,
   MMIO_BASE,

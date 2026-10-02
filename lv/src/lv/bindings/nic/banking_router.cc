@@ -6,7 +6,6 @@
 
 #include "banking_router.h"
 
-#include <fmt/format.h>
 #include <liblv/binding.h>
 #include <liblv/output.h>
 
@@ -21,6 +20,7 @@ BankingRouter::BankingRouter(const sc_core::sc_module_name &name,
       num_froms_(param.num_froms),
       num_banks_(param.num_tos),
       bank_line_size_(param.bank_line_size),
+      preserve_original_address_(param.preserve_original_address),
       peq_fw_("peq_fw"),
       peq_bw_("peq_bw") {
   if (num_banks_ == 0) {
@@ -108,12 +108,12 @@ void BankingRouter::HandleRequest() {
       // Record original address.
       trans_mas_sla_[trans].orig_addr = addr;
 
-      // Get Bank ID and bank-local address.
+      // Bank selection always uses the interleaved bank-id field. Downstream
+      // requests keep the original address unless conversion is requested.
       auto s_id = ToBankId(addr);
-      auto local_addr = ToBankLocalAddress(addr);
-
-      // Update address to the bank-local address.
-      trans->set_address(local_addr);
+      if (!preserve_original_address_) {
+        trans->set_address(ToBankLocalAddress(addr));
+      }
 
       auto m_id = trans_mas_sla_[trans].m_id;
       trans_mas_sla_[trans].s_id = s_id;
@@ -192,8 +192,10 @@ unsigned int BankingRouter::transport_dbg(int id,
                                           tlm::tlm_generic_payload &trans) {
   auto address = trans.get_address();
   auto bank_id = ToBankId(address);
-  auto phy_addr = ToBankLocalAddress(address);
-  trans.set_address(phy_addr);
+
+  if (!preserve_original_address_) {
+    trans.set_address(ToBankLocalAddress(address));
+  }
   unsigned int result = to[bank_id]->transport_dbg(trans);
   trans.set_address(address);
   return result;

@@ -12,7 +12,10 @@
 namespace simtix::cache {
 
 TagArray::TagArray(const Param &p)
-    : config_(p), num_sets_(p.GetNumSets()), random_engine_(p.random_seed) {
+    : config_(p),
+      num_sets_(p.GetNumSets()),
+      random_engine_(p.random_seed),
+      set_index_shift_(p.set_index_shift) {
   // initialize the tag array
   tag_array_.resize(num_sets_ * config_.ways);
 }

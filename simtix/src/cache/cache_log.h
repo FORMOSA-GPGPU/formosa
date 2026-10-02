@@ -20,7 +20,7 @@
 namespace simtix::cache::cache_log {
 
 enum class Category {
-  kMmio = 0,
+  kCommand = 0,
   kArb,
   kMshr,
   kMem,
@@ -32,8 +32,8 @@ enum class Category {
 
 inline const char *CategoryName(Category category) {
   switch (category) {
-    case Category::kMmio:
-      return "mmio";
+    case Category::kCommand:
+      return "command";
     case Category::kArb:
       return "arb";
     case Category::kMshr:

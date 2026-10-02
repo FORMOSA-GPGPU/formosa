@@ -13,6 +13,8 @@
 #include <tlm_utils/multi_passthrough_target_socket.h>
 #include <tlm_utils/peq_with_get.h>
 
+#include <cstdint>
+#include <limits>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -24,15 +26,22 @@ class BankingRouter : public sc_module {
  public:
   struct Param {
     uint64_t num_froms = 4;
-    uint64_t total_size = 1024;
+    uint64_t total_size = std::numeric_limits<uint64_t>::max();
     uint64_t num_tos = 4;
     uint64_t bank_line_size = 64;
+    // Bank selection still uses the interleaved bank-id field. When true,
+    // downstream requests keep the original address instead of a bank-local
+    // address.
+    bool preserve_original_address = false;
     // clang-format off
     LV_SCHEMA(BankingRouter, Param,
               LV_FIELD(num_froms, "Number of master (from) ports"),
               LV_FIELD(total_size, "Total address space size in bytes"),
               LV_FIELD(num_tos, "Number of bank (to) ports"),
-              LV_FIELD(bank_line_size, "Bank interleave granularity in bytes"))
+              LV_FIELD(bank_line_size, "Bank interleave granularity in bytes"),
+              LV_FIELD(preserve_original_address,
+                       "Keep the original request address after bank selection; "
+                       "do not convert it to a bank-local address"))
     // clang-format on
   };
   using TargetSocket =
@@ -65,6 +74,7 @@ class BankingRouter : public sc_module {
   uint64_t num_froms_;
   uint64_t num_banks_;
   uint64_t bank_line_size_;
+  bool preserve_original_address_;
 
   /* Internal request buffer */
   tlm_utils::peq_with_get<tlm::tlm_generic_payload> peq_fw_;

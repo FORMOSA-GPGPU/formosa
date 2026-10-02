@@ -178,7 +178,6 @@ Cache::Cache(const sc_module_name &name, const Param &p)
       config_(p),
       non_cacheable_regions_(p.non_cacheable_regions),
       sink_("sink"),
-      mmio_sink_("mmio_sink"),
       source_("source"),
       stats_(name),
       packet_pool_(),
@@ -190,7 +189,8 @@ Cache::Cache(const sc_module_name &name, const Param &p)
       victim_buffer_("victim_buffer", p, *this),
       core_req_queue_("core_req_queue", config_.pipeline_queue_size),
       core_resp_queue_("core_resp_queue", config_.pipeline_queue_size),
-      mmio_resp_queue_("mmio_resp_queue", config_.pipeline_queue_size),
+      cmd_channel_("cmd_channel", config_.pipeline_queue_size,
+                   config_.pipeline_queue_size),
       tag_array_resp_queue_("tag_array_resp_queue",
                             config_.pipeline_queue_size),
       mshr_file_mem_req_queue_("mshr_file_mem_req_queue",
@@ -260,16 +260,15 @@ Cache::Cache(const sc_module_name &name, const Param &p)
 void Cache::Tick() {
   BeginDeadlockWatchdogTick();
   // Output stage
-  SendMmioResponse();
   SendCoreResponse();
   SendMemRequest();
   // Data Array stage
   AccessDataArrayStage();
   // Tag Array stage
   AccessTagArrayStage();
-  AdvanceMmioSequencer();
+  AdvanceCommandSequencer();
   // Accept input
-  AcceptMmioRequest();
+  AcceptCommand();
   AcceptCoreRequest();
   AcceptMemResponse();
   CheckDeadlockWatchdog();
@@ -342,9 +341,9 @@ Packet *Cache::AllocateCoreRequestPacket(tlm::tlm_generic_payload *payload) {
 }
 
 void Cache::AcceptCoreRequest() {
-  if (mmio_sequencer_.IsBusy()) {
+  if (cmd_sequencer_.IsBusy()) {
     if (sink_.req_port->num_available() > 0) {
-      MarkBlockReason("mmio_busy", false);
+      MarkBlockReason("command_busy", false);
     }
     return;
   }
@@ -1640,7 +1639,8 @@ LV_BINDING(simtix, Cache)
     .property("sink", &Cache::sink, lv::doc("Core-side TLM sink"))
     .property("source", &Cache::source, lv::doc("Memory-side TLM source"))
     .property("port", &Cache::port, lv::doc("Core-side request port"))
-    .property("mmio_port", &Cache::mmio_port, lv::doc("MMIO target port"))
+    .property("cmd_port", &Cache::cmd_port,
+              lv::doc("Decoded cache-command request/completion interface"))
     .property("target", &Cache::target, &Cache::set_target,
               lv::doc("Memory-side target"))
     .property("stats", &Cache::stats, lv::doc("Statistics group"))

@@ -2,6 +2,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <ilha/cache_command.h>
 #include <systemc.h>
 #include <tlm.h>
 #include <tlm_core/tlm_2/tlm_generic_payload/tlm_gp.h>
@@ -128,34 +129,14 @@ std::vector<uint8_t> U32Bytes(uint32_t value) {
   return bytes;
 }
 
-std::vector<uint8_t> U64Bytes(uint64_t value) {
-  std::vector<uint8_t> bytes(sizeof(value));
-  for (size_t i = 0; i < bytes.size(); ++i) {
-    bytes[i] = static_cast<uint8_t>((value >> (i * 8)) & 0xFF);
-  }
-  return bytes;
-}
-
 uint32_t LoadU32(const std::vector<uint8_t> &bytes, size_t offset = 0) {
   uint32_t value = 0;
   std::memcpy(&value, bytes.data() + offset, sizeof(value));
   return value;
 }
 
-uint64_t LoadU64(const std::vector<uint8_t> &bytes, size_t offset = 0) {
-  uint64_t value = 0;
-  for (size_t i = 0; i < sizeof(value); ++i) {
-    value |= static_cast<uint64_t>(bytes.at(offset + i)) << (i * 8);
-  }
-  return value;
-}
-
-constexpr uint64_t kMmioStartOffset = 0x0;
-constexpr uint64_t kMmioAddrOffset = 0x8;
-constexpr uint64_t kMmioSizeOffset = 0x10;
-constexpr uint64_t kMmioOpOffset = 0x18;
-constexpr uint64_t kMmioFlushOp = 1;
-constexpr uint64_t kMmioInvalidateOp = 2;
+constexpr uint64_t kFlushOpcode = 1;
+constexpr uint64_t kInvalidateOpcode = 2;
 
 std::vector<uint8_t> StoreU32At(std::vector<uint8_t> data, size_t offset,
                                 uint32_t value) {
@@ -230,12 +211,7 @@ class CacheModuleTester {
 
   explicit CacheModuleTester(Cache &dut) : dut_(dut) {}
 
-  void StartMmioOperation(uint64_t operation, uint64_t address, uint64_t size) {
-    dut_.mmio_op_ = static_cast<Cache::MmioOperation>(operation);
-    dut_.mmio_addr_ = address;
-    dut_.mmio_size_ = size;
-    dut_.StartMmioSequencer();
-  }
+  void AcceptQueuedCacheCommand() { dut_.AcceptCommand(); }
 
   void ArmWatchdog(uint64_t threshold_cycles) {
     auto &watchdog = dut_.deadlock_watchdog_;
@@ -645,12 +621,10 @@ class CacheBench : public sc_core::sc_module {
       : sc_core::sc_module(name),
         clock_("clock"),
         core_("core"),
-        mmio_("mmio"),
         memory_("memory"),
         cache_("cache", param) {
     cache_.clock(clock_);
     core_.socket.bind(cache_.sink()->port);
-    mmio_.socket.bind(cache_.mmio_sink()->port);
     cache_.set_target(&memory_.socket);
   }
 
@@ -681,19 +655,8 @@ class CacheBench : public sc_core::sc_module {
     return core_.response_count() >= count;
   }
 
-  bool WaitForMmioResponses(size_t count, size_t max_cycles = 16) {
-    for (size_t cycle = 0; cycle < max_cycles; ++cycle) {
-      if (mmio_.response_count() >= count) {
-        return true;
-      }
-      AdvanceCycle();
-    }
-    return mmio_.response_count() >= count;
-  }
-
   sc_core::sc_signal<bool> clock_;
   CoreEndpoint core_;
-  CoreEndpoint mmio_;
   MemoryEndpoint memory_;
   Cache cache_;
 };
@@ -793,39 +756,47 @@ class CacheModuleTestRunnerBase : public sc_core::sc_module {
     return read;
   }
 
-  void WriteMmio64(CacheBench &bench, uint64_t offset, uint64_t value) {
-    const size_t response_count = bench.mmio_.response_count();
-    auto *write = bench.mmio_.SendWrite(offset, U64Bytes(value));
-    Expect(bench.WaitForMmioResponses(response_count + 1, 32),
-           "MMIO write receives a response");
-    Expect(bench.mmio_.HasResponse(write), "MMIO write response is OK");
+  bool SendCacheCommand(CacheBench &bench, uint64_t opcode, uint64_t address,
+                        uint64_t size) {
+    auto *port = bench.cache_.cmd_port();
+    if (port == nullptr) {
+      FailCurrentBench("cache command port is null");
+      return false;
+    }
+    if (!port->nb_can_put()) {
+      FailCurrentBench("cache command port cannot accept a command");
+      return false;
+    }
+    ilha::CacheCommand command{address, size, opcode};
+    if (!port->nb_put(command)) {
+      FailCurrentBench("cache command port rejected a command");
+      return false;
+    }
+    wait(sc_core::SC_ZERO_TIME);
+    return true;
   }
 
-  uint64_t ReadMmio64(CacheBench &bench, uint64_t offset) {
-    const size_t response_count = bench.mmio_.response_count();
-    auto *read = bench.mmio_.SendRead(offset, sizeof(uint64_t));
-    Expect(bench.WaitForMmioResponses(response_count + 1, 32),
-           "MMIO read receives a response");
-    Expect(bench.mmio_.HasResponse(read), "MMIO read response is OK");
-    return LoadU64(PayloadData(read));
+  bool CacheCommandResponseReady(CacheBench &bench) {
+    auto *port = bench.cache_.cmd_port();
+    return port != nullptr && port->nb_can_get();
   }
 
-  void StartMmioOperation(CacheBench &bench, uint64_t op, uint64_t address,
-                          uint64_t size) {
-    WriteMmio64(bench, kMmioAddrOffset, address);
-    WriteMmio64(bench, kMmioSizeOffset, size);
-    WriteMmio64(bench, kMmioOpOffset, op);
-    WriteMmio64(bench, kMmioStartOffset, 1);
-  }
-
-  bool WaitForMmioIdle(CacheBench &bench, size_t max_polls = 64) {
-    for (size_t poll = 0; poll < max_polls; ++poll) {
-      if (ReadMmio64(bench, kMmioStartOffset) == 0) {
-        return true;
+  bool WaitForCacheCommandResponse(CacheBench &bench, size_t max_cycles = 64) {
+    auto *port = bench.cache_.cmd_port();
+    if (port == nullptr) {
+      FailCurrentBench("cache command port is null");
+      return false;
+    }
+    for (size_t cycle = 0; cycle < max_cycles; ++cycle) {
+      if (port->nb_can_get()) {
+        bool response = false;
+        Expect(port->nb_get(response), "command port completion get succeeds");
+        Expect(response, "command port completion is success");
+        return response;
       }
       bench.AdvanceCycle();
     }
-    return ReadMmio64(bench, kMmioStartOffset) == 0;
+    return false;
   }
 
   std::vector<uint8_t> FillAndDirtyLine(CacheBench &bench, uint64_t address,

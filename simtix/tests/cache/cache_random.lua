@@ -115,12 +115,17 @@ local cache = simtix.Cache("cache", {
 
 local initiator = simple.OutstandingInitiator("initiator")
 local mmio_initiator = simple.Initiator("mmio_initiator")
+local cache_controller = ilha.CacheController("cache_controller", {
+  num_banks = 1,
+})
 
 initiator.target = cache.port
-mmio_initiator.target = cache.mmio_port
+mmio_initiator.target = cache_controller.mmio_port
+cache_controller.bank = cache.cmd_port
 cache.target = memory.port
 mmio_initiator.clock = clock
 cache.clock = clock
+cache_controller.clock = clock
 memory.clock = clock
 
 local trace = {}

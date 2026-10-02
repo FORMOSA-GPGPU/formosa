@@ -43,7 +43,6 @@
 ---@field protected _fab_agent simple.XBar
 ---@field protected _aligner simple.BlockAligner
 ---@field protected _l2cache simtix.Cache
----@field protected _l2cache_dummy_init simple.Initiator
 ---@field protected _gmem simple.Memory
 ---@field protected _dram dramsys.DRAMSys
 ---@field protected _fab_sys simple.XBar
@@ -286,7 +285,6 @@ function System.new(name, config, opts)
   end
 
   -- Global memories
-  self._l2cache_dummy_init = simple.Initiator("l2cache_dummy_init")
   self._l2cache = simtix.Cache("L2Cache", {
     write_hit_policy = "WriteBack",
     cache_size_bytes = shared_cache_size,
@@ -371,11 +369,9 @@ function System.new(name, config, opts)
   self._fab_sys.mem_side[2].target = self._l2cache.port
   self._l2cache.target = self._aligner.from
   self._aligner.to = self._dram.port
-  self._l2cache_dummy_init.target = self._l2cache.mmio_port
   self._gmem.clock = self._clock
   self._fab_sys.clock = self._clock
   self._l2cache.clock = self._clock
-  self._l2cache_dummy_init.clock = self._clock
 
   self.stats = stats.Group("System")
   for _, sm in ipairs(self._sm) do

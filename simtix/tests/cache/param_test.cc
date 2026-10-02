@@ -29,12 +29,14 @@ SCENARIO("Cache Param parses canonical Lua field names", "[cache][param]") {
   table["cache_size_bytes"] = std::size_t{65536};
   table["mshr_entries"] = std::size_t{12};
   table["victim_buffer_entries"] = std::size_t{6};
+  table["set_index_shift"] = std::size_t{2};
 
   const Param param = ParseParam(table);
 
   CHECK(param.cache_size_bytes == 65536);
   CHECK(param.mshr_entries == 12);
   CHECK(param.victim_buffer_entries == 6);
+  CHECK(param.set_index_shift == 2);
 }
 
 SCENARIO("Cache rejects invalid non-cacheable regions", "[cache][param]") {

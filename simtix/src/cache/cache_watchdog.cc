@@ -60,7 +60,6 @@ Cache::WatchdogSnapshot Cache::MakeWatchdogSnapshot() const {
   return WatchdogSnapshot{
       .core_req = core_req_queue_.used(),
       .core_resp = core_resp_queue_.used(),
-      .mmio_resp = mmio_resp_queue_.used(),
       .tag_array_resp = tag_array_resp_queue_.used(),
       .mshr_file_mem_req = mshr_file_mem_req_queue_.used(),
       .mshr_file_refill_notify = mshr_file_refill_notify_queue_.used(),
@@ -82,18 +81,17 @@ Cache::WatchdogSnapshot Cache::MakeWatchdogSnapshot() const {
       .victim_buffer_committed_entries = victim_buffer_.CommittedEntryCount(),
       .victim_buffer_inflight_entries = victim_buffer_.InflightEntryCount(),
       .atomic_busy = atomic_sequencer_.IsBusy(),
-      .mmio_busy = mmio_sequencer_.IsBusy(),
-      .mmio_phase = mmio_sequencer_.phase,
-      .mmio_start = mmio_start_,
-      .mmio_scan_address = mmio_sequencer_.scan_address,
-      .mmio_scan_index = mmio_sequencer_.scan_index,
+      .cmd_busy = cmd_sequencer_.IsBusy(),
+      .cmd_phase = cmd_sequencer_.phase,
+      .cmd_active = cmd_active_,
+      .cmd_scan_address = cmd_sequencer_.scan_address,
+      .cmd_scan_index = cmd_sequencer_.scan_index,
   };
 }
 
 bool Cache::HasWatchdogPendingWork(const WatchdogSnapshot &snapshot) const {
   return snapshot.core_req > 0 || snapshot.core_resp > 0 ||
-         snapshot.mmio_resp > 0 || snapshot.tag_array_resp > 0 ||
-         snapshot.mshr_file_mem_req > 0 ||
+         snapshot.tag_array_resp > 0 || snapshot.mshr_file_mem_req > 0 ||
          snapshot.mshr_file_refill_notify > 0 ||
          snapshot.mshr_file_replay > 0 || snapshot.write_buffer_mem_req > 0 ||
          snapshot.write_buffer_mem_req_out > 0 ||
@@ -102,13 +100,12 @@ bool Cache::HasWatchdogPendingWork(const WatchdogSnapshot &snapshot) const {
          snapshot.line_escape_hazards > 0 || snapshot.mshr_pending ||
          snapshot.mshr_replay || snapshot.write_buffer_pending ||
          snapshot.victim_buffer_pending || snapshot.atomic_busy ||
-         snapshot.mmio_busy;
+         snapshot.cmd_busy;
 }
 
 bool Cache::WatchdogSnapshotsEqual(const WatchdogSnapshot &lhs,
                                    const WatchdogSnapshot &rhs) {
   return lhs.core_req == rhs.core_req && lhs.core_resp == rhs.core_resp &&
-         lhs.mmio_resp == rhs.mmio_resp &&
          lhs.tag_array_resp == rhs.tag_array_resp &&
          lhs.mshr_file_mem_req == rhs.mshr_file_mem_req &&
          lhs.mshr_file_refill_notify == rhs.mshr_file_refill_notify &&
@@ -132,10 +129,10 @@ bool Cache::WatchdogSnapshotsEqual(const WatchdogSnapshot &lhs,
              rhs.victim_buffer_committed_entries &&
          lhs.victim_buffer_inflight_entries ==
              rhs.victim_buffer_inflight_entries &&
-         lhs.atomic_busy == rhs.atomic_busy && lhs.mmio_busy == rhs.mmio_busy &&
-         lhs.mmio_phase == rhs.mmio_phase && lhs.mmio_start == rhs.mmio_start &&
-         lhs.mmio_scan_address == rhs.mmio_scan_address &&
-         lhs.mmio_scan_index == rhs.mmio_scan_index;
+         lhs.atomic_busy == rhs.atomic_busy && lhs.cmd_busy == rhs.cmd_busy &&
+         lhs.cmd_phase == rhs.cmd_phase && lhs.cmd_active == rhs.cmd_active &&
+         lhs.cmd_scan_address == rhs.cmd_scan_address &&
+         lhs.cmd_scan_index == rhs.cmd_scan_index;
 }
 
 void Cache::CheckDeadlockWatchdog() {

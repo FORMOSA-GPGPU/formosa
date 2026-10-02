@@ -249,11 +249,21 @@ local config = {
       paths = { "simtix/lua/banked_memory.lua" },
       depends = { "simtix.mem", "lv.lua", "lv.bindings.nic" },
     },
+    ["simtix.banked_cache"] = {
+      paths = { "simtix/lua/banked_cache.lua" },
+      depends = {
+        "simtix.cache",
+        "lv.lua",
+        "ilha.platform",
+        "lv.bindings.nic",
+        "lv.bindings.simple",
+      },
+    },
     ["simtix.pipelined_sm"] = {
       paths = { "simtix/lua/pipelined_sm.lua" },
       depends = {
         "simtix.pipelined_core",
-        "simtix.cache",
+        "simtix.banked_cache",
         "simtix.banked_memory",
         "lv.lua",
         "ilha.platform",
@@ -444,10 +454,12 @@ local config = {
     ["simtix.cache.unit"] = {
       depends = {
         "simtix.cache",
+        "simtix.banked_cache",
         "simtix.tests.cache",
         "lv.executable",
         "lv.bindings.simple",
         "lv.bindings.systemc",
+        "ilha.platform",
       },
       adapters = {
         cmake = {
