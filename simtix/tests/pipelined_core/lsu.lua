@@ -28,13 +28,10 @@ local tester = simtix.LsuTester("tester", param)
 tester:lsu_init(function(name)
   if args.lsu == "simple" then
     return simtix.SimpleLsu(name, param)
-  elseif args.lsu == "coalescing" then
-    return simtix.CoalescingLsu(name, param, {
-      enable_stack_remap = false, -- Disable stack remap for testing
-    })
   elseif args.lsu == "coalescing_outstanding" then
     return simtix.CoalescingOutstandingLsu(name, param, {
       enable_stack_remap = false, -- Disable stack remap for testing
+      num_inflight_slots = 4,
     })
   else
     error("Unknown LSU: " .. tostring(args.lsu))

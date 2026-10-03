@@ -178,19 +178,18 @@ foreach(nw ${WARPS_LIST})
   endforeach() # end ns
 endforeach() # end nw
 
-set(LSU_LIST "simple" "coalescing" "coalescing_outstanding")
 set(LSU_LANES_LIST 4 8 32 64)
-foreach(lsu ${LSU_LIST})
+foreach(lsu "simple" "coalescing_outstanding")
   foreach(nl ${LSU_LANES_LIST})
-    set(test_name "pipelined_${lsu}_lsu_l${nl}")
-    set(test_args
-      "--lsu" "${lsu}"
-      "--num-lanes" "${nl}"
-      "--total-iter" "1000"
-    )
-    add_simtix_unit_test(${test_name} lsu.lua ARGS ${test_args})
+    if(lsu STREQUAL "simple")
+      add_simtix_unit_test(pipelined_simple_lsu_l${nl} lsu.lua ARGS
+        "--lsu" "simple" "--num-lanes" "${nl}" "--total-iter" "1000")
+    else()
+      add_simtix_unit_test(pipelined_coalescing_outstanding_lsu_l${nl}_o4
+        lsu.lua ARGS "--lsu" "coalescing_outstanding" "--num-lanes" "${nl}"
+        "--total-iter" "1000")
+    endif()
   endforeach()
 endforeach()
 
-add_simtix_unit_test(pipelined_coalescing_lsu_deterministic lsu_coalescing.lua)
-add_simtix_unit_test(pipelined_coalescing_lsu_outstanding lsu_outstanding.lua)
+add_simtix_unit_test(pipelined_coalescing_lsu_deterministic lsu_outstanding.lua)

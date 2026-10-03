@@ -15,7 +15,7 @@ local BankedMemory = require("simtix.banked_memory")
 ---@field num_lmem_banks? integer
 ---@field scheduler? "lrr"|"gto"|"tl"
 ---@field scheduler_config? simtix.TwoLevel.Param
----@field lsu? "simple"|"coalescing"|"coalescing_outstanding"
+---@field lsu? "simple"|"coalescing_outstanding"
 ---@field lsu_config? simtix.pipelined_sm.lsu_config
 
 ---@class simtix.pipelined_sm : ilha.system.sm
@@ -187,9 +187,7 @@ function PipelinedSM.new(name, id, config, sm_param)
         stack_size_per_thread = addr.per_thread_stack_size,
       }
       local lsu
-      if lsu_kind == "coalescing" then
-        lsu = simtix.CoalescingLsu(name, core_param, lsu_param)
-      elseif lsu_kind == "coalescing_outstanding" then
+      if lsu_kind == "coalescing_outstanding" then
         lsu_param.num_inflight_slots = lsu_config.num_inflight_slots
         lsu = simtix.CoalescingOutstandingLsu(name, core_param, lsu_param)
       else
