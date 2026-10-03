@@ -18,7 +18,8 @@ stdenv.mkDerivation {
   configurePhase = ''
     ./configure --prefix=$out \
     --target=riscv64-unknown-elf \
-    CC_FOR_TARGET="${formosa-llvm}/bin/clang -mcpu=formosa-gpgpu -mabi=lp64 \
+    CC_FOR_TARGET="${formosa-llvm}/bin/clang --target=riscv64-unknown-elf \
+    -mcpu=formosa-gpgpu -mabi=lp64 \
     -mno-relax -mcmodel=medany \
     -Wno-error-implicit-function-declaration \
     -Wno-unused-command-line-argument \

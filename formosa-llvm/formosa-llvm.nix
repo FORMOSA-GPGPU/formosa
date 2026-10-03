@@ -15,9 +15,8 @@ stdenv.mkDerivation {
           -D CMAKE_INSTALL_PREFIX=$out \
           -D LLVM_ENABLE_PROJECTS="clang;lld;lldb" \
           -D CMAKE_BUILD_TYPE=Release \
-          -D LLVM_DEFAULT_TARGET_TRIPLE=riscv64-unknown-elf \
           -D LLDB_INCLUDE_TESTS=OFF \
-          -D LLVM_TARGETS_TO_BUILD="X86;RISCV;NVPTX" \
+          -D LLVM_TARGETS_TO_BUILD="X86;Native;RISCV;NVPTX" \
           -D BUILD_SHARED_LIBS=ON \
           -D LLDB_ENABLE_LIBEDIT=ON \
           -D LLDB_ENABLE_PYTHON=ON \

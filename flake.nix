@@ -60,12 +60,10 @@
           in (pkgs.callPackage spirvLlvmBase {
             llvm = llvmForTranslator;
           }).overrideAttrs (old: {
-            # formosa-llvm is a monolithic output that bundles clang/clang++
-            # (default target riscv64) in bin, and spirv-llvm-translator puts
-            # llvm.dev on PATH via nativeBuildInputs. On Darwin CMake's compiler
-            # detection then picks up that riscv-default clang as the host
-            # compiler and chokes on the Apple SDK's -arch flag. Pin the host
-            # compiler to the stdenv cc so it isn't shadowed.
+            # formosa-llvm bundles clang/clang++ in bin, and
+            # spirv-llvm-translator puts llvm.dev on PATH via nativeBuildInputs.
+            # Pin the host compiler to stdenv cc so compiler selection does not
+            # depend on the order of build inputs.
             cmakeFlags = (old.cmakeFlags or [ ]) ++ [
               "-DCMAKE_C_COMPILER=${pkgs.stdenv.cc}/bin/cc"
               "-DCMAKE_CXX_COMPILER=${pkgs.stdenv.cc}/bin/c++"
