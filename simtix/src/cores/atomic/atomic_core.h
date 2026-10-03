@@ -19,6 +19,7 @@
 #include "cores/encoding.h"
 #include "cores/exec_flag.h"
 #include "cores/sched/sched.h"
+#include "cores/warp_lane_state.h"
 #include "tlm_extensions/atomic_extension.h"
 
 namespace simtix {
@@ -29,10 +30,7 @@ class AtomicCore : public BaseCore {
       : BaseCore(name, p),
         tmask_(false, num_lanes_),
         wmask_(false, num_warps_),
-        pending_barrier_tmask_(
-            num_warps_, sc_bv_base{false, static_cast<int>((num_lanes_))}),
-        pending_ecall_tmask_(num_warps_,
-                             sc_bv_base{false, static_cast<int>((num_lanes_))}),
+        lane_state_(num_warps_, num_lanes_),
         mem_port_("mem_port"),
         csr_buf_(num_lanes_),
         addr_buf_(num_lanes_),
@@ -150,8 +148,7 @@ class AtomicCore : public BaseCore {
 
   sc_bv_base tmask_;
   sc_bv_base wmask_;
-  std::vector<sc_bv_base> pending_barrier_tmask_;
-  std::vector<sc_bv_base> pending_ecall_tmask_;
+  WarpLaneState lane_state_;
   sc_signal<bool> cmd_ready_;
   uint64_t current_pc_ = 0;
 

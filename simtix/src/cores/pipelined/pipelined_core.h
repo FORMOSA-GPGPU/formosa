@@ -64,7 +64,7 @@ class PipelinedCore : public BaseCore,
 
     // Binding ibuffer to backends
     for (uint32_t i = 0; i < num_warps_; ++i) {
-      uint32_t subcore_id = i % pipe_param.num_subcores;
+      uint32_t subcore_id = get_backend_id(i);
       uint32_t local_wid = i / pipe_param.num_subcores;
       if (pipe_param.enable_ghost_scheduler) {
         ghost_schedulers_[subcore_id].from_frontend[local_wid].bind(
@@ -174,8 +174,10 @@ class PipelinedCore : public BaseCore,
   void CaptureThreadMask(Packet *packet) override {
     packet->tmask = 0;
     uint64_t *ptpc = &ptpc_[packet->wid * num_lanes_];
+    const auto &backend = backends_[get_backend_id(packet->wid)];
     for (uint32_t lane = 0; lane < num_lanes_; ++lane) {
-      packet->tmask[lane] = ptpc[lane] == packet->wpc;
+      packet->tmask[lane] =
+          backend.LaneRunnable(packet->wid, lane) && ptpc[lane] == packet->wpc;
       if (packet->tmask[lane]) {
         ptpc[lane] = packet->wpc + 4;
       }
@@ -210,8 +212,10 @@ class PipelinedCore : public BaseCore,
   pipelined::Stats stats_;
 
  private:
+  uint32_t get_backend_id(uint32_t wid) const { return wid % backends_.size(); }
+
   GhostScheduler &ghost_for(uint32_t wid) {
-    return ghost_schedulers_[wid % backends_.size()];
+    return ghost_schedulers_[get_backend_id(wid)];
   }
 
   void Activate(const sc_dt::sc_bv_base &cwm, uint64_t pc, uint64_t wg_info,

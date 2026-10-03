@@ -101,6 +101,7 @@ void PipelinedCore::Activate(const sc_dt::sc_bv_base &cwm, uint64_t pc,
   uint32_t active_warp_cnt = 0;
   for (int w = 0; w < num_warps_; ++w) {
     if (cwm[w].to_bool()) {
+      backends_[get_backend_id(w)].ResetLaneState(w);
       // Setup the PC of all threads in the warp
       for (int l = 0; l < num_lanes_; ++l) {
         ptpc_[w * num_lanes_ + l] = pc;
@@ -124,10 +125,11 @@ void PipelinedCore::Resume(const sc_dt::sc_bv_base &cwm) {
   assert(cmd_ready_);
   WarpStateTransition(&active_mask_, &barrier_mask_, cwm);
 
-  // For all resumed warp, since they are not active for fetching, the fetch PC
-  // may have already skewed. Sycn them so that they are fetching correctly.
+  // Release waiting lanes without reactivating exited lanes, then sync fetch PC
+  // to the frontend's next PC as before.
   for (int w = 0; w < num_warps_; ++w) {
     if (cwm[w].to_bool()) {
+      backends_[get_backend_id(w)].ClearBarrier(w);
       frontend_.SyncPC(w);
     }
   }

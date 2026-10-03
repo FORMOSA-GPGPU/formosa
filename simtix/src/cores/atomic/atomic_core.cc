@@ -169,33 +169,29 @@ void AtomicCore::MainProc() {
     }
 
     if (HasFlag(flag, ExecFlag::BARRIER)) {
-      pending_barrier_tmask_[wid] |= tmask_;
-
-      if (pending_barrier_tmask_[wid].and_reduce()) {
-        WarpStateTransition(&barrier_mask_, &active_mask_, wmask_);
-        pending_barrier_tmask_[wid] = 0;
-      }
+      lane_state_.ArriveBarrier(wid, tmask_);
       stats_.committed_custom_instr[wid]++;
     }
 
     if (HasFlag(flag, ExecFlag::ECALL)) {
-      pending_ecall_tmask_[wid] |= tmask_;
-
-      if (pending_ecall_tmask_[wid].and_reduce()) {
-        mcause_[wid] = DecodeExceptionCause(flag);
-        mepc_[wid] = wpc;
-        mtval_[wid] = 0;
-        WarpStateTransition(&exception_mask_, &active_mask_, wmask_);
-        pending_ecall_tmask_[wid] = 0;
-      }
+      lane_state_.Exit(wid, tmask_);
       stats_.committed_system_instr[wid]++;
     }
 
+    // The instruction has completed. Resolve warp state in priority order:
+    // non-ECALL exception, all lanes exited, then all live lanes at a barrier.
     if (HasException(flag) && !HasFlag(flag, ExecFlag::ECALL)) {
       mcause_[wid] = DecodeExceptionCause(flag);
       mepc_[wid] = wpc;
       mtval_[wid] = DecodeTrapVal(flag, iword, tmask_, addr_buf_, num_lanes_);
       WarpStateTransition(&exception_mask_, &active_mask_, wmask_);
+    } else if (lane_state_.AllExited(wid)) {
+      mcause_[wid] = DecodeExceptionCause(ExecFlag::ECALL);
+      mepc_[wid] = wpc;
+      mtval_[wid] = 0;
+      WarpStateTransition(&exception_mask_, &active_mask_, wmask_);
+    } else if (lane_state_.BarrierReady(wid)) {
+      WarpStateTransition(&barrier_mask_, &active_mask_, wmask_);
     }
 
     // Done
@@ -257,6 +253,7 @@ void AtomicCore::Activate(const sc_dt::sc_bv_base &cwm, uint64_t pc,
   uint32_t active_warp_cnt = 0;
   for (int w = 0; w < num_warps_; ++w) {
     if (cwm[w].to_bool()) {
+      lane_state_.Reset(w);
       // Setup the PC of all threads in the warp
       for (int l = 0; l < num_lanes_; ++l) {
         ptpc_[w * num_lanes_ + l] = pc;
@@ -277,6 +274,11 @@ void AtomicCore::Activate(const sc_dt::sc_bv_base &cwm, uint64_t pc,
 
 void AtomicCore::Resume(const sc_dt::sc_bv_base &cwm) {
   assert(cmd_ready_);
+  for (uint32_t wid = 0; wid < num_warps_; ++wid) {
+    if (cwm[wid].to_bool()) {
+      lane_state_.ClearBarrier(wid);
+    }
+  }
   WarpStateTransition(&active_mask_, &barrier_mask_, cwm);
 }
 
@@ -298,9 +300,7 @@ uint64_t AtomicCore::ArbitratePC(uint32_t wid) {
   uint8_t max_pri = 0;
   uint8_t *pwpri = &ptpri_[wid * num_lanes_];
   for (uint32_t i = 0; i < num_lanes_; ++i) {
-    /* Skip this thread if it already reaches ecall state. */
-    if (pending_ecall_tmask_[wid][i] == 1 ||
-        pending_barrier_tmask_[wid][i] == 1) {
+    if (!lane_state_.LaneRunnable(wid, i)) {
       continue;
     }
 
@@ -317,7 +317,7 @@ uint64_t AtomicCore::ArbitratePC(uint32_t wid) {
 void AtomicCore::UpdateThreadMask(uint32_t wid, uint64_t wpc) {
   uint64_t *pwpc = &ptpc_[wid * num_lanes_];
   for (uint32_t i = 0; i < num_lanes_; ++i) {
-    tmask_[i] = pwpc[i] == wpc;
+    tmask_[i] = lane_state_.LaneRunnable(wid, i) && pwpc[i] == wpc;
   }
 }
 

@@ -23,6 +23,7 @@
 #include "cores/pipelined/scoreboard.h"
 #include "cores/pipelined/stats.h"
 #include "cores/sched/sched.h"
+#include "cores/warp_lane_state.h"
 #include "cores/warp_mask.h"
 #include "konata/konata.h"
 #include "utils/delay_queue.h"
@@ -80,8 +81,7 @@ class Backend : public sc_module {
         issue_suppressed_warps_(false, p.num_warps),
         scoreboard_(num_local_warps_, pp.num_subcores),
         inflight_counter_(num_local_warps_),
-        pending_barrier_threads_(num_local_warps_, p.num_lanes),
-        pending_ecall_threads_(num_local_warps_, p.num_lanes),
+        lane_state_(num_local_warps_, p.num_lanes),
         pending_ecall_wpc_(num_local_warps_),
         pending_exceptions_(num_local_warps_),
         alu_delay_q_("alu_delay_q_", pp.alu_latency, pp.alu_ticks_per_output),
@@ -156,12 +156,21 @@ class Backend : public sc_module {
 
   Scoreboard *scoreboard() { return &scoreboard_; }
 
+  void ResetLaneState(uint32_t wid) { lane_state_.Reset(get_local_wid(wid)); }
+
+  void ClearBarrier(uint32_t wid) {
+    lane_state_.ClearBarrier(get_local_wid(wid));
+  }
+
+  bool LaneRunnable(uint32_t wid, uint32_t lane) const {
+    return lane_state_.LaneRunnable(get_local_wid(wid), lane);
+  }
+
  private:
   void Tick() {
     issue_suppressed_warps_ = 0;
     ProcessPendingExceptions();
-    ProcessPendingEcalls();
-    ProcessPendingBarriers();
+    ProcessWarpStates();
     KonataRetire();
     Retire();
     Writeback();
@@ -175,8 +184,7 @@ class Backend : public sc_module {
   void Execute2();
   void Writeback();
   void Retire();
-  void ProcessPendingBarriers();
-  void ProcessPendingEcalls();
+  void ProcessWarpStates();
   void ProcessPendingExceptions();
   void KonataRetire();
 
@@ -244,59 +252,8 @@ class Backend : public sc_module {
     uint64_t tval = 0;
   };
 
-  /**
-   * Track the per-warp thread masks and their reduction state in separate
-   * arrays so hot state scans do not load the full masks.
-   */
-  class PendingThreadMaskTable {
-   public:
-    PendingThreadMaskTable(uint32_t num_warps, uint32_t num_lanes)
-        : masks_(num_warps, sc_bv_base{false, static_cast<int>(num_lanes)}),
-          states_(num_warps, State::NONE) {}
-
-    bool MarkReachedAndCheckAll(uint32_t local_wid, const sc_bv_base &tmask) {
-      assert(tmask != 0);
-
-      auto &mask = masks_[local_wid];
-      mask |= tmask;
-      bool all_reached = mask.and_reduce();
-      states_[local_wid] = all_reached ? State::ALL_REACHED : State::PARTIAL;
-      return all_reached;
-    }
-
-    void ClearIfPending(uint32_t local_wid) {
-      if (states_[local_wid] == State::NONE) {
-        return;
-      }
-
-      masks_[local_wid] = 0;
-      states_[local_wid] = State::NONE;
-    }
-
-    bool AllReached(uint32_t local_wid) const {
-      return states_[local_wid] == State::ALL_REACHED;
-    }
-
-    bool LaneReached(uint32_t local_wid, uint32_t lane) const {
-      return masks_[local_wid][lane] == 1;
-    }
-
-   private:
-    enum class State : uint8_t {
-      NONE = 0,
-      PARTIAL,
-      ALL_REACHED,
-    };
-
-    static_assert(sizeof(State) == 1);
-
-    std::vector<sc_bv_base> masks_;
-    std::vector<State> states_;
-  };
-
   std::vector<uint32_t> inflight_counter_;
-  PendingThreadMaskTable pending_barrier_threads_;
-  PendingThreadMaskTable pending_ecall_threads_;
+  WarpLaneState lane_state_;
   std::vector<uint64_t> pending_ecall_wpc_;
 
   // Deferred non-ECALL trap state for each warp.
