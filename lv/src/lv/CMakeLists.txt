@@ -18,6 +18,9 @@ add_library(${TARGET_OBJ} OBJECT
   bindings/dramsys/dramsys.cc
   bindings/ipc/agent.cc
   bindings/nic/banking_router.cc
+  bindings/nic/address_router.cc
+  bindings/nic/router.cc
+  bindings/nic/xbar.cc
   bindings/simple/block_aligner.cc
   bindings/simple/clint.cc
   bindings/simple/constant_table.cc

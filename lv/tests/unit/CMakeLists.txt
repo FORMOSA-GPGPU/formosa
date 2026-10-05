@@ -24,6 +24,7 @@ add_lv_unit_test(simple/print_buf.lua)
 add_lv_unit_test(simple/simple.lua)
 add_lv_unit_test(simple/xbar.lua)
 add_lv_unit_test(nic/banking_router.lua)
+add_lv_unit_test(nic/address_router.lua)
 add_lv_unit_test(systemc/time.lua)
 add_lv_unit_test(systemc/signal.lua)
 add_lv_unit_test(systemc/module.lua)
@@ -31,5 +32,6 @@ add_lv_unit_test(workload/elf.lua)
 
 # Native (non-Lua) unit tests.
 add_subdirectory(log)
+add_subdirectory(nic)
 
 add_subdirectory(axi)

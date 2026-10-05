@@ -16,7 +16,12 @@ struct IpExtension : tlm::tlm_extension<IpExtension> {
   uint64_t ip = 0;
 
   tlm_extension_base *clone() const override {
-    IpExtension *ext = new IpExtension;
+    // Originals can be owned by an initiator or embedded in a request. Clones
+    // are heap-owned by the receiving payload and must retire through free().
+    struct OwnedClone : IpExtension {
+      void free() override { delete this; }
+    };
+    IpExtension *ext = new OwnedClone;
     ext->ip = ip;
     return ext;
   }
