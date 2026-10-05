@@ -19,17 +19,25 @@ struct FetchEntryExtension : lv::IpExtension {
   FetchEntry *entry = nullptr;
 
   tlm_extension_base *clone() const override {
-    FetchEntryExtension *ext = new FetchEntryExtension;
-    ext->entry = entry;
+    // FetchEntry embeds the original; payloads own their clones.
+    struct OwnedClone final : FetchEntryExtension {
+      void free() override { delete this; }
+    };
+    auto *ext = new OwnedClone;
+    ext->copy_from(*this);
     return ext;
   }
 
   void copy_from(const tlm_extension_base &ext) override {
-    entry = static_cast<const FetchEntryExtension &>(ext).entry;
+    lv::IpExtension::copy_from(ext);
+    // IP-only copies carry no fetch association; retain this entry.
+    if (const auto *fetch = dynamic_cast<const FetchEntryExtension *>(&ext)) {
+      entry = fetch->entry;
+    }
   }
 
   // Don't delete this
-  virtual void free() override {}
+  void free() override {}
 };
 
 class FetchEntry {

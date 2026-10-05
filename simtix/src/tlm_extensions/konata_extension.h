@@ -29,11 +29,12 @@ struct KonataExtension : tlm::tlm_extension<KonataExtension> {
   }
 
   tlm_extension_base *clone() const override {
-    KonataExtension *ext = new KonataExtension;
-    ext->unique_id = unique_id;
-    ext->thread_id = thread_id;
-    ext->parent_id = parent_id;
-    ext->declared = declared;
+    // Originals belong to KonataExtensionPool; payloads own their clones.
+    struct OwnedClone final : KonataExtension {
+      void free() override { delete this; }
+    };
+    auto *ext = new OwnedClone;
+    ext->copy_from(*this);
     return ext;
   }
 

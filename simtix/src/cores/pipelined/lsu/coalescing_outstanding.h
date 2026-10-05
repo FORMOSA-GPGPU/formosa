@@ -25,7 +25,13 @@ struct LsuTransExtension : tlm::tlm_extension<LsuTransExtension> {
   uint32_t req_id = 0;
 
   tlm_extension_base *clone() const override {
-    return new LsuTransExtension(*this);
+    // Inflight slots own the originals; payloads own their clones.
+    struct OwnedClone final : LsuTransExtension {
+      void free() override { delete this; }
+    };
+    auto *ext = new OwnedClone;
+    ext->copy_from(*this);
+    return ext;
   }
   void copy_from(const tlm_extension_base &other) override {
     const auto &extension = static_cast<const LsuTransExtension &>(other);
@@ -34,7 +40,7 @@ struct LsuTransExtension : tlm::tlm_extension<LsuTransExtension> {
   }
 
   // Don't delete this
-  virtual void free() override {}
+  void free() override {}
 };
 
 namespace {
