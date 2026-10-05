@@ -32,6 +32,7 @@ add_library(${TARGET_OBJ} OBJECT
   bindings/simple/mux.cc
   bindings/simple/outstanding_initiator.cc
   bindings/simple/perfetto_reader.cc
+  bindings/simple/plic.cc
   bindings/simple/print_buf.cc
   bindings/simple/xbar.cc
   bindings/cp/command_processor.cc

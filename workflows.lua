@@ -320,6 +320,18 @@ local config = {
       },
       depends = { "tests.cp.common", "lv.bindings.cp" },
     },
+    ["lv.drivers.plic"] = {
+      paths = {
+        "lv/drivers/include/plic.h",
+        "lv/drivers/src/plic.c",
+      },
+    },
+    ["tests.plic"] = {
+      paths = {
+        "tests/plic/**",
+      },
+      depends = { "tests.cp.command_processor", "lv.drivers.plic" },
+    },
     ["libcomm"] = {
       paths = {
         "libcomm/CMakeLists.txt",
@@ -597,6 +609,7 @@ local config = {
       depends = {
         "lv.tests.unit",
         "tests.cp.command_processor",
+        "tests.plic",
         "tests.ipc",
         "tests.pfreader",
       },
@@ -606,7 +619,7 @@ local config = {
             ENABLE_PROJECTS = { "lv", "tests" },
             LV_ENABLE_PERFETTO = true,
             LV_ENABLE_TESTING = true,
-            TESTS_ENABLE_TESTS = { "cp", "ipc", "pfreader" },
+            TESTS_ENABLE_TESTS = { "cp", "plic", "ipc", "pfreader" },
             CP_TEST_CORES = { "cp.command_processor" },
           },
           selectors = {
@@ -615,6 +628,7 @@ local config = {
             "^cp\\.riscv-test\\.cp\\.command_processor$",
             "^cp\\.interrupt\\.cp\\.command_processor$",
             "^cp\\.prog0\\.cp\\.command_processor$",
+            "^plic\\.cp\\.command_processor$",
             "^cp\\.harness$",
             "pfreader",
             "ipc_test",
