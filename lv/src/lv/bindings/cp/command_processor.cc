@@ -99,6 +99,9 @@ inline void TLM_MemIF::setup_trans(tlm::tlm_generic_payload &trans,
   trans.set_command(command);
   trans.set_address(addr);
   trans.set_data_length(len);
+  // Pooled payloads may retain a previous initiator's streaming width. Every
+  // CP load/store transfers one complete, contiguous scalar access.
+  trans.set_streaming_width(len);
   trans.set_data_ptr(ptr);
   trans.set_byte_enable_ptr(byte_enable_.data());
   trans.set_byte_enable_length(len);
