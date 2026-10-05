@@ -7,7 +7,6 @@
 #include <formosa_addr_map.h>
 
 #include <array>
-#include <chrono>
 #include <cstdint>
 #include <cstdlib>
 #include <iostream>
@@ -250,9 +249,6 @@ int main() {
   for (size_t i = 0; i < 60000 && polled_status == kFsaCompletionPollPending;
        ++i) {
     polled_status = fsa_poll_completion(polled, &polled_result);
-    if (polled_status == kFsaCompletionPollPending) {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
   }
   if (polled_status != kFsaCompletionPollTerminal ||
       polled_result != FSA_COMPLETION_RESULT_SUCCESS ||
@@ -278,8 +274,6 @@ int main() {
     } else if (submit_status != kFsaCommandSubmitWouldBlock) {
       std::cerr << "completion-pool fill failed: " << submit_status << "\n";
       return 1;
-    } else {
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
   }
   if (pool_token_count != pool_tokens.size()) {
@@ -292,9 +286,6 @@ int main() {
     for (size_t attempts = 0;
          attempts < 60000 && status == kFsaCompletionPollPending; ++attempts) {
       status = fsa_poll_completion(token, &result);
-      if (status == kFsaCompletionPollPending) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(1));
-      }
     }
     if (status != kFsaCompletionPollTerminal ||
         result != FSA_COMPLETION_RESULT_SUCCESS) {

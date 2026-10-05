@@ -431,9 +431,9 @@ FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
 }
 
 /* Ensure CP is in ROM Reset before publishing a Boot Descriptor. */
-int ensure_rom_reset_state(uint64_t deadline_ms, uint64_t *elapsed_ms) {
-  uint64_t local_elapsed = 0;
-  uint64_t *elapsed = elapsed_ms ? elapsed_ms : &local_elapsed;
+int ensure_rom_reset_state(uint64_t deadline_ms) {
+  uint64_t start_ns;
+  CHECK_ERR(fsa_real_time_ns(&start_ns));
   bool msip_sent = false;
   while (true) {
     uint64_t status = kFirmwareStatusBooting;
@@ -444,9 +444,10 @@ int ensure_rom_reset_state(uint64_t deadline_ms, uint64_t *elapsed_ms) {
       CHECK_ERR(real_cp_reset());
       msip_sent = true;
     }
-    usleep(1000);
-    ++(*elapsed);
-    if (deadline_ms > 0 && *elapsed >= deadline_ms) return -1;
+    uint64_t now_ns;
+    CHECK_ERR(fsa_real_poll_backoff(&now_ns));
+    if (deadline_ms > 0 && (now_ns - start_ns) / 1000000 >= deadline_ms)
+      return -1;
   }
 }
 
@@ -560,7 +561,8 @@ static int upload_firmware(const void *fw_ptr, size_t fw_size) {
   recorder.BlobEvent("boot_descriptor", 0, fw_ptr, fw_size);
 
   /* Wait until ROM has finished the Host→staging DMA (FW_SIZE cleared). */
-  uint64_t elapsed_ms = 0;
+  uint64_t start_ns;
+  CHECK_ERR(fsa_real_time_ns(&start_ns));
   while (true) {
     uint64_t remaining = 1;
     CHECK_ERR(real_mmio(FSA_CP_OFF_FW_SIZE, 0, &remaining));
@@ -570,8 +572,9 @@ static int upload_firmware(const void *fw_ptr, size_t fw_size) {
     CHECK_ERR(real_mmio(FSA_CP_OFF_FW_STATUS, 0, &status));
     CHECK_ERR(real_mmio(FSA_CP_OFF_FW_FAULT_CODE, 0, &fault));
     if (status == kFirmwareStatusFault) return -1;
-    usleep(1000);
-    if (++elapsed_ms >= 5000) return -1;
+    uint64_t now_ns;
+    CHECK_ERR(fsa_real_poll_backoff(&now_ns));
+    if ((now_ns - start_ns) / 1000000 >= 5000) return -1;
   }
   return 0;
 }
@@ -780,7 +783,11 @@ FsaCompletionPollStatus fsa_poll_completion(FsaCompletionToken token,
 FsaCompletionWaitStatus fsa_wait_completion(FsaCompletionToken token,
                                             uint64_t timeout_ms,
                                             FsaCompletionResult *result) {
-  uint64_t elapsed_ms = 0;
+  uint64_t start_ns;
+  if (fsa_real_time_ns(&start_ns) != 0) {
+    mark_transport_failure(-1);
+    return kFsaCompletionWaitTransportError;
+  }
   while (true) {
     const FsaCompletionPollStatus status = fsa_poll_completion(token, result);
     if (status == kFsaCompletionPollTerminal) {
@@ -800,8 +807,12 @@ FsaCompletionWaitStatus fsa_wait_completion(FsaCompletionToken token,
     if (status == kFsaCompletionPollTransportError) {
       return kFsaCompletionWaitTransportError;
     }
-    usleep(1000);
-    if (timeout_ms > 0 && ++elapsed_ms >= timeout_ms) {
+    uint64_t now_ns;
+    if (fsa_real_poll_backoff(&now_ns) != 0) {
+      mark_transport_failure(-1);
+      return kFsaCompletionWaitTransportError;
+    }
+    if (timeout_ms > 0 && (now_ns - start_ns) / 1000000 >= timeout_ms) {
       return kFsaCompletionWaitTimeout;
     }
   }
@@ -862,10 +873,13 @@ FsaCompletionReleaseStatus fsa_release_completion(FsaCompletionToken token) {
   return kFsaCompletionReleaseAccepted;
 }
 
-static FirmwareReadyResult wait_for_firmware_ready(uint64_t timeout) {
+static FirmwareReadyResult wait_for_firmware_ready(
+    uint64_t timeout, std::optional<uint64_t> reset_start_ns = std::nullopt) {
   if (transport_failed.load(std::memory_order_acquire))
     return kFirmwareReadyResultTransportError;
-  uint64_t elapsed_ms = 0;
+  uint64_t start_ns = reset_start_ns.value_or(0);
+  if (!reset_start_ns && fsa_real_time_ns(&start_ns) != 0)
+    return kFirmwareReadyResultTransportError;
   while (true) {
     uint64_t status = kFirmwareStatusReset;
     uint64_t abi = 0;
@@ -889,8 +903,10 @@ static FirmwareReadyResult wait_for_firmware_ready(uint64_t timeout) {
         return kFirmwareReadyResultSuccess;
       }
     }
-    usleep(1000);
-    if (timeout > 0 && ++elapsed_ms >= timeout)
+    uint64_t now_ns;
+    if (fsa_real_poll_backoff(&now_ns) != 0)
+      return kFirmwareReadyResultTransportError;
+    if (timeout > 0 && (now_ns - start_ns) / 1000000 >= timeout)
       return kFirmwareReadyResultTimeout;
   }
 }
@@ -977,8 +993,7 @@ int fsa_hal_init(FsaDeviceDescription *description) {
     }
     noncache_alloc_ready = true;
 
-    uint64_t elapsed_ms = 0;
-    if (ensure_rom_reset_state(5000, &elapsed_ms) != 0 ||
+    if (ensure_rom_reset_state(5000) != 0 ||
         upload_firmware(gpufw_elf, gpufw_elf_len) != 0 ||
         wait_for_firmware_ready(5000) != kFirmwareReadyResultSuccess) {
       rollback_initialization();
@@ -1002,15 +1017,15 @@ int fsa_hal_reset(uint64_t timeout) {
   transport_failed.store(false, std::memory_order_release);
   boot_generation_before_reset = runtime_boot_generation;
 
-  uint64_t elapsed_ms = 0;
-  if (ensure_rom_reset_state(timeout, &elapsed_ms) != 0 ||
+  uint64_t start_ns;
+  if (fsa_real_time_ns(&start_ns) != 0 ||
+      ensure_rom_reset_state(timeout) != 0 ||
       upload_firmware(gpufw_elf, gpufw_elf_len) != 0) {
     firmware_reboot_failed.store(true, std::memory_order_release);
     return -1;
   }
-  const uint64_t remaining =
-      timeout == 0 ? 0 : (elapsed_ms >= timeout ? 1 : timeout - elapsed_ms);
-  if (wait_for_firmware_ready(remaining) != kFirmwareReadyResultSuccess) {
+  if (wait_for_firmware_ready(timeout, start_ns) !=
+      kFirmwareReadyResultSuccess) {
     firmware_reboot_failed.store(true, std::memory_order_release);
     return -1;
   }

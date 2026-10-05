@@ -252,6 +252,7 @@ function System.new(name, config, opts)
     timeout_ms = 100,
     debug = false,
     ignore_terminate = opts.keep_alive or false,
+    synchronous = not replay,
   })
   self._host_dma = dma.DMA("host_dma", { fifo_size = 2 })
   self._device_dma = dma.DMA("device_dma", { fifo_size = 2 })
@@ -393,6 +394,7 @@ function System:_initialize()
   self._rst_n:write(false)
   sc.start(5 * self._period)
   self._rst_n:write(true)
+  self._agent:start()
 end
 
 ---@param cycles integer

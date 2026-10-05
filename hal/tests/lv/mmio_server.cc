@@ -7,6 +7,7 @@
 #include <real/real.h>
 
 #include <algorithm>
+#include <atomic>
 #include <csignal>
 #include <cstddef>
 #include <cstdint>
@@ -24,12 +25,14 @@
 // Global map to store received MMIO writes
 std::map<uint64_t, uint64_t> mmio_registers;
 std::vector<std::unique_ptr<libcomm::Transceiver>> transceivers;
+std::atomic<uint64_t> elapsed_ns{0};
 
 /* LV-only injectors: write 1 then clear. Addresses sit outside the command
  * ring / completion pool used by the mock. */
 constexpr uint64_t kEnableFailNextCmdPacket = 0x20000FF0ULL;
 constexpr uint64_t kEnableFailNextWrPtr = 0x20000FF8ULL;
 constexpr uint64_t kEnableFreeRingOnComplete = 0x20000FE8ULL;
+constexpr uint64_t kTimeNs = 0x20000FE0ULL;
 bool fail_next_cmd_packet = false;
 bool fail_next_wr_ptr = false;
 bool free_ring_on_complete = false;
@@ -162,11 +165,19 @@ void track_completion_from_cmd(uint64_t new_wr_ptr) {
 }
 
 void handle_mmio_message(libcomm::Transceiver *self, const libcomm::Msg &msg) {
-  if (msg.cmd() == libcomm::Cmd::Put) {
+  if (msg.cmd() == libcomm::Cmd::Wait) {
+    const auto now = elapsed_ns.fetch_add(msg.addr()) + msg.addr();
+    self->Send(libcomm::Msg::Respond(msg).addr(now));
+  } else if (msg.cmd() == libcomm::Cmd::Put) {
     uint64_t addr = msg.addr();
     uint64_t value = 0;
     std::memcpy(&value, msg.data(), std::min(sizeof(value), msg.size()));
 
+    if (addr == kTimeNs) {
+      elapsed_ns.store(value);
+      self->Send(libcomm::Msg::Respond(msg));
+      return;
+    }
     if (addr == kEnableFailNextCmdPacket) {
       fail_next_cmd_packet = value != 0;
       self->Send(libcomm::Msg::Respond(msg));
@@ -259,6 +270,12 @@ void handle_mmio_message(libcomm::Transceiver *self, const libcomm::Msg &msg) {
     self->Send(resp);
     std::cout << "[MMIO Server] Sent ProbeAck response." << std::endl;
   } else if (msg.cmd() == libcomm::Cmd::Get) {
+    if (msg.addr() == kTimeNs) {
+      const uint64_t now = elapsed_ns.load();
+      self->Send(libcomm::Msg::Respond(msg).data(
+          reinterpret_cast<const uint8_t *>(&now)));
+      return;
+    }
     if (fail_capability_reads && msg.addr() >= FSA_SYSTEM_INFO_BASE &&
         msg.addr() < FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_SIZE) {
       std::cout << "[MMIO Server] Injected capability read failure\n";

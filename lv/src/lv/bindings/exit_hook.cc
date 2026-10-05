@@ -6,12 +6,16 @@
 
 #include <csignal>
 #include <cstdlib>
+#include <utility>
 
 namespace {
-sol::function exit_hook;
+sol::function &ExitHook() {
+  static sol::function hook;
+  return hook;
+}
 
 void handle_exit_signal(int) {
-  if (exit_hook.valid()) exit_hook();
+  if (ExitHook().valid()) ExitHook()();
   // Global teardown is unsafe from an asynchronous signal handler.
   std::_Exit(0);
 }
@@ -19,13 +23,15 @@ void handle_exit_signal(int) {
 
 LV_MODULE(lv)
     .init([] {
+      // Destroy the callback before the Lua runtime created by ModuleBuilder.
+      ExitHook();
       std::signal(SIGINT, handle_exit_signal);
       std::signal(SIGTERM, handle_exit_signal);
     })
     .function(
         "exit_hook",
         [](sol::function f) {
-          exit_hook = f;
+          ExitHook() = std::move(f);
         },
         lv::params(lv::param("f")),
         lv::doc("Register a Lua callback invoked on SIGINT or SIGTERM."));

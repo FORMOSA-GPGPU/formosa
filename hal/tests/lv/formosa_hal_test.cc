@@ -18,6 +18,7 @@
 constexpr uint64_t kEnableFailNextCmdPacket = 0x20000FF0ULL;
 constexpr uint64_t kEnableFailNextWrPtr = 0x20000FF8ULL;
 constexpr uint64_t kEnableFreeRingOnComplete = 0x20000FE8ULL;
+constexpr uint64_t kTimeNs = 0x20000FE0ULL;
 
 template <typename T>
 void test_return(T rc) {
@@ -552,8 +553,19 @@ void test_wait_poll_release_timeout_lifecycle() {
     exit(-1);
   }
 
+  const uint64_t start_ns = 999000;
+  test_return(
+      fsa_real_copy_to_scratchpad(kTimeNs, &start_ns, sizeof(start_ns)));
   FsaCompletionResult timed = FSA_COMPLETION_RESULT_PENDING;
-  const FsaCompletionWaitStatus ws = fsa_wait_completion(pending, 5, &timed);
+  const FsaCompletionWaitStatus ws = fsa_wait_completion(pending, 1, &timed);
+  uint64_t now_ns = 0;
+  test_return(fsa_real_copy_from_scratchpad(kTimeNs, &now_ns, sizeof(now_ns)));
+  std::cout << "[FORMOSA HAL Test] timeout elapsed ns=" << now_ns - start_ns
+            << std::endl;
+  if (now_ns - start_ns != 1000000) {
+    std::cerr << "[FORMOSA HAL Test] timeout rounded absolute timestamps\n";
+    exit(-1);
+  }
   if (ws != kFsaCompletionWaitTimeout) {
     std::cerr << "[FORMOSA HAL Test] expected wait timeout, got " << ws
               << " result=" << static_cast<int>(timed) << "\n";

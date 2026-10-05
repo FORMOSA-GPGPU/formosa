@@ -126,9 +126,9 @@ cmp -s "$BASE-1.toml" "$BASE-3.toml"; echo replay1_vs_3=$?
 
 ## Notes
 
-- Capture and replay stats do not need to match exactly. Capture includes the
-  OpenCL runtime and host/socket timing; replay drives the captured HAL trace
-  directly inside the simulator.
+- Capture and replay stats do not need to match exactly. Live execution runs
+  the OpenCL runtime with synchronized IPC and backend polling intervals;
+  replay drives the captured HAL trace directly inside the simulator.
 - `completion_slot` events wait for the replayed simulator to complete. Replay
   does not force the poll count observed during capture, so faster or slower
   simulator changes can show up in replay stats.

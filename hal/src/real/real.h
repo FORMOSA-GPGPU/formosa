@@ -20,6 +20,8 @@ int fsa_real_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
 int fsa_real_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr,
                                   size_t size);
 int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size);
+int fsa_real_poll_backoff(uint64_t *now_ns);
+int fsa_real_time_ns(uint64_t *now_ns);
 void fsa_real_abort();
 void fsa_real_cleanup();
 }

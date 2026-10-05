@@ -24,6 +24,7 @@
 struct LvClient {
   struct StoredResponse {
     libcomm::Status status;
+    uint64_t time_ns = 0;
     std::vector<uint8_t> data;
   };
 
@@ -83,6 +84,35 @@ int fsa_real_put(uintptr_t dev_addr, const void *host_ptr, size_t size) {
 }
 
 }  // namespace
+
+static int wait_device_time(uint64_t duration_ns, uint64_t *now_ns) {
+  if (!client.transceiver || !client.transceiver->IsConnectionAlive())
+    return -1;
+  uint32_t id;
+  {
+    std::lock_guard<std::mutex> lock(client.mtx);
+    id = client.msg_id++;
+  }
+  if (client.transceiver->Send(
+          libcomm::Msg::Build(libcomm::Cmd::Wait).id(id).addr(duration_ns)) !=
+      0)
+    return -1;
+  std::unique_lock<std::mutex> lock(client.mtx);
+  if (!client.cv.wait_for(lock, std::chrono::seconds(5), [&] {
+        return client.response.find(id) != client.response.end();
+      }))
+    return -1;
+  const auto status = client.response.at(id).status;
+  *now_ns = client.response.at(id).time_ns;
+  client.response.erase(id);
+  return status == libcomm::Status::Okay ? 0 : -1;
+}
+
+int fsa_real_time_ns(uint64_t *now_ns) { return wait_device_time(0, now_ns); }
+
+int fsa_real_poll_backoff(uint64_t *now_ns) {
+  return wait_device_time(1000, now_ns);
+}
 
 int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
   if (!client.transceiver || !client.transceiver->IsConnectionAlive()) {
@@ -283,10 +313,12 @@ int fsa_real_init() {
 
       LvClient::StoredResponse resp;
       resp.status = msg.status();
+      if (msg.cmd() == libcomm::Cmd::WaitAck) resp.time_ns = msg.addr();
       resp.data = std::move(data_copy);
 
       client.response.emplace(msg.id(), std::move(resp));
-      client.cv.notify_one();
+      // Multiple HAL callers can be waiting for different message IDs.
+      client.cv.notify_all();
     }
   });
   return 0;

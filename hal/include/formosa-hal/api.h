@@ -276,7 +276,9 @@ int fsa_copy_from_dev(uintptr_t dev_addr, void *host_ptr, size_t size);
 
 /** Wait for any ABI v3 completion and auto-release a terminal slot.
  *  Success means a terminal result was observed and released; check *result
- *  for command success vs command-specific failure / FirmwareReboot. */
+ *  for command success vs command-specific failure / FirmwareReboot.
+ *  timeout_ms uses the backend clock; zero waits indefinitely.
+ *  Timeout leaves the token owned by the caller. */
 FsaCompletionWaitStatus fsa_wait_completion(FsaCompletionToken token,
                                             uint64_t timeout_ms,
                                             FsaCompletionResult *result);

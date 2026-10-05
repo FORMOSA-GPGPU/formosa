@@ -10,6 +10,7 @@
 #include <sys/un.h>
 #include <unistd.h>
 
+#include <atomic>
 #include <cerrno>
 #include <csignal>
 #include <cstddef>
@@ -44,7 +45,10 @@ namespace libcomm {
   }
 
 ENUM(Cmd, Get, Put, Probe, Terminate, AccessAckData, AccessAck, ProbeAck,
-     TerminateAck);
+     TerminateAck, Wait, WaitAck);
+
+// Wait carries a duration in nanoseconds in addr (size must be zero).
+// WaitAck carries the peer's elapsed time in nanoseconds in addr.
 
 ENUM(Status, Okay, AddrErr, CmdErr, GenericErr);
 
@@ -72,12 +76,13 @@ class Msg {
 
   bool is_request() const {
     return cmd() == Cmd::Get || cmd() == Cmd::Put || cmd() == Cmd::Probe ||
-           cmd() == Cmd::Terminate;
+           cmd() == Cmd::Terminate || cmd() == Cmd::Wait;
   }
 
   bool is_response() const {
     return cmd() == Cmd::AccessAckData || cmd() == Cmd::AccessAck ||
-           cmd() == Cmd::ProbeAck || cmd() == Cmd::TerminateAck;
+           cmd() == Cmd::ProbeAck || cmd() == Cmd::TerminateAck ||
+           cmd() == Cmd::WaitAck;
   }
 
   bool has_data() const {
@@ -160,6 +165,7 @@ std::unique_ptr<Transceiver> Connect(
 class Transceiver {
  public:
   using SyncHandler = std::function<void(Transceiver *, const Msg &)>;
+  using DisconnectHandler = std::function<void(Transceiver *)>;
 
   virtual ~Transceiver() {
     connection_down_ = true;
@@ -172,8 +178,11 @@ class Transceiver {
     }
   }
 
-  void RegisterSyncHandler(SyncHandler handler) {
+  // Handlers run on the receiver thread; register before receiving starts.
+  void RegisterSyncHandler(SyncHandler handler,
+                           DisconnectHandler on_disconnect = {}) {
     sync_handler_ = std::move(handler);
+    disconnect_handler_ = std::move(on_disconnect);
 
     if (!recv_thread_.joinable()) {
       recv_thread_ = std::thread(&Transceiver::Recv, this);
@@ -200,8 +209,9 @@ class Transceiver {
 
   int fd_;
   pid_t pid_;
-  bool connection_down_;
+  std::atomic_bool connection_down_;
   SyncHandler sync_handler_;
+  DisconnectHandler disconnect_handler_;
   std::thread recv_thread_;
   std::mutex send_mtx_;
 
@@ -406,6 +416,8 @@ inline internal::MsgBuilder Msg::Respond(const Msg &msg) {
       return internal::MsgBuilder(msg, Cmd::ProbeAck);
     case Cmd::Terminate:
       return internal::MsgBuilder(msg, Cmd::TerminateAck);
+    case Cmd::Wait:
+      return internal::MsgBuilder(msg, Cmd::WaitAck);
     default:
       return internal::MsgBuilder(msg);
   }
@@ -447,6 +459,7 @@ inline void Transceiver::Recv() {
     sync_handler_(this, msg);
   }
   connection_down_ = true;
+  if (disconnect_handler_) disconnect_handler_(this);
 }
 
 inline std::unique_ptr<std::thread> Serve(
