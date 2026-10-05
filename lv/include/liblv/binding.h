@@ -1201,14 +1201,16 @@ class BindingBuilder {
 
   void RebindConstructors() {
     auto state = state_;
+    // Registry growth can invalidate TypeDoc pointers after registration.
+    const auto full_name = state->doc->full_name;
     state_->usertype[sol::call_constructor] =
-        [state](sol::variadic_args args,
-                sol::this_state this_state) -> sol::object {
+        [state, full_name](sol::variadic_args args,
+                           sol::this_state this_state) -> sol::object {
       for (const auto &invoker : state->constructor_invokers) {
         if (auto result = invoker(args, this_state)) return *result;
       }
       throw std::runtime_error("no matching constructor overload for " +
-                               state->doc->full_name);
+                               full_name);
     };
   }
 
@@ -1226,15 +1228,16 @@ class BindingBuilder {
 
   void RebindMethods(const char *name) {
     auto state = state_;
+    const auto full_name = state->doc->full_name;
     std::string key = name;
-    state_->usertype[name] = [state, key](
+    state_->usertype[name] = [state, key, full_name](
                                  Class &self, sol::variadic_args args,
                                  sol::this_state this_state) -> sol::object {
       for (const auto &invoker : state->method_invokers.at(key)) {
         if (auto result = invoker(self, args, this_state)) return *result;
       }
-      throw std::runtime_error("no matching method overload for " +
-                               state->doc->full_name + "." + key);
+      throw std::runtime_error("no matching method overload for " + full_name +
+                               "." + key);
     };
   }
 

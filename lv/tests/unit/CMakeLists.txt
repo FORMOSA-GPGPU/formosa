@@ -28,6 +28,10 @@ add_lv_unit_test(nic/address_router.lua)
 add_lv_unit_test(systemc/time.lua)
 add_lv_unit_test(systemc/signal.lua)
 add_lv_unit_test(systemc/module.lua)
+foreach(scenario missing-input missing-output duplicate-input duplicate-output multiple-writers late)
+  add_lv_test_script(systemc/ports.${scenario}.lua systemc/ports.lua
+    ARGS ${scenario} LABELS unit)
+endforeach()
 add_lv_unit_test(workload/elf.lua)
 
 # Native (non-Lua) unit tests.

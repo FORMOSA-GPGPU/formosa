@@ -32,15 +32,16 @@ end
 
 local xbar = simple.XBar("xbar", #initiators, addr_map)
 xbar.clock = clock
+local core_side, mem_side = xbar.core_side, xbar.mem_side
 
 for n, i in ipairs(initiators) do
   i.clock = clock
-  i.target = xbar.core_side[n].port
+  i.target = core_side[n].port
 end
 
 for n, m in ipairs(memories) do
   m.clock = clock
-  xbar.mem_side[n].target = monitors[n].from
+  mem_side[n].target = monitors[n].from
   monitors[n].to = m.port
 end
 

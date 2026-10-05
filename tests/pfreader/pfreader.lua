@@ -70,9 +70,9 @@ cpu:set_pc(elf.entry)
 local sig = sc.signal("int")
 local gnd = sc.signal("null")
 gnd:write(false)
-cpu.ext_int = sig
-cpu.sw_int = gnd
-cpu.timer_int = gnd
+cpu.ext_int(sig)
+cpu.sw_int(gnd)
+cpu.timer_int(gnd)
 
 print("Start simulation")
 trace.event_instant(tb, "tb", "Start simulation")

@@ -79,9 +79,9 @@ cp.target = xbar.core_side[1].port
 initiator.target = xbar.core_side[2].port
 md.target = xbar.core_side[3].port
 
-cp.ext_int = gnd
-cp.sw_int = gnd
-cp.timer_int = gnd
+cp.ext_int(gnd)
+cp.sw_int(gnd)
+cp.timer_int(gnd)
 
 gu.log("yellow", "Load elf")
 local elf_path = gu.runfile("bin/gpufw.elf")

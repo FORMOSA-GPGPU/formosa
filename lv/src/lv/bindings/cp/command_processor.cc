@@ -213,16 +213,6 @@ void CommandProcessor::set_target(Target *t) {
 
 void CommandProcessor::set_pc(uint64_t pc) { core.set_pc(pc); }
 
-void CommandProcessor::set_ext_int(sc_signal<bool> *s) {
-  ext_interrupt.bind(*s);
-}
-
-void CommandProcessor::set_sw_int(sc_signal<bool> *s) { sw_interrupt.bind(*s); }
-
-void CommandProcessor::set_timer_int(sc_signal<bool> *s) {
-  timer_interrupt.bind(*s);
-}
-
 LV_BINDING(cp, CommandProcessor)
     .constructor(
         [](const char *name, const uint64_t mhart_id,
@@ -237,11 +227,11 @@ LV_BINDING(cp, CommandProcessor)
               &CommandProcessor::set_target, lv::doc("Memory target"))
     .method("set_pc", &CommandProcessor::set_pc, lv::params("pc"),
             lv::doc("Set the initial program counter"))
-    .property("ext_int", &CommandProcessor::set_ext_int,
-              lv::doc("External interrupt signal"))
-    .property("sw_int", &CommandProcessor::set_sw_int,
-              lv::doc("Software interrupt signal"))
-    .property("timer_int", &CommandProcessor::set_timer_int,
-              lv::doc("Timer interrupt signal"));
+    .property("ext_int", &CommandProcessor::ext_int,
+              lv::doc("External interrupt input port"))
+    .property("sw_int", &CommandProcessor::sw_int,
+              lv::doc("Software interrupt input port"))
+    .property("timer_int", &CommandProcessor::timer_int,
+              lv::doc("Timer interrupt input port"));
 
 }  // namespace cp

@@ -23,6 +23,8 @@
 ---@field protected _gnd sc.signal
 ---@field protected _cp cp.CommandProcessor
 ---@field protected _clint simple.Clint
+---@field protected _timer_irq sc.signal
+---@field protected _msip_irq sc.signal
 ---@field protected _cp_rom simple.Memory
 ---@field protected _cp_printbuf simple.PrintBuf
 ---@field protected _cp_exit_code_register simple.ExitCodeRegister
@@ -305,9 +307,13 @@ function System.new(name, config, opts)
     { addr = addr.global_mem_base, size = addr.global_mem_size }, -- DDR global
   })
   -- connections
-  self._cp.timer_int = self._clint.timer_irq[1]
-  self._cp.sw_int = self._clint.msip_irq[1]
-  self._cp.ext_int = self._gnd
+  self._timer_irq = sc.signal("timer_irq", false)
+  self._msip_irq = sc.signal("msip_irq", false)
+  self._clint.timer_irq[1](self._timer_irq)
+  self._clint.msip_irq[1](self._msip_irq)
+  self._cp.timer_int(self._timer_irq)
+  self._cp.sw_int(self._msip_irq)
+  self._cp.ext_int(self._gnd)
   self._cp.target = self._fab_cp.core_side[1].port
 
   self._fab_cp.mem_side[1].target = self._cp_rom.port
@@ -327,25 +333,27 @@ function System.new(name, config, opts)
   self._fab_cp.clock = self._clock
 
   -- sm subsys connections fab_nexus
-  self._fab_nexus.mem_side[1].target = self._fab_agent.core_side[2].port
+  local nexus_mem_side = self._fab_nexus.mem_side
+  local sys_core_side = self._fab_sys.core_side
+  nexus_mem_side[1].target = self._fab_agent.core_side[2].port
   local nexus_idx = 2 -- SM MMIO starts from the number 2 index
   for i = 1, system.num_sm do
-    self._fab_nexus.mem_side[nexus_idx].target = self._sm[i].port
+    nexus_mem_side[nexus_idx].target = self._sm[i].port
     nexus_idx = nexus_idx + 1
   end
-  self._fab_nexus.mem_side[nexus_idx].target = self._fab_sys.core_side[2].port
+  nexus_mem_side[nexus_idx].target = sys_core_side[2].port
   self._fab_nexus.clock = self._clock
 
   -- sm subsys connections
   for i = 1, system.num_sm do
-    self._sm[i].target = self._fab_sys.core_side[2 + i].port
+    self._sm[i].target = sys_core_side[2 + i].port
   end
 
   -- Shared fab_agent connections
   self._agent.target = self._fab_agent.core_side[1].port
-  self._host_dma.port1_target = self._fab_sys.core_side[1].port
-  self._device_dma.port0_target = self._fab_sys.core_side[3 + system.num_sm].port
-  self._device_dma.port1_target = self._fab_sys.core_side[4 + system.num_sm].port
+  self._host_dma.port1_target = sys_core_side[1].port
+  self._device_dma.port0_target = sys_core_side[3 + system.num_sm].port
+  self._device_dma.port1_target = sys_core_side[4 + system.num_sm].port
   self._fab_agent.mem_side[1].target = self._clint.port
   self._fab_agent.mem_side[2].target = self._system_info.port
   self._fab_agent.mem_side[3].target = self._scratch.port

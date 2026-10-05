@@ -45,6 +45,7 @@ add_library(${TARGET_OBJ} OBJECT
   bindings/systemc/clock.cc
   bindings/systemc/core.cc
   bindings/systemc/module.cc
+  bindings/systemc/ports.cc
   bindings/systemc/time.cc
   bindings/systemc/signal.cc
   bindings/workload/elf.cc

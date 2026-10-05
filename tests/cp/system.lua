@@ -17,7 +17,7 @@ local platform = require("cp.platform")
 ---@field mem_target? sc.Socket Unified memory target; only for num_mem_ports == 1.
 ---@field imem_target? sc.Socket Instruction target; only for num_mem_ports == 2.
 ---@field dmem_target? sc.Socket Data target; only for num_mem_ports == 2.
----@field ext_int? sc.signal External interrupt input; only when has_ext_int.
+---@field ext_int? sc.BoolIn External interrupt port; only when has_ext_int.
 ---@field boot fun(self: cp.core, entry: integer)
 ---@field protected _sc_module sc.Module
 ---@alias cp.core_ctor fun(name: string): cp.core
@@ -77,7 +77,7 @@ function System.new(_, core_module)
   if self.core.has_ext_int then
     self.ext_int = sc.signal("ext_int")
     self.ext_int:write(false)
-    self.core.ext_int = self.ext_int
+    self.core.ext_int(self.ext_int)
   end
   return self
 end

@@ -357,6 +357,10 @@ std::string GenerateLuaLS() {
     for (const auto &ctor : type.constructors) {
       WriteOverload(out, ctor);
     }
+    // Instance __call methods also make the documented userdata callable.
+    for (const auto &method : type.methods) {
+      if (method.name == "__call") WriteOverload(out, method);
+    }
     fmt::format_to(std::back_inserter(out), "{} = {{}}\n\n", type.full_name);
 
     WriteCallableGroups(out, type.methods, [&](const std::string &name) {

@@ -20,7 +20,7 @@ using lv::TlmSink;
 
 class VClint : public sc_module {
  public:
-  using IntSignal = sc_signal<bool>;
+  using IntPort = sc_out<bool>;
 
   explicit VClint(const sc_module_name &name)
       : sc_module(name),
@@ -34,10 +34,8 @@ class VClint : public sc_module {
               return ProcessRequest(&trans);
             },
             16) {
-    timer_irq_[0].write(false);
-    msip_irq_[0].write(false);
-    timer_irq_ptrs_.push_back(&timer_irq_[0]);
-    msip_irq_ptrs_.push_back(&msip_irq_[0]);
+    timer_irq_[0].initialize(false);
+    msip_irq_[0].initialize(false);
     top_->clk = 0;
     top_->mtime_tick = 0;
     top_->we = 0;
@@ -68,12 +66,16 @@ class VClint : public sc_module {
 
   auto port() const { return &sink_.port; }
 
-  sol::as_table_t<std::vector<IntSignal *>> timer_irq() {
-    return sol::as_table(timer_irq_ptrs_);
+  sol::as_table_t<std::vector<IntPort *>> timer_irq() {
+    std::vector<IntPort *> ports;
+    for (auto &port : timer_irq_) ports.push_back(&port);
+    return ports;
   }
 
-  sol::as_table_t<std::vector<IntSignal *>> msip_irq() {
-    return sol::as_table(msip_irq_ptrs_);
+  sol::as_table_t<std::vector<IntPort *>> msip_irq() {
+    std::vector<IntPort *> ports;
+    for (auto &port : msip_irq_) ports.push_back(&port);
+    return ports;
   }
 
  private:
@@ -188,10 +190,8 @@ class VClint : public sc_module {
     return len;
   }
 
-  sc_vector<IntSignal> timer_irq_;
-  sc_vector<IntSignal> msip_irq_;
-  std::vector<IntSignal *> timer_irq_ptrs_;
-  std::vector<IntSignal *> msip_irq_ptrs_;
+  sc_vector<IntPort> timer_irq_;
+  sc_vector<IntPort> msip_irq_;
 
   sc_clock *clock_ = nullptr;
   sc_in<bool> clock_i_;
@@ -210,8 +210,8 @@ LV_BINDING(simple, VClint)
     .property("clock", &VClint::clock, &VClint::set_clock,
               lv::doc("SystemC clock"))
     .property("timer_irq", &VClint::timer_irq,
-              lv::doc("Timer interrupt signals"))
+              lv::doc("Timer interrupt output ports"))
     .property("msip_irq", &VClint::msip_irq,
-              lv::doc("Software interrupt signals"));
+              lv::doc("Software interrupt output ports"));
 
 }  // namespace simple

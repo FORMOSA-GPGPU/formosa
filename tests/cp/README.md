@@ -40,7 +40,8 @@ golden file when using a custom ELF.
    wrap its native LV model. Set `isa`, `num_mem_ports`, `has_ext_int`, and `has_reset`.
 2. Implement `clock`, `boot(entry)`, and either `mem_target` or
    `imem_target`/`dmem_target`. These port properties accept memory targets.
-   Provide `ext_int` when supported; the system creates and connects its signal.
+   Expose `ext_int` as an `sc.BoolIn` port when supported; the system owns
+   its signal and connects it with `core.ext_int(signal)`.
    Accept `reset_n` as an active-low reset signal, or ignore it if the model has
    no reset input (`has_reset = false`). The system owns the signal. For cores
    with `has_reset = true`, it holds reset low for `platform.reset_cycles` clock

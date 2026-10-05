@@ -67,7 +67,8 @@ function PipelinedSM.new(name, id, config, sm_param)
 
   -- Child names are local to this hierarchy-aware SM instance.
   self._core = simtix.PipelinedCore("PipelinedCore", core_param, pipe_param)
-  local num_subcores = #self._core.subcores
+  local subcores = self._core.subcores
+  local num_subcores = #subcores
 
   -- D-cache is mastered by every subcore.
   dcache_param.num_froms = num_subcores
@@ -160,8 +161,7 @@ function PipelinedSM.new(name, id, config, sm_param)
     lsu_kind == "coalescing_outstanding" or next(lsu_config) == nil,
     "sm.param.lsu_config requires the coalescing_outstanding LSU"
   )
-  for i = 1, #self._core.subcores do
-    local subcore = self._core.subcores[i]
+  for i, subcore in ipairs(subcores) do
     subcore:sched_init(function(name)
       if scheduler == "lrr" then
         return simtix.Lrr(core_param)
@@ -215,9 +215,10 @@ function PipelinedSM.new(name, id, config, sm_param)
     -- Each DMemXBar is a BankedCache master so address interleave happens
     -- before miss serialization. BankedCache muxes bank misses into one stream.
     local dmem_xbar = self._dmem_xbars[i]
-    self._core.subcores[i].dmem = dmem_xbar.core_side[1].port
-    dmem_xbar.mem_side[1].target = self._local_mem.port
-    dmem_xbar.mem_side[2].target = self._dcache.port
+    local mem_side = dmem_xbar.mem_side
+    subcore.dmem = dmem_xbar.core_side[1].port
+    mem_side[1].target = self._local_mem.port
+    mem_side[2].target = self._dcache.port
   end
 
   self._wg_init.warp_ctrl_target = self._core.warp_ctrl

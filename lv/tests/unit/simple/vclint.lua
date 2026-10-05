@@ -14,6 +14,11 @@ clint.clock = clock
 
 md.target = clint.port
 
+local msip_irq = sc.signal("msip_irq", false)
+local timer_irq = sc.signal("timer_irq", false)
+clint.msip_irq[1](msip_irq)
+clint.timer_irq[1]:bind(timer_irq)
+
 local function msip_addr(hart) return clint_base + hart * 4 end
 
 local function mtimecmp_addr(hart) return clint_base + 0x4000 + hart * 8 end
@@ -26,19 +31,19 @@ print("Starting msip tests...")
 
 md:write_bytes(msip_addr(0), { 0x01, 0x00, 0x00, 0x00 })
 sc.start(5 * period)
-assert(clint.msip_irq[1]:read() == true, "msip[0] set must raise irq")
+assert(msip_irq:read() == true, "msip[0] set must raise irq")
 
 md:write_bytes(msip_addr(0), { 0x00, 0x00, 0x00, 0x00 })
 sc.start(5 * period)
-assert(clint.msip_irq[1]:read() == false, "msip[0] clear must drop irq")
+assert(msip_irq:read() == false, "msip[0] clear must drop irq")
 
 sc.start(sc.time(5, sc.time_unit.NS))
 md:write_bytes(msip_addr(0), { 0x01, 0x00, 0x00, 0x00 })
 sc.start(sc.ZERO_TIME)
-assert(clint.msip_irq[1]:read() == true, "msip[0] set must raise irq immediately")
+assert(msip_irq:read() == true, "msip[0] set must raise irq immediately")
 md:write_bytes(msip_addr(0), { 0x00, 0x00, 0x00, 0x00 })
 sc.start(sc.ZERO_TIME)
-assert(clint.msip_irq[1]:read() == false, "msip[0] clear must drop irq immediately")
+assert(msip_irq:read() == false, "msip[0] clear must drop irq immediately")
 
 print("MSIP tests passed!")
 
@@ -54,7 +59,7 @@ for i = 1, 8 do
 end
 
 local wait = 0
-while clint.timer_irq[1]:read() == false do
+while timer_irq:read() == false do
   sc.start(period)
   wait = wait + 1
 end
@@ -62,6 +67,6 @@ assert(wait == 256, string.format("Timer IRQ[0] fired after %d cycles, expected 
 
 md:write_bytes(mtimecmp_addr(0), { 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF }) --- mtimecmp[0] = max
 sc.start(1 * period)
-assert(clint.timer_irq[1]:read() == false, "Timer IRQ[0] should be false after reset")
+assert(timer_irq:read() == false, "Timer IRQ[0] should be false after reset")
 
 print("Timer tests passed!")

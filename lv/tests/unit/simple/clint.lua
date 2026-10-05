@@ -15,6 +15,15 @@ clint.clock = clock
 
 md.target = clint.port
 
+local msip_irq, timer_irq = {}, {}
+local msip_ports, timer_ports = clint.msip_irq, clint.timer_irq
+for i = 1, clint_num_cores do
+  msip_irq[i] = sc.signal("msip_irq_" .. i, false)
+  timer_irq[i] = sc.signal("timer_irq_" .. i, false)
+  msip_ports[i](msip_irq[i])
+  timer_ports[i]:bind(timer_irq[i])
+end
+
 local function msip_addr(hart) return clint_base + hart * 4 end
 
 local function mtimecmp_addr(hart) return clint_base + 0x4000 + hart * 8 end
@@ -42,7 +51,7 @@ for i, t in ipairs(msip_tests) do
   sc.start(5 * period)
 
   for j = 1, clint_num_cores do
-    local irq = clint.msip_irq[j]:read()
+    local irq = msip_irq[j]:read()
     local irq_exp = t.irq_exp[j]
     assert(
       irq == irq_exp,
@@ -75,7 +84,7 @@ end
 sc.start(1 * period)
 local wait = 0
 for i = 1, clint_num_cores do
-  while clint.timer_irq[i]:read() == false do
+  while timer_irq[i]:read() == false do
     sc.start(period)
     wait = wait + 1
   end
@@ -97,14 +106,14 @@ for i, t in ipairs(timer_reset_tests) do
   sc.start(1 * period)
 
   for j = 1, i do
-    local irq = clint.timer_irq[j]:read()
+    local irq = timer_irq[j]:read()
     assert(
       irq == false,
       string.format("Timer IRQ[%d] should be false after reset, got %s", j - 1, tostring(irq))
     )
   end
   for j = i + 1, clint_num_cores do
-    local irq = clint.timer_irq[j]:read()
+    local irq = timer_irq[j]:read()
     assert(
       irq == true,
       string.format("Timer IRQ[%d] should still be true after reset, got %s", j - 1, tostring(irq))

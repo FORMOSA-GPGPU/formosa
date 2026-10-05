@@ -49,9 +49,13 @@ cpu:set_pc(elf.entry)
 
 local gnd = sc.signal("null")
 
-cpu.ext_int = gnd
-cpu.sw_int = clint.msip_irq[1]
-cpu.timer_int = clint.timer_irq[1]
+local msip_irq = sc.signal("msip_irq", false)
+local timer_irq = sc.signal("timer_irq", false)
+clint.msip_irq[1](msip_irq)
+clint.timer_irq[1](timer_irq)
+cpu.ext_int(gnd)
+cpu.sw_int(msip_irq)
+cpu.timer_int(timer_irq)
 
 print("Start simulation")
 sc.start()

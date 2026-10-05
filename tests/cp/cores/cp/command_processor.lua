@@ -8,7 +8,10 @@
 ---@overload fun(name: string): cp.command_processor
 local CommandProcessor =
   { isa = "rv64im", num_mem_ports = 1, has_ext_int = true, has_reset = false }
-CommandProcessor.__index = CommandProcessor
+function CommandProcessor:__index(key)
+  if key == "ext_int" then return self._native.ext_int end
+  return CommandProcessor[key]
+end
 
 ---@param _ string Module name, consumed by lv.sc_module.wrap.
 ---@return cp.command_processor
@@ -23,8 +26,8 @@ function CommandProcessor.new(_)
   })
   self._gnd = sc.signal("gnd")
   self._gnd:write(false)
-  self._native.sw_int = self._gnd
-  self._native.timer_int = self._gnd
+  self._native.sw_int(self._gnd)
+  self._native.timer_int(self._gnd)
   return self
 end
 
@@ -37,7 +40,7 @@ function CommandProcessor:__newindex(key, value)
   elseif key == "mem_target" then
     self._native.target = value
   elseif key == "ext_int" then
-    self._native.ext_int = value
+    error("ext_int is a port; use ext_int(signal)")
   elseif key == "reset_n" then
     -- This model has no reset input.
     return

@@ -120,9 +120,9 @@ class CommandProcessor : public sc_module {
   Target *get_target() const;
 
   void set_pc(uint64_t pc);
-  void set_ext_int(sc_signal<bool> *s);
-  void set_sw_int(sc_signal<bool> *s);
-  void set_timer_int(sc_signal<bool> *s);
+  sc_in<bool> *ext_int() { return &ext_interrupt; }
+  sc_in<bool> *sw_int() { return &sw_interrupt; }
+  sc_in<bool> *timer_int() { return &timer_interrupt; }
 
  private:
   sc_in<bool> SC_NAMED(clk);

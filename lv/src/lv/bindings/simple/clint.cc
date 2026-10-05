@@ -21,7 +21,7 @@ using lv::Warning;
 
 class Clint : public sc_module {
  public:
-  using IntSignal = sc_signal<bool>;
+  using IntPort = sc_out<bool>;
 
   explicit Clint(const sc_module_name &name, size_t num_cores = 1)
       : sc_module(name),
@@ -39,12 +39,9 @@ class Clint : public sc_module {
             },
             16) {
     for (uint64_t i = 0; i < num_cores; ++i) {
-      timer_irq_ptrs_.emplace_back(&timer_irq_[i]);
-      msip_irq_ptrs_.emplace_back(&msip_irq_[i]);
-
-      // Initialize timer irq and msip irq signals to false
-      timer_irq_[i].write(false);
-      msip_irq_[i].write(false);
+      // Defer initial values until the platform has bound the output ports.
+      timer_irq_[i].initialize(false);
+      msip_irq_[i].initialize(false);
     }
 
     SC_METHOD(MTimeMethod);
@@ -65,22 +62,23 @@ class Clint : public sc_module {
 
   auto port() const { return &sink_.port; }
 
-  sol::as_table_t<std::vector<IntSignal *>> timer_irq() {
-    return sol::as_table(timer_irq_ptrs_);
+  sol::as_table_t<std::vector<IntPort *>> timer_irq() {
+    std::vector<IntPort *> ports;
+    for (auto &port : timer_irq_) ports.push_back(&port);
+    return ports;
   }
 
-  sol::as_table_t<std::vector<IntSignal *>> msip_irq() {
-    return sol::as_table(msip_irq_ptrs_);
+  sol::as_table_t<std::vector<IntPort *>> msip_irq() {
+    std::vector<IntPort *> ports;
+    for (auto &port : msip_irq_) ports.push_back(&port);
+    return ports;
   }
 
  private:
   size_t num_cores_;
-  // signal holder
-  sc_vector<IntSignal> timer_irq_;
-  sc_vector<IntSignal> msip_irq_;
-  // vector of signal pointers
-  std::vector<IntSignal *> timer_irq_ptrs_;
-  std::vector<IntSignal *> msip_irq_ptrs_;
+  // Module-owned output ports; connecting channels belong to the platform.
+  sc_vector<IntPort> timer_irq_;
+  sc_vector<IntPort> msip_irq_;
 
   sc_event msip_modify_event_;
 
@@ -246,8 +244,8 @@ LV_BINDING(simple, Clint)
     .property("clock", &Clint::clock, &Clint::set_clock,
               lv::doc("SystemC clock"))
     .property("timer_irq", &Clint::timer_irq,
-              lv::doc("Timer interrupt signals"))
+              lv::doc("Timer interrupt output ports"))
     .property("msip_irq", &Clint::msip_irq,
-              lv::doc("Software interrupt signals"));
+              lv::doc("Software interrupt output ports"));
 
 }  // namespace simple
