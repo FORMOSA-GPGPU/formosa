@@ -8,7 +8,13 @@
 ---@field clock sc.clock
 ---@field stats stats.Group | nil
 
----@alias ilha.system.sm_ctor fun(name: string, id: integer, config: ilha.system_config, sm_param: table|nil): ilha.system.sm
+---@class ilha.system.sm_options
+---@field id integer
+---@field config ilha.system_config
+---@field address_map ilha.addr_map Platform-owned SM address map; required. Fields are inferred from ilha.addr_map's SSOT.
+---@field params? table Model-specific parameters; treated as read-only.
+
+---@alias ilha.system.sm_ctor fun(name: string, options: ilha.system.sm_options): ilha.system.sm
 
 ---@class ilha.system.opts
 ---@field replay? boolean
@@ -227,7 +233,12 @@ function System.new(name, config, opts)
 
   for i = 1, system.num_sm do
     local id = i - 1
-    local sm = make_sm("SM" .. id, id, system, config.sm.param)
+    local sm = make_sm("SM" .. id, {
+      id = id,
+      config = system,
+      params = config.sm.param,
+      address_map = addr,
+    })
     sm.clock = self._clock
     table.insert(self._sm, sm)
   end

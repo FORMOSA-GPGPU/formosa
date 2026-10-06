@@ -106,27 +106,33 @@
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
-        "ENABLE_PROJECTS": "ilha;simtix"
+        "ENABLE_PROJECTS": "ilha;simtix",
+        "SIMTIX_ENABLE_TESTING": true
       },
       "inherits": "workflow.base",
       "name": "ilha.platform.coverage"
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "ilha;simtix"
+        "ENABLE_PROJECTS": "ilha;simtix",
+        "SIMTIX_ENABLE_TESTING": true
       },
       "inherits": "workflow.base",
       "name": "ilha.platform.debug"
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "ilha;simtix"
+        "ENABLE_PROJECTS": "ilha;simtix",
+        "SIMTIX_ENABLE_TESTING": true
       },
       "inherits": "workflow.base",
       "name": "ilha.platform.release"
@@ -199,9 +205,11 @@
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "fw;simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
@@ -209,9 +217,11 @@
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
@@ -219,9 +229,11 @@
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests",
+        "SIMTIX_ENABLE_TESTING": true,
         "TESTS_ENABLE_TESTS": "opencl;kernel-sim"
       },
       "inherits": "workflow.base",
@@ -262,6 +274,7 @@
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
         "ENABLE_PROJECTS": "fw;simtix;tests;ilha",
@@ -273,6 +286,7 @@
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests;ilha",
@@ -284,6 +298,7 @@
     },
     {
       "cacheVariables": {
+        "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Release",
         "ENABLE_COVERAGE": false,
         "ENABLE_PROJECTS": "fw;simtix;tests;ilha",
@@ -335,7 +350,7 @@
       },
       "filter": {
         "include": {
-          "name": "ilha\\..*|^ilha\\.wg_lifecycle$"
+          "name": "ilha\\..*|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "ilha.platform.coverage",
@@ -350,7 +365,7 @@
       },
       "filter": {
         "include": {
-          "name": "ilha\\..*|^ilha\\.wg_lifecycle$"
+          "name": "ilha\\..*|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "ilha.platform.debug",
@@ -365,7 +380,7 @@
       },
       "filter": {
         "include": {
-          "name": "ilha\\..*|^ilha\\.wg_lifecycle$"
+          "name": "ilha\\..*|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "ilha.platform.release",
@@ -470,7 +485,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm"
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.atomic_sm.coverage",
@@ -485,7 +500,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm"
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.atomic_sm.debug",
@@ -500,7 +515,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm"
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.atomic_sm.release",
@@ -560,7 +575,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.coverage",
@@ -575,7 +590,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.debug",
@@ -590,7 +605,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.release",
@@ -647,7 +662,7 @@
   "version": 8,
   "workflowPresets": [
     {
-      "displayName": "Validate the Ilha platform configuration, bindings, and work-group lifecycle.",
+      "displayName": "Validate the Ilha platform configuration, bindings, work-group lifecycle, and SM composition.",
       "name": "ilha.platform.coverage",
       "steps": [
         {
@@ -661,7 +676,7 @@
       ]
     },
     {
-      "displayName": "Validate the Ilha platform configuration, bindings, and work-group lifecycle.",
+      "displayName": "Validate the Ilha platform configuration, bindings, work-group lifecycle, and SM composition.",
       "name": "ilha.platform.debug",
       "steps": [
         {
@@ -675,7 +690,7 @@
       ]
     },
     {
-      "displayName": "Validate the Ilha platform configuration, bindings, and work-group lifecycle.",
+      "displayName": "Validate the Ilha platform configuration, bindings, work-group lifecycle, and SM composition.",
       "name": "ilha.platform.release",
       "steps": [
         {

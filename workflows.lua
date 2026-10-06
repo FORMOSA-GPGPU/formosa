@@ -99,7 +99,13 @@ local function make_simtix_sm_workflow(sm_model, extra_test_suites)
   end
 
   local display_name = (sm_model:gsub("_sm$", " SM"))
-  local test_scope = #test_suites > 2 and "unit and integration" or "integration"
+  local test_scope = "integration"
+  for _, suite in ipairs(test_suites) do
+    if suite:match("%.unit$") then
+      test_scope = "unit and integration"
+      break
+    end
+  end
   return {
     description = "Validate the simtix " .. display_name .. " with " .. test_scope .. " tests.",
     test_suites = test_suites,
@@ -285,6 +291,10 @@ local config = {
       paths = { "simtix/tests/utils/**" },
       depends = { "simtix.tests.build" },
     },
+    ["simtix.tests.sm"] = {
+      paths = { "simtix/tests/sm/**" },
+      depends = { "simtix.tests.build" },
+    },
     ["tests.cp.common"] = {
       paths = {
         "tests/cp/CMakeLists.txt",
@@ -432,6 +442,30 @@ local config = {
     },
   },
   test_suites = {
+    ["simtix.sm.integration"] = {
+      depends = {
+        "simtix.atomic_sm",
+        "simtix.pipelined_sm",
+        "simtix.tests.sm",
+        "lv.executable",
+        "lv.lua",
+        "lv.bindings.simple",
+        "lv.bindings.systemc",
+      },
+      adapters = {
+        cmake = {
+          build_options = {
+            ENABLE_PROJECTS = { "simtix" },
+            SIMTIX_ENABLE_TESTING = true,
+            BUILD_TESTING = true,
+          },
+          selectors = {
+            "^simtix\\.sm-map\\.(atomic|pipelined)$",
+            "^simtix\\.sm-config\\.pipelined\\.(default|core|four)$",
+          },
+        },
+      },
+    },
     ["opencl.simtix.pipelined_sm"] = make_simtix_sm_test_suite("opencl", "pipelined_sm"),
     ["opencl.simtix.atomic_sm"] = make_simtix_sm_test_suite("opencl", "atomic_sm"),
     ["kernel-sim.simtix.pipelined_sm"] = make_simtix_sm_test_suite("kernel-sim", "pipelined_sm"),
@@ -590,18 +624,29 @@ local config = {
     ["ilha.integration"] = {
       depends = {
         "ilha.platform",
+        "simtix.atomic_sm",
+        "simtix.pipelined_sm",
         "simtix.pipelined_core",
         "lv.executable",
         "lv.lua",
+        "lv.bindings.cp",
+        "lv.bindings.dma",
+        "lv.bindings.dramsys",
+        "lv.bindings.ipc",
         "lv.bindings.simple",
         "lv.bindings.systemc",
+        "lv.bindings.workload",
       },
       adapters = {
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "ilha", "simtix" },
+            BUILD_TESTING = true,
           },
-          selectors = { "^ilha\\.wg_lifecycle$" },
+          selectors = {
+            "^ilha\\.wg_lifecycle$",
+            "^ilha\\.system\\.(atomic|pipelined)$",
+          },
         },
       },
     },
@@ -653,13 +698,13 @@ local config = {
   workflows = {
     ["simtix.pipelined_sm"] = make_simtix_sm_workflow(
       "pipelined_sm",
-      { "simtix.pipelined_core.unit", "ilha.integration" }
+      { "simtix.pipelined_core.unit", "ilha.integration", "simtix.sm.integration" }
     ),
     ["ilha.platform"] = {
-      description = "Validate the Ilha platform configuration, bindings, and work-group lifecycle.",
-      test_suites = { "ilha.unit", "ilha.integration" },
+      description = "Validate the Ilha platform configuration, bindings, work-group lifecycle, and SM composition.",
+      test_suites = { "ilha.unit", "ilha.integration", "simtix.sm.integration" },
     },
-    ["simtix.atomic_sm"] = make_simtix_sm_workflow("atomic_sm"),
+    ["simtix.atomic_sm"] = make_simtix_sm_workflow("atomic_sm", { "simtix.sm.integration" }),
     ["simtix.cache"] = {
       description = "Validate the simtix cache model with unit and integration tests.",
       test_suites = {

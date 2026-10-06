@@ -5,6 +5,9 @@
 ---@class simtix.atomic_sm.param
 ---@field non_cacheable_regions? {addr: integer, size: integer}[]
 
+---@class simtix.atomic_sm.options : ilha.system.sm_options
+---@field params? simtix.atomic_sm.param Model-specific parameters; treated as read-only.
+
 ---@class simtix.atomic_sm : ilha.system.sm
 ---@field protected _clock sc.clock
 ---@field protected _id integer
@@ -19,20 +22,19 @@
 ---@field protected _wg_init ilha.WGInitializer
 ---@field protected _core_info simple.ConstantTable
 ---@field protected _stack_remap simple.DummyTarget
----@overload fun(name: string, id: integer, config: ilha.system_config, sm_param?: simtix.atomic_sm.param): simtix.atomic_sm
+---@overload fun(name: string, options: simtix.atomic_sm.options): simtix.atomic_sm
 local AtomicSM = {}
 
 ---@param name string
----@param id integer
----@param config ilha.system_config
----@param sm_param? simtix.atomic_sm.param
+---@param options simtix.atomic_sm.options
 ---@return simtix.atomic_sm
-function AtomicSM.new(name, id, config, sm_param)
-  sm_param = sm_param or {}
+function AtomicSM.new(name, options)
+  local id, config = options.id, options.config
+  local sm_param = options.params or {}
+  local addr = assert(options.address_map, "SM address_map is required")
   ---@type simtix.atomic_sm
   local self = setmetatable({}, AtomicSM --[[@as table]])
   self._id = id
-  local addr = require("ilha.addr_map")
   local threads_per_core = config:threads_per_core()
 
   -- Child names are local to this hierarchy-aware SM instance.
@@ -167,4 +169,4 @@ setmetatable(AtomicSM --[[@as table]], {
   end,
 })
 
-return require("lv.sc_module").wrap(AtomicSM)
+return require("lv.sc_module").wrap(AtomicSM) --[[@as simtix.atomic_sm]]

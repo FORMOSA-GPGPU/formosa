@@ -18,6 +18,9 @@ local BankedMemory = require("simtix.banked_memory")
 ---@field lsu? "simple"|"coalescing_outstanding"
 ---@field lsu_config? simtix.pipelined_sm.lsu_config
 
+---@class simtix.pipelined_sm.options : ilha.system.sm_options
+---@field params? simtix.pipelined_sm.param Model-specific parameters; treated as read-only.
+
 ---@class simtix.pipelined_sm : ilha.system.sm
 ---@field protected _clock sc.clock
 ---@field protected _id integer
@@ -33,28 +36,36 @@ local BankedMemory = require("simtix.banked_memory")
 ---@field protected _wg_init ilha.WGInitializer
 ---@field protected _core_info simple.ConstantTable
 ---@field protected _stack_remap simtix.StackRemapTable
----@overload fun(name: string, id: integer, config: ilha.system_config, sm_param?: simtix.pipelined_sm.param): simtix.pipelined_sm
+---@overload fun(name: string, options: simtix.pipelined_sm.options): simtix.pipelined_sm
 local PipelinedSM = {}
 
 ---@param name string
----@param id integer
----@param config ilha.system_config
----@param sm_param? simtix.pipelined_sm.param
+---@param options simtix.pipelined_sm.options
 ---@return simtix.pipelined_sm
-function PipelinedSM.new(name, id, config, sm_param)
-  sm_param = sm_param or {}
+function PipelinedSM.new(name, options)
+  local id, config = options.id, options.config
+  ---@type simtix.pipelined_sm.param
+  local sm_param = options.params or {}
+  local addr = assert(options.address_map, "SM address_map is required")
   ---@type simtix.pipelined_sm
   local self = setmetatable({}, PipelinedSM --[[@as table]])
   self._id = id
-  local addr = require("ilha.addr_map")
   local threads_per_core = config:threads_per_core()
 
+  -- Instance defaults must not mutate parameters shared by callers.
+  local function copy_parameters(source)
+    local result = {}
+    for key, value in pairs(source or {}) do
+      result[key] = value
+    end
+    return result
+  end
   ---@type simtix.Cache.Param
-  local icache_param = sm_param.icache or {}
+  local icache_param = copy_parameters(sm_param.icache)
   icache_param.block_size_bytes = icache_param.block_size_bytes or config.cache_block_size
 
   ---@type simtix.banked_cache.param
-  local dcache_param = sm_param.dcache or {}
+  local dcache_param = copy_parameters(sm_param.dcache)
   dcache_param.block_size_bytes = dcache_param.block_size_bytes or config.cache_block_size
   dcache_param.non_cacheable_regions = config:effective_non_cacheable_regions()
 
@@ -63,7 +74,7 @@ function PipelinedSM.new(name, id, config, sm_param)
     num_lanes = config.threads_per_warp,
   }
 
-  local pipe_param = sm_param.core or {}
+  local pipe_param = copy_parameters(sm_param.core)
 
   -- Child names are local to this hierarchy-aware SM instance.
   self._core = simtix.PipelinedCore("PipelinedCore", core_param, pipe_param)
@@ -279,4 +290,4 @@ setmetatable(PipelinedSM --[[@as table]], {
   end,
 })
 
-return require("lv.sc_module").wrap(PipelinedSM)
+return require("lv.sc_module").wrap(PipelinedSM) --[[@as simtix.pipelined_sm]]

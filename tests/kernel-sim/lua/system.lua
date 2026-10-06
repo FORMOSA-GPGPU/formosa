@@ -55,7 +55,12 @@ function System.new(prog_name, args)
 
   ---@type ilha.system.sm_ctor
   local make_sm = require(config.sm.module)
-  self._sm = make_sm("SM0", 0, self._config, config.sm.param)
+  self._sm = make_sm("SM0", {
+    id = 0,
+    config = self._config,
+    address_map = require("ilha.addr_map"),
+    params = config.sm.param,
+  })
   self._sm.clock = self._clock
 
   self._initiator.clock = self._clock

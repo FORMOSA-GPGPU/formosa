@@ -74,7 +74,6 @@ if(BUILD_TESTING)
     add_lv_test_script("ilha.${_test}" "tests/unit/${_test}" LABELS unit ilha)
   endforeach()
   if("simtix" IN_LIST ENABLE_PROJECTS)
-    add_lv_test_script(ilha.wg_lifecycle tests/integration/wg_lifecycle.lua
-      LABELS integration ilha)
+    add_subdirectory(tests/integration)
   endif()
 endif()
