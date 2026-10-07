@@ -17,8 +17,6 @@
 ---@alias ilha.system.sm_ctor fun(name: string, options: ilha.system.sm_options): ilha.system.sm
 
 ---@class ilha.system.opts
----@field replay? boolean
----@field replay_host_mem_size? integer
 ---@field keep_alive? boolean
 ---@field agent_socket_path string
 
@@ -42,9 +40,6 @@
 ---@field protected _sm ilha.system.sm[]
 ---@field protected _sm_printbuf simple.PrintBuf[]
 ---@field protected _agent ipc.Agent
----@field _replay_initiator simple.Initiator|nil
----@field protected _agent_dummy simple.Initiator|nil
----@field _replay_host_mem simple.Memory|nil
 ---@field protected _host_dma dma.DMA
 ---@field protected _device_dma dma.DMA
 ---@field protected _scratch simple.Memory
@@ -243,8 +238,6 @@ function System.new(name, config, opts)
     table.insert(self._sm, sm)
   end
 
-  local replay = opts.replay or false
-
   -- Agent subsys
   self._system_info = simple.ConstantTable("SystemInfo", {
     entries = {
@@ -263,7 +256,7 @@ function System.new(name, config, opts)
     timeout_ms = 100,
     debug = false,
     ignore_terminate = opts.keep_alive or false,
-    synchronous = not replay,
+    synchronous = true,
   })
   self._host_dma = dma.DMA("host_dma", { fifo_size = 2 })
   self._device_dma = dma.DMA("device_dma", { fifo_size = 2 })
@@ -286,17 +279,7 @@ function System.new(name, config, opts)
     { addr = addr.system_info_base, size = addr.system_info_size }, -- hardware capabilities
     { addr = scratch_mem_base, size = scratch_mem_size }, -- scratch (CP CSR + ABI ring)
   }
-  local agent_core_ports = replay and 3 or 2
-  self._fab_agent = simple.XBar("fab_agent", agent_core_ports, fab_agent_mmap)
-
-  -- Replay-only host path. Normal capture uses ipc.Agent as the DMA host.
-  if replay then
-    self._replay_initiator = simple.Initiator("replay_initiator")
-    self._agent_dummy = simple.Initiator("agent_dummy")
-    self._replay_host_mem = simple.Memory("replay_host_mem", {
-      size = opts.replay_host_mem_size or 4096,
-    })
-  end
+  self._fab_agent = simple.XBar("fab_agent", 2, fab_agent_mmap)
 
   -- Global memories
   self._l2cache = simtix.Cache("L2Cache", {
@@ -372,18 +355,7 @@ function System.new(name, config, opts)
   self._scratch.clock = self._clock
   self._fab_agent.clock = self._clock
 
-  -- Capture/default host path
-  if not replay then self._host_dma.port0_target = self._agent.port end
-
-  -- Replay host path
-  if replay then
-    self._replay_initiator.target = self._fab_agent.core_side[3].port
-    self._agent_dummy.target = self._agent.port
-    self._host_dma.port0_target = self._replay_host_mem.port
-    self._replay_initiator.clock = self._clock
-    self._agent_dummy.clock = self._clock
-    self._replay_host_mem.clock = self._clock
-  end
+  self._host_dma.port0_target = self._agent.port
 
   self._fab_sys.mem_side[1].target = self._gmem.port
   self._fab_sys.mem_side[2].target = self._l2cache.port

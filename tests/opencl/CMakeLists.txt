@@ -62,7 +62,6 @@ set(OCL_DEFAULT_OPTS
   CL_HPP_CL_1_2_DEFAULT_BUILD)
 
 lv_script(run_opencl.lua)
-lv_script(run_opencl_replay.lua)
 
 add_subdirectory(mandelbrot)
 add_subdirectory(montecarlo)

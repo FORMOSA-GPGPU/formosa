@@ -87,9 +87,7 @@ owned_roots=(
   tests/ipc
   tests/kernel-sim
   tests/opencl/CMakeLists.txt
-  tests/opencl/README_REPLAY.md
   tests/opencl/run_opencl.lua
-  tests/opencl/run_opencl_replay.lua
   tests/opencl/activation
   tests/opencl/attention
   tests/opencl/batched_gemm

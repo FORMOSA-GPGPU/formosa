@@ -1,5 +1,6 @@
 #include <CL/opencl.hpp>
 #include <cstdint>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -67,7 +68,7 @@ int main(int argc, char **argv) {
     return -1;
   }
 
-  srand(time(nullptr));
+  srand(0);
   std::vector<cl::Platform> platforms;
   cl::Platform::get(&platforms);
 

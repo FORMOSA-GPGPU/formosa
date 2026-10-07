@@ -16,14 +16,12 @@
 #include <limits>
 #include <mutex>
 #include <optional>
-#include <string_view>
 #include <vector>
 
 #include "command_packet.h"
 #include "common/util.h"
 #include "falloc.h"
 #include "gpufw.elf.h"
-#include "hal-capture-recorder.h"
 
 static std::vector<Packet> host_cmd_ring;
 static uint32_t host_rd_ptr;
@@ -41,15 +39,9 @@ static const formosa::real::ConfigurationSnapshot *active_configuration =
 static std::mutex command_mtx;
 
 /* Shared completion-pool ownership. */
-struct MemoryCopyCaptureMetadata {
-  uint64_t src_addr = 0;
-  uint64_t dst_addr = 0;
-  uint64_t size = 0;
-};
 struct CompletionSlotMetadata {
   bool in_use = false;
   FsaCompletionToken token = 0;
-  MemoryCopyCaptureMetadata capture;
 };
 static std::vector<CompletionSlotMetadata> completion_slots;
 static std::vector<FsaCompletionToken> stale_completion_tokens;
@@ -58,8 +50,6 @@ static_assert(FSA_COMPLETION_SLOT_COUNT == FSA_COMPLETION_POOL_ENTRIES,
               "ABI slot count must match address-map pool capacity");
 
 namespace {
-
-formosa::hal::CaptureRecorder recorder;
 
 bool checked_add(uint64_t lhs, uint64_t rhs, uint64_t &result) {
   if (lhs > std::numeric_limits<uint64_t>::max() - rhs) return false;
@@ -166,10 +156,6 @@ void rollback_initialization() noexcept {
   }
   falloc_clean();
   falloc_noncache_clean();
-  try {
-    recorder.Close();
-  } catch (...) {
-  }
 }
 
 enum FirmwareReadyResult {
@@ -196,14 +182,6 @@ int real_mmio(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr,
               bool latch_transport_failure = true) {
   int status = fsa_real_mmio(offset, wr_val, rd_ptr);
   if (latch_transport_failure) mark_transport_failure(status);
-  if (rd_ptr == nullptr) {
-    recorder.Event("mmio_write", offset, sizeof(uint64_t), wr_val, status);
-  } else if (status == 0) {
-    recorder.Event("mmio_read", offset, sizeof(uint64_t),
-                   static_cast<int64_t>(*rd_ptr), status);
-  } else {
-    recorder.Event("mmio_read", offset, sizeof(uint64_t), 0, status);
-  }
   return status;
 }
 
@@ -213,20 +191,6 @@ int real_cp_reset() {
   if (status == 0) {
     host_rd_ptr = 0;
     host_wr_ptr = 0;
-  }
-  recorder.Event("cp_reset", 0, 0, 0, status);
-  return status;
-}
-
-int copy_to_scratchpad_recorded(uintptr_t dev_addr, const void *host_ptr,
-                                size_t size, std::string_view type,
-                                bool latch_transport_failure = true) {
-  int status = fsa_real_copy_to_scratchpad(dev_addr, host_ptr, size);
-  if (latch_transport_failure) mark_transport_failure(status);
-  if (status == 0 && size > 0) {
-    recorder.BlobEvent(type, dev_addr, host_ptr, size, 0, status);
-  } else {
-    recorder.Event(type, dev_addr, size, 0, status);
   }
   return status;
 }
@@ -329,17 +293,6 @@ std::optional<size_t> allocate_completion_slot() {
   return std::nullopt;
 }
 
-void maybe_record_d2h_capture(const MemoryCopyCaptureMetadata &metadata,
-                              FsaCompletionResult result) {
-  if (result != FSA_COMPLETION_RESULT_SUCCESS || metadata.size == 0 ||
-      metadata.dst_addr == 0) {
-    return;
-  }
-  recorder.BlobEvent("memory_copy_d2h", metadata.src_addr,
-                     reinterpret_cast<const void *>(metadata.dst_addr),
-                     metadata.size);
-}
-
 enum class SendCmdStatus {
   Ok = 0,
   /* Packet write failed before WP doorbell: safe to free the host slot. */
@@ -351,12 +304,9 @@ enum class SendCmdStatus {
 SendCmdStatus send_cmd(const Packet &cmd) {
   uint64_t cmd_wr_addr = dev_cmd_ring_base + (host_wr_ptr * sizeof(cmd.raw));
 
-  if (copy_to_scratchpad_recorded(cmd_wr_addr, &cmd, sizeof(cmd.raw),
-                                  "scratchpad_write", false) != 0) {
+  if (fsa_real_copy_to_scratchpad(cmd_wr_addr, &cmd, sizeof(cmd.raw)) != 0) {
     return SendCmdStatus::PreWpFailure;
   }
-  recorder.BlobEvent("cmd_packet", cmd_wr_addr, &cmd, sizeof(cmd.raw),
-                     host_wr_ptr, 0);
 
   uint32_t next_wr_ptr = (host_wr_ptr + 1) % host_cmd_ring.size();
   if (real_mmio(FSA_CP_OFF_WR_PTR, next_wr_ptr, nullptr) != 0) {
@@ -366,10 +316,9 @@ SendCmdStatus send_cmd(const Packet &cmd) {
   return SendCmdStatus::Ok;
 }
 
-template <typename FillPacket, typename AfterCompletionPrepared>
-FsaCommandSubmitStatus submit_command(
-    FsaCompletionToken *completion, FillPacket fill,
-    AfterCompletionPrepared after_completion_prepared) {
+template <typename FillPacket>
+FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
+                                      FillPacket fill) {
   if (completion == nullptr) return kFsaCommandSubmitInvalidArgument;
   *completion = 0;
 
@@ -404,15 +353,13 @@ FsaCommandSubmitStatus submit_command(
                                  FSA_COMPLETION_RESULT_PENDING);
   const uintptr_t slot_address =
       FSA_COMPLETION_POOL_BASE + *slot_index * FSA_COMPLETION_SLOT_BYTES;
-  if (copy_to_scratchpad_recorded(slot_address, &slot, sizeof(slot),
-                                  "completion_pool_write", false) != 0) {
+  if (fsa_real_copy_to_scratchpad(slot_address, &slot, sizeof(slot)) != 0) {
     completion_slots[*slot_index] = CompletionSlotMetadata{};
     return kFsaCommandSubmitTransportError;
   }
   memcpy(pkt->raw + FSA_COMPLETION_TOKEN_OFFSET, &metadata.token,
          sizeof(metadata.token));
   *completion = metadata.token;
-  after_completion_prepared(*pkt, *completion);
 
   const SendCmdStatus rc = send_cmd(*pkt);
   if (rc == SendCmdStatus::PreWpFailure) {
@@ -422,12 +369,6 @@ FsaCommandSubmitStatus submit_command(
   }
   if (rc != SendCmdStatus::Ok) return kFsaCommandSubmitTransportError;
   return kFsaCommandSubmitAccepted;
-}
-
-template <typename FillPacket>
-FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
-                                      FillPacket fill) {
-  return submit_command(completion, fill, [](Packet &, FsaCompletionToken) {});
 }
 
 /* Ensure CP is in ROM Reset before publishing a Boot Descriptor. */
@@ -471,32 +412,15 @@ FsaCommandSubmitStatus send_memory_copy_cmd(MemoryDomain src_domain,
                                             MemoryDomain dst_domain,
                                             uint64_t dst_addr, uint64_t size,
                                             FsaCompletionToken *completion) {
-  return submit_command(
-      completion,
-      [=](Packet &packet) {
-        MemoryCopyPacket &cmd = packet.memory_copy_packet;
-        cmd.header = kMemoryCopyPacketHeader;
-        cmd.src_domain = src_domain;
-        cmd.dst_domain = dst_domain;
-        cmd.src_addr = src_addr;
-        cmd.dst_addr = dst_addr;
-        cmd.size = size;
-      },
-      [=](Packet &, FsaCompletionToken token) {
-        /* Capture H2D host payload at the runtime command seam.  D2H is
-         * recorded when the terminal result is observed. */
-        if (src_domain == kMemoryDomainHost && size != 0 && src_addr != 0) {
-          recorder.BlobEvent("memory_copy_h2d", dst_addr,
-                             reinterpret_cast<const void *>(src_addr), size);
-        }
-        if (dst_domain == kMemoryDomainHost && size != 0 && dst_addr != 0) {
-          MemoryCopyCaptureMetadata &capture =
-              completion_slots[fsa_completion_token_slot_index(token)].capture;
-          capture.src_addr = src_addr;
-          capture.dst_addr = dst_addr;
-          capture.size = size;
-        }
-      });
+  return submit_command(completion, [=](Packet &packet) {
+    MemoryCopyPacket &cmd = packet.memory_copy_packet;
+    cmd.header = kMemoryCopyPacketHeader;
+    cmd.src_domain = src_domain;
+    cmd.dst_domain = dst_domain;
+    cmd.src_addr = src_addr;
+    cmd.dst_addr = dst_addr;
+    cmd.size = size;
+  });
 }
 
 int wait_for_copy_completion(FsaCompletionToken completion) {
@@ -558,7 +482,6 @@ static int upload_firmware(const void *fw_ptr, size_t fw_size) {
                       reinterpret_cast<uintptr_t>(fw_ptr), nullptr));
   CHECK_ERR(
       real_mmio(FSA_CP_OFF_FW_SIZE, static_cast<int64_t>(fw_size), nullptr));
-  recorder.BlobEvent("boot_descriptor", 0, fw_ptr, fw_size);
 
   /* Wait until ROM has finished the Host→staging DMA (FW_SIZE cleared). */
   uint64_t start_ns;
@@ -580,16 +503,11 @@ static int upload_firmware(const void *fw_ptr, size_t fw_size) {
 }
 
 int fsa_addr_malloc(uintptr_t dev_addr, size_t size) {
-  int status = falloc_addr_malloc(dev_addr, size);
-  recorder.Event("addr_malloc", dev_addr, size, 0, status);
-  return status;
+  return falloc_addr_malloc(dev_addr, size);
 }
 
 int fsa_malloc(void **dev_addr, size_t size) {
-  int status = falloc_malloc(dev_addr, size);
-  recorder.Event("malloc", reinterpret_cast<uintptr_t>(*dev_addr), size, 0,
-                 status);
-  return status;
+  return falloc_malloc(dev_addr, size);
 }
 
 int fsa_malloc_noncache(void **dev_addr, size_t size) {
@@ -600,8 +518,6 @@ int fsa_malloc_noncache(void **dev_addr, size_t size) {
   void *allocated_addr = nullptr;
   int status = falloc_noncache_malloc(&allocated_addr, size);
   *dev_addr = status == 0 ? allocated_addr : nullptr;
-  recorder.Event("malloc_noncache", reinterpret_cast<uintptr_t>(*dev_addr),
-                 size, 0, status);
   return status;
 }
 
@@ -610,7 +526,6 @@ int fsa_free(void *dev_addr) {
   if (status != 0 && noncache_alloc_ready) {
     status = falloc_noncache_free(dev_addr);
   }
-  recorder.Event("free", reinterpret_cast<uintptr_t>(dev_addr), 0, 0, status);
   return status;
 }
 
@@ -719,7 +634,6 @@ FsaCompletionPollStatus fsa_poll_completion(FsaCompletionToken token,
     return kFsaCompletionPollTransportError;
   }
 
-  MemoryCopyCaptureMetadata capture;
   size_t slot_index = 0;
   {
     std::lock_guard<std::mutex> lock(command_mtx);
@@ -731,15 +645,9 @@ FsaCompletionPollStatus fsa_poll_completion(FsaCompletionToken token,
         return kFsaCompletionPollInvalidToken;
       }
       if (result != nullptr) *result = FSA_COMPLETION_RESULT_FIRMWARE_REBOOT;
-      recorder.CompletionSlotEvent(
-          FSA_COMPLETION_POOL_BASE + fsa_completion_token_slot_index(token) *
-                                         FSA_COMPLETION_SLOT_BYTES,
-          fsa_completion_token_alloc_tag(token),
-          FSA_COMPLETION_RESULT_FIRMWARE_REBOOT);
       return kFsaCompletionPollTerminal;
     }
     slot_index = *found;
-    capture = completion_slots[slot_index].capture;
   }
 
   FirmwareSnapshot firmware;
@@ -749,10 +657,6 @@ FsaCompletionPollStatus fsa_poll_completion(FsaCompletionToken token,
 
   if (firmware_rebooted(firmware, token)) {
     if (result != nullptr) *result = FSA_COMPLETION_RESULT_FIRMWARE_REBOOT;
-    recorder.CompletionSlotEvent(
-        FSA_COMPLETION_POOL_BASE + slot_index * FSA_COMPLETION_SLOT_BYTES,
-        fsa_completion_token_alloc_tag(token),
-        FSA_COMPLETION_RESULT_FIRMWARE_REBOOT);
     return kFsaCompletionPollTerminal;
   }
 
@@ -774,9 +678,6 @@ FsaCompletionPollStatus fsa_poll_completion(FsaCompletionToken token,
     return kFsaCompletionPollPending;
   }
 
-  maybe_record_d2h_capture(capture, slot_result);
-  recorder.CompletionSlotEvent(
-      slot_address, fsa_completion_token_alloc_tag(token), slot_result);
   return kFsaCompletionPollTerminal;
 }
 
@@ -920,7 +821,6 @@ int fsa_hal_init(FsaDeviceDescription *description) {
   FsaDeviceDescription local_description = {};
   try {
     rollback_initialization();
-    recorder.InitIfNeeded();
     firmware_ready.store(false, std::memory_order_release);
     transport_failed.store(false, std::memory_order_release);
     firmware_reboot_failed.store(false, std::memory_order_release);
@@ -971,16 +871,6 @@ int fsa_hal_init(FsaDeviceDescription *description) {
       rollback_initialization();
       return -1;
     }
-    recorder.ManifestU64("cmd_ring_size", dev_cmd_ring_size);
-    recorder.ManifestU64("cmd_ring_base", dev_cmd_ring_base);
-    recorder.ManifestU64("completion_pool_base",
-                         (uint64_t)FSA_COMPLETION_POOL_BASE);
-    recorder.ManifestU64("global_mem_base", snapshot->global_mem_base);
-    recorder.ManifestU64("global_mem_alloc_base",
-                         snapshot->global_mem_alloc_base);
-    recorder.ManifestU64("global_mem_size", snapshot->global_mem_size);
-    recorder.ManifestU64("fsa_mmio_base", snapshot->fsa_mmio_base);
-    recorder.ManifestU64("cache_block_size", snapshot->cache_line_size);
 
     const uint64_t alloc_size = local_description.max_allocation_size;
     if (falloc_init(snapshot->global_mem_alloc_base, alloc_size,
@@ -1046,7 +936,6 @@ int fsa_hal_cleanup() {
   fsa_real_cleanup();
   falloc_clean();
   falloc_noncache_clean();
-  recorder.Close();
   return 0;
 }
 

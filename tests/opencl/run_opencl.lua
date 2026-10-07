@@ -28,7 +28,6 @@ local parser = argparse("run_opencl.lua")
 parser:option("-s --stats", "Output path of the stat"):args(1)
 ConfigCli.add_options(parser, true)
 parser:option("-t --trace", "Output prefix of the Perfetto trace"):args(1):default("run_opencl")
-parser:option("--replay-capture", "Output directory for replay capture"):args(1)
 parser:argument("host_program", "Host program to run with the simulator"):args("1")
 parser:argument("host_program_args", "Arguments for the host program"):args("*")
 
@@ -150,7 +149,6 @@ else
   end
 
   stdlib.setenv("AGENT_SOCKET_PATH", agent_socket_path)
-  if args.replay_capture then stdlib.setenv("FORMOSA_HAL_CAPTURE_TRACE", args.replay_capture) end
   print("Running OpenCL program: " .. host_program_with_args)
 
   local exit_code = os.execute(host_program_with_args)

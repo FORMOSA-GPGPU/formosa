@@ -5,7 +5,6 @@
 #include <CL/opencl.hpp>
 #include <cstdint>
 #include <cstdlib>
-#include <ctime>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -53,7 +52,7 @@ void divergence_kernel(cl::Context &context, cl::Program &program,
 }
 
 int main(int argc, char **argv) {
-  srand(time(nullptr));
+  srand(0);
   std::vector<cl::Platform> platforms;
   cl::Platform::get(&platforms);
 

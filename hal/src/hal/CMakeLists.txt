@@ -6,7 +6,6 @@ function(add_formosa_hal name)
   set(target formosa-hal.${name})
   add_library(${target} STATIC
     hal.cc
-    hal-capture-recorder.cc
     $<TARGET_OBJECTS:gpufw_elf_carr>
   )
   target_include_directories(${target}
