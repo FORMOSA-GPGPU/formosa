@@ -374,6 +374,8 @@ void Backend::UpdateReadyWarps() {
 
   ready_warps_ = 0;
   bool has_scoreboard_blocked_warp = false;
+  uint32_t scheduler_eligible_warps = 0;
+  uint32_t frontend_starved_warps = 0;
 
   bool has_control_hazards = false;
   bool has_data_hazards = false;
@@ -387,8 +389,11 @@ void Backend::UpdateReadyWarps() {
     bool is_exception = pending_exceptions_[local_wid].valid;
     bool is_suppressed = issue_suppressed_warps_[wid] == 1;
 
-    // Only active warps with runnable lanes and no pending trap may issue.
+    // Only active warps with runnable lanes, no pending trap, and no issue
+    // suppression are eligible to participate in this scheduler cycle.
     if (is_active && has_runnable_lanes && !is_exception && !is_suppressed) {
+      ++scheduler_eligible_warps;
+
       // Furthermore, the first instruction in the ibuffer must be ready (i.e.,
       // has no dependencies)
       Packet *packet = nullptr;
@@ -396,6 +401,10 @@ void Backend::UpdateReadyWarps() {
       IssueStallReason reason = IssueStallReason::kNone;
       bool can_issue = has_packet && scoreboard_.CanIssue(packet, &reason);
       ready_warps_[wid] = can_issue;
+
+      if (!has_packet) {
+        ++frontend_starved_warps;
+      }
 
       if (has_packet && !can_issue) {
         has_scoreboard_blocked_warp = true;
@@ -406,6 +415,22 @@ void Backend::UpdateReadyWarps() {
       }
     }
   }
+  stats->frontend_starved_warp_count_sum += frontend_starved_warps;
+
+  // A frontend-starvation stall is a cycle in which there is at least one
+  // scheduler-eligible warp, but every eligible warp lacks an instruction in
+  // its I-buffer.
+  if (scheduler_eligible_warps > 0 &&
+      frontend_starved_warps == scheduler_eligible_warps) {
+    stats->frontend_starvation_stall_cycles++;
+  }
+
+  // Count no-ready cycles where frontend starvation is present, including
+  // mixed cycles in which other eligible warps are scoreboard-blocked.
+  if (ready_warps_ == 0 && frontend_starved_warps > 0) {
+    stats->frontend_starvation_exposed_stall_cycles++;
+  }
+
   if (ready_warps_ == 0 && has_scoreboard_blocked_warp) {
     stats->scoreboard_stall_cycles++;
     stats->scoreboard_stall_with_control_hazard_cycles += has_control_hazards;

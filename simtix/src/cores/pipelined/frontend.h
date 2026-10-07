@@ -171,7 +171,9 @@ class Frontend : public sc_module {
   void OnIssue(uint32_t wid) { issuing_warps_[wid] = 1; }
   void TryLinkRedirectTarget(uint32_t wid, Packet *consumer);
 
-  void GenerateFetchRequest(uint32_t wid);
+  enum class AdmitOrigin : uint8_t { kStarving, kIssuing };
+
+  void GenerateFetchRequest(uint32_t wid, AdmitOrigin origin);
 
   struct FetchFilterEntry {
     uint64_t fg_addr;

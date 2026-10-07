@@ -34,15 +34,12 @@ void Frontend::PCGen() {
     for (uint32_t i = 0; i < num_warps_; ++i) {
       uint32_t wid = (prioritized_ + i) % num_warps_;
       if ((*warp_mask)[wid]) {
-        GenerateFetchRequest(wid);
+        const AdmitOrigin origin = warp_mask == &issuing_warps_
+                                       ? AdmitOrigin::kIssuing
+                                       : AdmitOrigin::kStarving;
+
+        GenerateFetchRequest(wid, origin);
         prioritized_ = (wid + 1) % num_warps_;
-
-        if (warp_mask == &issuing_warps_) {
-          core_->stats()->fetch_due_to_issuing++;
-        } else if (warp_mask == &starving_warps_) {
-          core_->stats()->fetch_due_to_starving++;
-        }
-
         goto FINALLY;
       }
     }
@@ -312,14 +309,12 @@ Frontend::FindFetchFilterEntry(uint64_t fg_addr) {
                       });
 }
 
-void Frontend::GenerateFetchRequest(uint32_t wid) {
-  // Filter the request if IWIS is enabled and the FG addr already exists
-  uint64_t fg_addr = ToFetchGroupAddress(fetch_pc_[wid]);
-  if (enable_iwis_) {
-    if (FindFetchFilterEntry(fg_addr) != fetch_filter_.end()) {
-      core_->stats()->num_fetches_filtered++;
-      return;
-    }
+void Frontend::GenerateFetchRequest(uint32_t wid, AdmitOrigin origin) {
+  // Filter the request if IWIS is enabled and the FG addr already exists.
+  const uint64_t fg_addr = ToFetchGroupAddress(fetch_pc_[wid]);
+  if (enable_iwis_ && FindFetchFilterEntry(fg_addr) != fetch_filter_.end()) {
+    core_->stats()->num_fetches_filtered++;
+    return;
   }
 
   // Fetch filter missed or IWIS is not enabled
@@ -335,6 +330,13 @@ void Frontend::GenerateFetchRequest(uint32_t wid) {
     WITH_TRACER(Declare(p));
     WITH_TRACER(StartStage(p, 0, "F1"));
   }
+
+  if (origin == AdmitOrigin::kIssuing) {
+    core_->stats()->fetch_due_to_issuing++;
+  } else {
+    core_->stats()->fetch_due_to_starving++;
+  }
+
   pc_gen_q_.write(entry);
 }
 

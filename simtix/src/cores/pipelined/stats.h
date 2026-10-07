@@ -83,6 +83,7 @@ struct Stats : public BaseCore::Stats {
   // Frontend
   Metric fetch_due_to_starving;
   Metric fetch_due_to_issuing;
+  Formula<Real> fetch_requests;
   Metric num_fetches_filtered;
   Metric can_share_instr;
   Metric instr_shared;
@@ -105,6 +106,9 @@ struct Stats : public BaseCore::Stats {
   Metric scheduler_cycles;
   Metric issue_cycles;
   Metric no_ready_warp_stall_cycles;
+  Metric frontend_starved_warp_count_sum;
+  Metric frontend_starvation_stall_cycles;
+  Metric frontend_starvation_exposed_stall_cycles;
   Metric scoreboard_stall_cycles;
   Metric collect_queue_full_stall_cycles;
   Metric ready_warp_count_sum;
@@ -116,6 +120,9 @@ struct Stats : public BaseCore::Stats {
   Formula<Real> avg_ready_warps;
   Formula<Real> issue_rate;
   Formula<Real> no_ready_warp_stall_ratio;
+  Formula<Real> avg_frontend_starved_warps;
+  Formula<Real> frontend_starvation_stall_ratio;
+  Formula<Real> frontend_starvation_exposed_stall_ratio;
   Formula<Real> scoreboard_stall_ratio;
   Formula<Real> scoreboard_stall_with_control_hazard_ratio;
   Formula<Real> scoreboard_stall_with_data_hazard_ratio;
@@ -162,6 +169,15 @@ struct Stats : public BaseCore::Stats {
         LV_STAT(issue_cycles, "Number of backend issue cycles"),
         LV_STAT(no_ready_warp_stall_cycles,
                 "Number of scheduler cycles with no ready warp"),
+        LV_STAT(frontend_starved_warp_count_sum,
+                "Sum of scheduler-eligible warps with an empty I-buffer over "
+                "scheduler cycles"),
+        LV_STAT(frontend_starvation_stall_cycles,
+                "Number of scheduler cycles where every scheduler-eligible "
+                "warp has an empty I-buffer"),
+        LV_STAT(frontend_starvation_exposed_stall_cycles,
+                "Number of scheduler cycles with no ready warp and at least "
+                "one scheduler-eligible warp with an empty I-buffer"),
         LV_STAT(scoreboard_stall_cycles,
                 "Number of scheduler cycles blocked only by scoreboard"),
         LV_STAT(
@@ -190,6 +206,15 @@ struct Stats : public BaseCore::Stats {
         LV_STAT(issue_rate, "Backend issue cycles per scheduler cycle"),
         LV_STAT(no_ready_warp_stall_ratio,
                 "Fraction of scheduler cycles with no ready warp"),
+        LV_STAT(avg_frontend_starved_warps,
+                "Average scheduler-eligible warps with an empty I-buffer per "
+                "scheduler cycle"),
+        LV_STAT(frontend_starvation_stall_ratio,
+                "Fraction of scheduler cycles where every scheduler-eligible "
+                "warp has an empty I-buffer"),
+        LV_STAT(frontend_starvation_exposed_stall_ratio,
+                "Fraction of scheduler cycles with no ready warp and at least "
+                "one scheduler-eligible warp with an empty I-buffer"),
         LV_STAT(scoreboard_stall_ratio,
                 "Fraction of scheduler cycles blocked only by scoreboard"),
         LV_STAT(scoreboard_stall_with_control_hazard_ratio,
@@ -205,6 +230,7 @@ struct Stats : public BaseCore::Stats {
                 "Number of fetch requests due to warp starving"),
         LV_STAT(fetch_due_to_issuing,
                 "Number of fetch requests due to warp issuing"),
+        LV_STAT(fetch_requests, "Number of fetch requests"),
         LV_STAT(num_fetches_filtered,
                 "Number of fetch requests filtered by fetch filter"),
         LV_STAT(can_share_instr,
@@ -322,9 +348,16 @@ struct Stats : public BaseCore::Stats {
         LV_STAT(avg_non_stack_store_instr_time,
                 "Average execution time of non-stack store instructions (ns)") {
     ipc = total_instret / active_cycles;
+    fetch_requests = fetch_due_to_starving + fetch_due_to_issuing;
     avg_ready_warps = ready_warp_count_sum / scheduler_cycles;
     issue_rate = issue_cycles / scheduler_cycles;
     no_ready_warp_stall_ratio = no_ready_warp_stall_cycles / scheduler_cycles;
+    avg_frontend_starved_warps =
+        frontend_starved_warp_count_sum / scheduler_cycles;
+    frontend_starvation_stall_ratio =
+        frontend_starvation_stall_cycles / scheduler_cycles;
+    frontend_starvation_exposed_stall_ratio =
+        frontend_starvation_exposed_stall_cycles / scheduler_cycles;
     scoreboard_stall_ratio = scoreboard_stall_cycles / scheduler_cycles;
     scoreboard_stall_with_control_hazard_ratio =
         scoreboard_stall_with_control_hazard_cycles / scoreboard_stall_cycles;
