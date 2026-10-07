@@ -20,7 +20,7 @@
     };
     formosa-pocl-src = {
       url =
-        "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=6b1841f6c4457566d542b8c13e98ffeea594f95d&shallow=1&submodules=1";
+        "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=e1d5dcfbc1c1e2330526cc16414035bed0260dde&shallow=1&submodules=1";
       flake = false;
     };
 
