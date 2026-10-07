@@ -4,7 +4,15 @@
 
 # See https://pre-commit.com for more information
 # See https://pre-commit.com/hooks.html for more hooks
-exclude: '^(third-party/(?![^/]+\.cmake$|stb/(?:CMakeLists\.txt|libstb\.c)$).*)|^build/'
+# Preserve imported benchmark sources and notices without formatting changes.
+exclude: >-
+  (?x)^(
+    third-party/(?![^/]+\.cmake$|stb/(?:CMakeLists\.txt|libstb\.c)$).*
+    | build/
+    | tests/opencl/rodinia/(?:opencl/|openmp/|data/|LICENSE$|README$)
+    | tests/opencl/parboil/(?:benchmarks/|common/|LICENSE$|NIST_NOTICE\.txt$|README(?:\.(?:benchmarks|buildsystem))?$)
+    | tests/opencl/shoc/(?:src/|config/|LICENSE(?:-CUDPP)?\.txt$|README\.txt$)
+  )
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks

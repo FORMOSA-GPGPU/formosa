@@ -395,7 +395,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|^opencl\\..*\\.validation$|hal\\.lv_.*"
         }
       },
       "name": "opencl.coverage",
@@ -410,7 +410,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|^opencl\\..*\\.validation$|hal\\.lv_.*"
         }
       },
       "name": "opencl.debug",
@@ -425,7 +425,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|hal\\.lv_.*"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|opencl\\..*\\.simtix\\.atomic_sm|^opencl\\..*\\.validation$|hal\\.lv_.*"
         }
       },
       "name": "opencl.release",
@@ -485,7 +485,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.atomic_sm.coverage",
@@ -500,7 +500,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.atomic_sm.debug",
@@ -515,7 +515,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.atomic_sm|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.atomic_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.atomic_sm|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.atomic_sm.release",
@@ -575,7 +575,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.coverage",
@@ -590,7 +590,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.debug",
@@ -605,7 +605,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.release",

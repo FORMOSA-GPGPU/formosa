@@ -54,20 +54,21 @@ redistributing source or binaries.
 
 ## OpenCL benchmark tests
 
-Some tests under `tests/opencl` are derived from Rodinia Benchmark Suite 3.1.
-Some OpenCL test harnesses and file layout were adapted from the Vortex OpenCL
-tests, then modified for FORMOSA.
+Rodinia input fixtures and NN dataset generation material came through the
+Vortex OpenCL tests.
 
 | FORMOSA path | Source / attribution | License / notice |
 | --- | --- | --- |
-| `tests/opencl/bfs` | Rodinia BFS benchmark, adapted through Vortex `tests/opencl/bfs`. The kernel header identifies Jianbin Fang and the BFS benchmark date. | Rodinia 3-clause BSD-like license from the University of Virginia applies; existing source attribution is retained in the files. |
-| `tests/opencl/kmeans` | Rodinia kmeans benchmark, adapted through Vortex `tests/opencl/kmeans`. Several files retain Northwestern University and University of Virginia attribution. | Rodinia 3-clause BSD-like license from the University of Virginia applies. BSD-like Northwestern University license headers are also retained in source files. |
-| `tests/opencl/gaussian` | Rodinia Gaussian Elimination benchmark, adapted through Vortex `tests/opencl/guassian`. | Rodinia 3-clause BSD-like license from the University of Virginia applies. AMD APP SDK helper files retain Advanced Micro Devices, Inc. BSD-like license and export-control notice. |
-| `tests/opencl/nn` | Rodinia Nearest Neighbor benchmark, adapted through Vortex `tests/opencl/nearn`. `inputgen/hurricanegen.c` identifies the dataset generator as being for Rodinia's Nearest Neighbor benchmark. | Rodinia 3-clause BSD-like license from the University of Virginia applies. AMD APP SDK helper files retain Advanced Micro Devices, Inc. BSD-like license and export-control notice. |
+| `tests/opencl/rodinia` | Rodinia 3.1 subset from [yuhc/gpu-rodinia at `9c10d3e`](https://github.com/yuhc/gpu-rodinia/tree/9c10d3ea16ddba2ba057cc3951a9efc4c2cc18a4), with Myocyte data from [HPC-FAIR/rodinia_3.1 at `2feb92e`](https://github.com/HPC-FAIR/rodinia_3.1/tree/2feb92e26a10c435d68fe301e29715a05cc1f070). | Retain `LICENSE`, `data/LICENSE`, and file-level notices, including Northwestern University BSD terms and AMD license/export notices. |
+| `tests/opencl/parboil` | Parboil 2.5 subset from [yuhc/gpu-parboil at `ccf3d31`](https://github.com/yuhc/gpu-parboil/tree/ccf3d3126f1754ca85528722f4ced5894ccb852b). | Illinois/NCSA terms in `LICENSE`. SpMV's Matrix Market I/O helpers retain NIST attribution; distribute the complete supplemental `NIST_NOTICE.txt` with source and binaries. |
+| `tests/opencl/shoc` | SHOC subset from [vetter/shoc at `00b25e2`](https://github.com/vetter/shoc/tree/00b25e2751dde4f1d7c595cadbb7fdb0873257b0). | Retain the BSD terms in `LICENSE.txt` and `LICENSE-CUDPP.txt`, plus file-level notices. |
+| `tests/opencl/rodinia/bfs/graph*.txt` | Rodinia BFS fixtures previously distributed through Vortex `tests/opencl/bfs`. | Retain Rodinia's UVA BSD-like notice and Vortex attribution for the inherited material. |
+| `tests/opencl/rodinia/gaussian/matrix*.txt` | Rodinia Gaussian fixtures previously distributed through Vortex `tests/opencl/guassian`. | Retain Rodinia's UVA BSD-like notice and Vortex attribution for the inherited material. |
+| `tests/opencl/rodinia/nn/cane*.db`, `filelist.txt`, and `inputgen` | Rodinia Nearest Neighbor data and generator previously distributed through Vortex `tests/opencl/nearn`. | Retain Rodinia's UVA BSD-like notice and Vortex attribution. |
 
-Vortex is licensed under Apache-2.0 and its paper states that Vortex evaluated
-a subset of the Rodinia benchmark suite. FORMOSA retains upstream benchmark
-notices in these files.
+Vortex is licensed under Apache-2.0. FORMOSA's CMake integration, input
+generators, and validation helpers use Apache-2.0; upstream notices remain
+applicable to the imported material.
 
 Rodinia 3.1 is distributed under a 3-clause BSD-like license by the University
 of Virginia. The license requires retaining the copyright notice, conditions,

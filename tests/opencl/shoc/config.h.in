@@ -1,0 +1,11 @@
+// SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+//
+// SPDX-License-Identifier: Apache-2.0
+
+#cmakedefine HAVE_CLOCK_GETTIME 1
+#cmakedefine HAVE_CLOCK_PROCESS_CPUTIME_ID 1
+#cmakedefine HAVE_GETTIMEOFDAY 1
+#cmakedefine HAVE_STDINT_H 1
+
+// Match the upstream configure result for the project's GCC/Clang toolchains.
+#define restrict __restrict

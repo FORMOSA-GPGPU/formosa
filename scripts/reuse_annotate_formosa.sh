@@ -87,26 +87,28 @@ owned_roots=(
   tests/ipc
   tests/kernel-sim
   tests/opencl/CMakeLists.txt
+  tests/opencl/README.md
   tests/opencl/run_opencl.lua
-  tests/opencl/activation
-  tests/opencl/attention
-  tests/opencl/batched_gemm
-  tests/opencl/bias_relu
-  tests/opencl/conv2d
-  tests/opencl/embedding
-  tests/opencl/gemm
+  tests/opencl/formosa/CMakeLists.txt
+  tests/opencl/formosa/activation
+  tests/opencl/formosa/attention
+  tests/opencl/formosa/batched_gemm
+  tests/opencl/formosa/bias_relu
+  tests/opencl/formosa/conv2d
+  tests/opencl/formosa/embedding
+  tests/opencl/formosa/gemm
   tests/opencl/gemma
-  tests/opencl/gru
-  tests/opencl/gustavson_gemm
-  tests/opencl/layernorm
-  tests/opencl/pooling
-  tests/opencl/residual_mlp
-  tests/opencl/rmsnorm
+  tests/opencl/formosa/gru
+  tests/opencl/formosa/gustavson_gemm
+  tests/opencl/formosa/layernorm
+  tests/opencl/formosa/pooling
+  tests/opencl/formosa/residual_mlp
+  tests/opencl/formosa/rmsnorm
   tests/opencl/smoke
-  tests/opencl/softmax
-  tests/opencl/swiglu
-  tests/opencl/transformer_block
-  tests/opencl/vecmul
+  tests/opencl/formosa/softmax
+  tests/opencl/formosa/swiglu
+  tests/opencl/formosa/transformer_block
+  tests/opencl/formosa/vecmul
   tests/pfreader
   third-party/DRAMSys.cmake
   third-party/FreeRTOS-Kernel.cmake
@@ -131,15 +133,15 @@ excluded_prefixes=(
   tests/baremetal-freertos/
   tests/cp/riscv-test/
   tests/kernel-sim/riscv-test/
-  tests/opencl/bfs/
-  tests/opencl/gaussian/
-  tests/opencl/kmeans/
-  tests/opencl/mandelbrot/
-  tests/opencl/montecarlo/
-  tests/opencl/nn/
-  tests/opencl/spmv/
-  tests/opencl/transpose/
-  tests/opencl/vecadd/
+  tests/opencl/rodinia/bfs/
+  tests/opencl/rodinia/gaussian/
+  tests/opencl/rodinia/kmeans/
+  tests/opencl/formosa/mandelbrot/
+  tests/opencl/formosa/montecarlo/
+  tests/opencl/rodinia/nn/
+  tests/opencl/formosa/spmv/
+  tests/opencl/formosa/transpose/
+  tests/opencl/formosa/vecadd/
 )
 
 is_excluded() {

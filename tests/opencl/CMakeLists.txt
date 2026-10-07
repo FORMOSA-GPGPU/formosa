@@ -15,7 +15,15 @@ set(OPENCL_PERF_CASES "${CMAKE_CURRENT_BINARY_DIR}/opencl_perf_cases.tsv")
 file(WRITE "${OPENCL_PERF_CASES}" "")
 
 function(add_lv_opencl_integration_test PROGRAM)
-  cmake_parse_arguments(TEST "" "ID;SUFFIX" "ARGS" ${ARGN})
+  cmake_parse_arguments(TEST "" "ID;SUFFIX;WORKING_DIRECTORY;CONFIG" "ARGS;WRAPPER" ${ARGN})
+
+  if(NOT TEST_WORKING_DIRECTORY)
+    set(TEST_WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}")
+  endif()
+  set(CONFIG_ARGS "")
+  if(TEST_CONFIG)
+    list(APPEND CONFIG_ARGS --config "${TEST_CONFIG}")
+  endif()
 
   # Logic: Start with Program name, append Suffix, or override with ID
   set(FINAL_ID ${PROGRAM})
@@ -26,7 +34,10 @@ function(add_lv_opencl_integration_test PROGRAM)
     set(FINAL_ID ${TEST_ID})
   endif()
 
-  if(NOT FINAL_ID MATCHES "^smoke\\.")
+  # The perf manifest stores arguments without per-test execution settings.
+  if(NOT FINAL_ID MATCHES "^smoke\\."
+      AND TEST_WORKING_DIRECTORY STREQUAL "${PROJECT_SOURCE_DIR}"
+      AND NOT TEST_CONFIG AND NOT TEST_WRAPPER)
     string(REPLACE ";" "\t" TEST_ARGS_TSV "${TEST_ARGS}")
     if(TEST_ARGS_TSV)
       file(APPEND "${OPENCL_PERF_CASES}" "${FINAL_ID}\t${PROGRAM}\t${TEST_ARGS_TSV}\n")
@@ -34,6 +45,9 @@ function(add_lv_opencl_integration_test PROGRAM)
       file(APPEND "${OPENCL_PERF_CASES}" "${FINAL_ID}\t${PROGRAM}\n")
     endif()
   endif()
+
+  # Preserve the wrapper list through the helper's argument parsing.
+  string(REPLACE ";" "\\\\;" WRAPPER_ARG "${TEST_WRAPPER}")
 
   foreach(sm ${OPENCL_SMS})
     set(TEST_NAME opencl.${FINAL_ID}.${sm})
@@ -43,9 +57,11 @@ function(add_lv_opencl_integration_test PROGRAM)
       ARGS -s ${TEST_OUTPUT}.toml
            -t ${TEST_OUTPUT}
            --sm ${sm}
+           ${CONFIG_ARGS}
            -- $<TARGET_FILE:${PROGRAM}> ${TEST_ARGS}
+      WRAPPER "${WRAPPER_ARG}"
       LABELS integration opencl
-      WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+      WORKING_DIRECTORY "${TEST_WORKING_DIRECTORY}"
     )
     set_tests_properties(${TEST_NAME} PROPERTIES
       ENVIRONMENT "POCL_CACHE_DIR=${TEST_OUTPUT}/pocl-cache"
@@ -63,35 +79,9 @@ set(OCL_DEFAULT_OPTS
 
 lv_script(run_opencl.lua)
 
-add_subdirectory(mandelbrot)
-add_subdirectory(montecarlo)
-add_subdirectory(vecadd)
-add_subdirectory(vecmul)
-add_subdirectory(gemm)
-add_subdirectory(batched_gemm)
-add_subdirectory(gustavson_gemm)
-add_subdirectory(conv2d)
-add_subdirectory(pooling)
-add_subdirectory(transpose)
-add_subdirectory(prefix_sum)
-add_subdirectory(lmem_bank_parallel)
-add_subdirectory(bfs)
-add_subdirectory(gaussian)
-add_subdirectory(image_blur)
-add_subdirectory(kmeans)
-add_subdirectory(nn)
-add_subdirectory(activation)
-add_subdirectory(bias_relu)
-add_subdirectory(layernorm)
-add_subdirectory(softmax)
-add_subdirectory(embedding)
-add_subdirectory(attention)
-add_subdirectory(transformer_block)
-add_subdirectory(residual_mlp)
-add_subdirectory(swiglu)
-add_subdirectory(gru)
-add_subdirectory(rmsnorm)
-add_subdirectory(gemma)
-
 add_subdirectory(smoke)
-add_subdirectory(spmv)
+add_subdirectory(formosa)
+add_subdirectory(rodinia)
+add_subdirectory(parboil)
+add_subdirectory(shoc)
+add_subdirectory(gemma)

@@ -92,6 +92,7 @@ end
 local function make_simtix_sm_workflow(sm_model, extra_test_suites)
   local test_suites = {
     "opencl.simtix." .. sm_model,
+    "opencl.validation",
     "kernel-sim.simtix." .. sm_model,
   }
   for _, suite in ipairs(extra_test_suites or {}) do
@@ -442,6 +443,18 @@ local config = {
     },
   },
   test_suites = {
+    ["opencl.validation"] = {
+      depends = { "tests.opencl" },
+      adapters = {
+        cmake = {
+          build_options = {
+            ENABLE_PROJECTS = { "fw", "simtix", "tests" },
+            TESTS_ENABLE_TESTS = { "opencl" },
+          },
+          selectors = { "^opencl\\..*\\.validation$" },
+        },
+      },
+    },
     ["simtix.sm.integration"] = {
       depends = {
         "simtix.atomic_sm",
@@ -727,6 +740,7 @@ local config = {
       test_suites = {
         "opencl.simtix.pipelined_sm",
         "opencl.simtix.atomic_sm",
+        "opencl.validation",
         "hal.unit",
       },
     },
