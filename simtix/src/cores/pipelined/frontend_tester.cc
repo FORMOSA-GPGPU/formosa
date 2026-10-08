@@ -75,7 +75,7 @@ class FrontendTester : public sc_module, private ToFrontendIntf {
   void set_target(Frontend::Target *target) { frontend.set_target(target); }
 
   Stats *stats() override { return &stats_; }
-  lv::stats::Group *stats_group() { return &stats_; }
+  lv::stats::Group stats_group() const { return stats_; }
 
  protected:
   const WarpMask &active_warps() const override { return active_warps_; }

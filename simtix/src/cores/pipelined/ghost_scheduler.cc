@@ -38,7 +38,7 @@ GhostScheduler::GhostScheduler(const sc_module_name &name,
     }
     warps_[get_local_wid(wid)].scoreboard_changed = true;
   });
-  core_->stats_group()->add_sub_group(&stats_);
+  core_->stats_group().add_sub_group(&stats_);
   issue_ports_.reserve(num_local_warps_);
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
     issue_ports_.push_back(std::make_unique<IssuePort>(this, local_wid));

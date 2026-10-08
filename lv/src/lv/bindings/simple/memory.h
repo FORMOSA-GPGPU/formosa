@@ -53,7 +53,7 @@ class Memory : public sc_module {
 
   void load_elf(ELFIO::elfio &elf);
 
-  lv::stats::Group *stats() const { return &stats_; }
+  lv::stats::Group stats() const { return stats_; }
 
  private:
   lv::trace::Track read_track_;

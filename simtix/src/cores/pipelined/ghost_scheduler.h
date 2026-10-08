@@ -37,7 +37,7 @@ class ToGhostSchedulerIntf {
   virtual Scoreboard *scoreboard(uint32_t subcore_id) = 0;
   virtual void FreePacket(Packet *packet) = 0;
   virtual konata::KonataTracer<Packet> *tracer() = 0;
-  virtual lv::stats::Group *stats_group() = 0;
+  virtual lv::stats::Group stats_group() const = 0;
   friend class GhostScheduler;
 };
 

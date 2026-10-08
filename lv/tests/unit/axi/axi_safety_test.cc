@@ -69,8 +69,8 @@ class SafetyHarness : public sc_core::sc_module {
 
   bool passed() const { return passed_; }
   bool NoDownstreamAccess() const {
-    const auto stats = memory_.stats()->tabularize();
-    const auto group = stats[memory_.stats()->name()];
+    const auto stats = memory_.stats().tabularize();
+    const auto group = stats[memory_.stats().name()];
     if (group["total_reads"]["val"].value<lv::stats::Integer>().value() != 0 ||
         group["total_writes"]["val"].value<lv::stats::Integer>().value() != 0)
       return false;

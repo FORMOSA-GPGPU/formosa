@@ -6,6 +6,8 @@
 
 #include <liblv/binding.h>
 
+#include <numeric>
+
 #define WITH_TRACER(code)            \
   do {                               \
     if (auto *t = core_->tracer()) { \

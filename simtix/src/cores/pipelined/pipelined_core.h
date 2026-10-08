@@ -102,7 +102,7 @@ class PipelinedCore : public BaseCore,
   ilha::WarpCtrl *warp_ctrl() { return static_cast<ilha::WarpCtrl *>(this); }
 
   pipelined::Stats *stats() override { return &stats_; }
-  lv::stats::Group *stats_group() { return &stats_; }
+  lv::stats::Group stats_group() const override { return stats_; }
 
  protected:
   // Implementation of ToFrontendIntf

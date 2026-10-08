@@ -70,7 +70,7 @@ class AtomicCore : public BaseCore {
   ilha::WarpCtrl *warp_ctrl() { return static_cast<ilha::WarpCtrl *>(this); }
 
   lv::TlmSource::Target *target() const { return mem_port_.target(); }
-  lv::stats::Group *stats() const { return &stats_; }
+  lv::stats::Group stats() const { return stats_; }
 
   void before_end_of_elaboration() override {
     sched_ = sched_init_("sched");

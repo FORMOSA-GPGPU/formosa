@@ -116,7 +116,7 @@ class GhostSchedulerTester : public sc_module, private ToGhostSchedulerIntf {
 
   uint32_t outstanding_packets() const { return outstanding_packets_; }
 
-  lv::stats::Group *stats_group_for_lua() { return &stats_; }
+  lv::stats::Group stats_group() const override { return stats_; }
 
  protected:
   const WarpMask &active_warps() const override { return active_warps_; }
@@ -138,8 +138,6 @@ class GhostSchedulerTester : public sc_module, private ToGhostSchedulerIntf {
   void FreePacket(Packet *packet) override { ReleasePacket(packet); }
 
   konata::KonataTracer<Packet> *tracer() override { return nullptr; }
-
-  lv::stats::Group *stats_group() override { return &stats_; }
 
  private:
   static uint32_t ValidateTopology(const ArchParam &param,
@@ -246,7 +244,7 @@ LV_BINDING(simtix, GhostSchedulerTester)
             lv::doc("Release an artificial scoreboard hazard"))
     .property("outstanding_packets", &GhostSchedulerTester::outstanding_packets,
               lv::doc("Number of tester-owned packets not yet released"))
-    .property("stats", &GhostSchedulerTester::stats_group_for_lua,
+    .property("stats", &GhostSchedulerTester::stats_group,
               lv::doc("GhOST scheduler statistics"));
 
 }  // namespace simtix::pipelined

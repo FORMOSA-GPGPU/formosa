@@ -10,6 +10,7 @@ macro(add_lv_unit_test LUA_SCRIPT)
   add_lv_test_script(${LUA_SCRIPT} ${LUA_SCRIPT} ARGS ${LUA_SCRIPT_ARGS} LABELS unit)
 endmacro()
 
+add_lv_unit_test(statistics.lua)
 add_lv_unit_test(dma/dma.lua)
 add_lv_unit_test(dbg/tick_agent.lua)
 add_lv_unit_test(dramsys/dramsys.lua)
@@ -36,6 +37,11 @@ endforeach()
 add_lv_unit_test(workload/elf.lua)
 
 # Native (non-Lua) unit tests.
+add_executable(lv_statistics_test statistics.cc)
+target_link_libraries(lv_statistics_test PRIVATE liblv)
+add_test(NAME lv.unit.statistics COMMAND lv_statistics_test)
+set_tests_properties(lv.unit.statistics PROPERTIES LABELS "lv;unit")
+
 add_subdirectory(log)
 add_subdirectory(nic)
 

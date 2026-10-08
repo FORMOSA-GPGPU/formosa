@@ -54,6 +54,40 @@ local function make_bank_param(param, bank_size, block_size, set_index_shift)
   return bank_param
 end
 
+-- Keep cache-specific counters and derived formulas in the Lua composite.
+local function add_aggregate_stats(group, banks)
+  local counters = {
+    { "total_reads", "Total number of non-atomic read requests" },
+    { "total_writes", "Total number of non-atomic write requests" },
+    { "total_atomics", "Total number of atomic requests" },
+    { "total_cacheable_requests", "Total number of requests routed through the cache" },
+    { "total_non_cacheable_requests", "Total number of requests routed around the cache" },
+    { "total_hits", "Total number of hits in cache" },
+    { "total_misses", "Total number of misses in cache" },
+    { "primary_misses", "Number of misses that allocate a new MSHR entry" },
+    { "secondary_misses", "Number of misses merged into an existing MSHR entry" },
+    { "total_evictions", "Total number of cache lines evicted" },
+    { "total_requests", "Total number of requests" },
+  }
+  local totals = {}
+  for _, counter in ipairs(counters) do
+    local name, description = counter[1], counter[2]
+    local total = banks[1].stats:get(name)
+    for i = 2, #banks do
+      total = total + banks[i].stats:get(name)
+    end
+    totals[name] = group:add_integer_formula(name, description, total)
+  end
+
+  -- Weight by cache-routed requests; idle banks and bypass traffic do not
+  -- dilute the rate. An entirely idle cache retains the native NaN result.
+  group:add_real_formula(
+    "hit_rate",
+    "The percentage of cache-routed requests hit in the cache",
+    totals.total_hits * 100 / totals.total_cacheable_requests
+  )
+end
+
 ---@class simtix.banked_cache.param : simtix.Cache.Param
 ---@field num_banks? integer   Number of interleaved banks (default: 4)
 ---@field num_froms? integer   Number of master (from) ports (default: 1)
@@ -70,7 +104,7 @@ end
 ---@field mmio_port sc.Socket
 ---@field target sc.Socket
 ---@field clock sc.clock
----@field stats stats.Group
+---@field stats stats.Group Aggregate cache counters and bankN details.
 ---@overload fun(name: string, param: simtix.banked_cache.param): simtix.BankedCache
 local BankedCache = {}
 
@@ -144,6 +178,8 @@ function BankedCache.new(name, param)
     self._controller.bank = bank.cmd_port
     self.stats:add_sub_group(bank.stats)
   end
+
+  add_aggregate_stats(self.stats, self._banks)
 
   return self
 end

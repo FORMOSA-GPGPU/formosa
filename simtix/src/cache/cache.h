@@ -61,7 +61,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
 
   void set_target(lv::TlmSource::Target *target) { source_.set_target(target); }
 
-  lv::stats::Group *stats() const { return &stats_; }
+  lv::stats::Group stats() const { return stats_; }
 
   /**
    * @brief Allocate a packet with cache-owned memory payload storage.

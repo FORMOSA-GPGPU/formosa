@@ -51,7 +51,7 @@ class AtomicMemory : public sc_module {
 
   auto port() { return &sink_.port; }
   size_t size() const { return size_; }
-  lv::stats::Group *stats() const { return &stats_; }
+  lv::stats::Group stats() const { return stats_; }
 
  private:
   bool HandleAtomicRequest(tlm::tlm_generic_payload *trans, unsigned int len);

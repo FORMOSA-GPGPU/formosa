@@ -172,7 +172,7 @@ class RoundTripHarness : public sc_core::sc_module {
     sc_core::wait(clock_.posedge_event());
   }
 
-  void ResetStats() { memory_.stats()->reset(); }
+  void ResetStats() { memory_.stats().reset(); }
 
   void Write(uint64_t addr, const std::vector<uint8_t> &data, size_t beat_bytes,
              uint32_t txn_id,
@@ -189,13 +189,13 @@ class RoundTripHarness : public sc_core::sc_module {
 
   Integer total_reads() const {
     return memory_.stats()
-        ->tabularize()[memory_.stats()->name()]["total_reads"]["val"]
+        .tabularize()[memory_.stats().name()]["total_reads"]["val"]
         .value<Integer>()
         .value();
   }
   Integer total_writes() const {
     return memory_.stats()
-        ->tabularize()[memory_.stats()->name()]["total_writes"]["val"]
+        .tabularize()[memory_.stats().name()]["total_writes"]["val"]
         .value<Integer>()
         .value();
   }
