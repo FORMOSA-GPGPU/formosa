@@ -27,3 +27,5 @@ class Gto : public WarpSched {
 };
 
 }  // namespace simtix
+
+SOL_BASE_CLASSES(simtix::Gto, simtix::WarpSched);

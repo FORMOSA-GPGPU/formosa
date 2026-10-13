@@ -73,7 +73,7 @@ class AtomicCore : public BaseCore {
   lv::stats::Group stats() const { return stats_; }
 
   void before_end_of_elaboration() override {
-    sched_ = sched_init_("sched");
+    sched_ = sched_init_("sched").get<std::shared_ptr<WarpSched>>();
     sched_init_ = sol::lua_nil;
   }
 

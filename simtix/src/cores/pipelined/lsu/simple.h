@@ -84,3 +84,5 @@ class SimpleLsu : public Lsu {
 };
 
 }  // namespace simtix::pipelined
+
+SOL_BASE_CLASSES(simtix::pipelined::SimpleLsu, simtix::pipelined::Lsu);

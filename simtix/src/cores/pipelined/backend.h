@@ -111,7 +111,8 @@ class Backend : public sc_module {
   }
 
   void before_end_of_elaboration() override {
-    arbitrator_ = arbitrator_init_("arbitrator");
+    arbitrator_ =
+        arbitrator_init_("arbitrator").get<std::shared_ptr<ArbitratorIntf>>();
     arbitrator_init_ = sol::lua_nil;
     arbitrator_->set_core(core_);
     arbitrator_->set_scoreboard(&scoreboard_);
@@ -124,7 +125,7 @@ class Backend : public sc_module {
       stats_.add_sub_group(arbitrator_->stats());
     }
 
-    lsu_ = lsu_init_("lsu");
+    lsu_ = lsu_init_("lsu").get<std::shared_ptr<Lsu>>();
     lsu_init_ = sol::lua_nil;
     lsu_->clock.bind(clock);
     lsu_->lsu_req.bind(lsu_req_q_);
@@ -148,7 +149,7 @@ class Backend : public sc_module {
     fpu_delay_q_.req_q_.bind(fpu_req_q_);
     fpu_delay_q_.resp_q_.bind(fpu_resp_q_);
 
-    sched_ = sched_init_("sched");
+    sched_ = sched_init_("sched").get<std::shared_ptr<WarpSched>>();
     sched_init_ = sol::lua_nil;
 
     core_->stats()->add_sub_group(&stats_);

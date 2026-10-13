@@ -405,3 +405,6 @@ class PipelinedArbitrator : public ArbitratorIntf {
   std::vector<lv::trace::Track> bank_conflict_tracks_;
 };
 }  // namespace simtix::pipelined
+
+SOL_BASE_CLASSES(simtix::pipelined::PipelinedArbitrator,
+                 simtix::pipelined::ArbitratorIntf);

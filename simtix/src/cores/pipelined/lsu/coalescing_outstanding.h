@@ -287,3 +287,6 @@ class CoalescingOutstandingLsu : public Lsu {
 };
 
 }  // namespace simtix::pipelined
+
+SOL_BASE_CLASSES(simtix::pipelined::CoalescingOutstandingLsu,
+                 simtix::pipelined::Lsu);

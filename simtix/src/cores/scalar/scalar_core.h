@@ -49,10 +49,10 @@ class ScalarCore : public sc_module {
 
   // Lua APIs
   void set_clock(sc_clock *clock) { this->clock.bind(*clock); }
-  void set_imem(tlm_utils::simple_target_socket<lv::TlmSink> *target) {
+  void set_imem(lv::TlmSource::Target *target) {
     imem_port_.set_target(target);
   }
-  void set_dmem(tlm_utils::simple_target_socket<lv::TlmSink> *target) {
+  void set_dmem(lv::TlmSource::Target *target) {
     dmem_port_.set_target(target);
   }
   void set_pc(uint64_t pc) { pc_ = pc; }

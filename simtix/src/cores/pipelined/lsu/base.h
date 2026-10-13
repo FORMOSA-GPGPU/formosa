@@ -15,6 +15,7 @@
 
 #include <cassert>
 #include <memory>
+#include <sol/forward.hpp>
 #include <vector>
 
 #include "cores/pipelined/packet.h"
@@ -50,3 +51,6 @@ class Lsu : public sc_module {
 };
 
 }  // namespace simtix::pipelined
+
+// Lua factories return shared ownership of concrete implementations.
+SOL_DERIVED_CLASSES(simtix::pipelined::Lsu);

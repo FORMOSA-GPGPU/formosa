@@ -61,6 +61,7 @@ struct lua_type_alias {
 
 }  // namespace lv
 
+#include <liblv/binding/tlm.h>
 #include <liblv/binding/type_aliases.h>
 
 namespace lv {

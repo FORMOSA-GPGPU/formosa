@@ -10,6 +10,8 @@
 #include <systemc.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_core_ifs.h>
 
+#include <sol/forward.hpp>
+
 #include "cores/pipelined/packet.h"
 #include "cores/pipelined/scoreboard.h"
 #include "konata/konata.h"
@@ -52,3 +54,6 @@ class ArbitratorIntf : public sc_module {
 };
 
 }  // namespace simtix::pipelined
+
+// Lua factories return shared ownership of concrete implementations.
+SOL_DERIVED_CLASSES(simtix::pipelined::ArbitratorIntf);

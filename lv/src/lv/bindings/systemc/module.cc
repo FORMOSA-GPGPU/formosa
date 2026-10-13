@@ -17,11 +17,12 @@ namespace {
 // of landing in the global scope.
 class Module final : public sc_module {
  public:
-  Module(const sc_module_name &name, sol::function construct)
+  Module(const sc_module_name &name, sol::protected_function construct)
       : sc_module(name) {
     // sc_module's own constructor already pushed this object as the current
     // hierarchy scope, so children built here attach to it directly.
-    construct();
+    sol::protected_function_result result = construct();
+    if (!result.valid()) throw sol::error(result);
   }
 
   std::string Name() const { return name(); }
@@ -42,7 +43,7 @@ class Module final : public sc_module {
 
 LV_BINDING(sc, Module)
     .constructor(
-        [](const char *name, sol::function construct) {
+        [](const char *name, sol::protected_function construct) {
           return std::make_shared<Module>(name, std::move(construct));
         },
         lv::params(lv::param("name"),

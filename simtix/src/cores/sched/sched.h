@@ -9,6 +9,7 @@
 #include <systemc.h>
 
 #include <cstdint>
+#include <sol/forward.hpp>
 
 namespace simtix {
 
@@ -23,3 +24,6 @@ class WarpSched {
 };
 
 }  // namespace simtix
+
+// Lua factories return shared ownership of concrete implementations.
+SOL_DERIVED_CLASSES(simtix::WarpSched);

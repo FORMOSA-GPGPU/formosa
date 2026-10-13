@@ -50,3 +50,5 @@ class TwoLevel : public WarpSched {
 };
 
 }  // namespace simtix
+
+SOL_BASE_CLASSES(simtix::TwoLevel, simtix::WarpSched);

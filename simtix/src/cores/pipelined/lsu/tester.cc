@@ -37,7 +37,7 @@ class LsuTester : public sc_module {
   }
 
   void before_end_of_elaboration() override {
-    lsu_ = lsu_init_("lsu");
+    lsu_ = lsu_init_("lsu").get<std::shared_ptr<Lsu>>();
     lsu_init_ = sol::lua_nil;
     lsu_->clock.bind(*clock_);
     lsu_->lsu_req.bind(lsu_req_);

@@ -93,7 +93,7 @@ class ArbitratorTester : public sc_module, private ToArbitratorIntf {
       auto arb = arb_init(fmt::format("arbitrator{}", i));
       arb_init = sol::lua_nil;
 
-      arbitrators_[i] = arb;
+      arbitrators_[i] = arb.get<std::shared_ptr<ArbitratorIntf>>();
       arbitrators_[i]->clock.bind(clk);
       arbitrators_[i]->set_core(this);
       arbitrators_[i]->set_scoreboard(&scoreboards_[i]);

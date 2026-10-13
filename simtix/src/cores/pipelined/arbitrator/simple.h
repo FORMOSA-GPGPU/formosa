@@ -25,3 +25,6 @@ class SimpleArbitrator : public ArbitratorIntf {
 };
 
 }  // namespace simtix::pipelined
+
+SOL_BASE_CLASSES(simtix::pipelined::SimpleArbitrator,
+                 simtix::pipelined::ArbitratorIntf);

@@ -22,3 +22,5 @@ class Lrr : public WarpSched {
 };
 
 }  // namespace simtix
+
+SOL_BASE_CLASSES(simtix::Lrr, simtix::WarpSched);
