@@ -20,8 +20,8 @@ Usage:
 
 This script intentionally annotates only a conservative whitelist of
 FORMOSA-owned files. It does not annotate vendored/generated/private areas such
-as third-party/, Rodinia-derived OpenCL tests, FreeRTOS ports, nanolibc, or
-tinyprintf.
+as third-party/, imported CPU and OpenCL benchmarks, FreeRTOS ports, nanolibc,
+or tinyprintf.
 EOF
 }
 
@@ -131,6 +131,9 @@ excluded_prefixes=(
   fw/nanolibc/cxx/
   fw/tinyprintf/
   tests/baremetal-freertos/
+  tests/cp/coremark/upstream/
+  tests/cp/dhrystone/main.c
+  tests/cp/dhrystone/LICENSE
   tests/cp/riscv-test/
   tests/kernel-sim/riscv-test/
   tests/opencl/rodinia/bfs/

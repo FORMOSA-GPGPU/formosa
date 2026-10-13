@@ -1,0 +1,27 @@
+/* SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+ * SPDX-License-Identifier: Apache-2.0 */
+
+MEMORY {
+  RAM (RWX): ORIGIN = @IMAGE_RAM_BASE@, LENGTH = @IMAGE_RAM_SIZE@
+}
+ENTRY(_start)
+_stack_start = @IMAGE_STACK_BASE@;
+_serial_base = @IMAGE_SERIAL_BASE@;
+SECTIONS {
+  .text @IMAGE_TEXT_BASE@ : {
+    KEEP(*(.text.start))
+    *(.text .text.*)
+  } > RAM
+  .rodata : { *(.rodata .rodata.* .srodata .srodata.*) } > RAM
+  .data : {
+    __global_pointer$ = . + 0x800;
+    *(.data .data.* .sdata .sdata.*)
+  } > RAM
+  .bss (NOLOAD) : {
+    __bss_start = .;
+    *(.bss .bss.* .sbss .sbss.* COMMON)
+    __bss_end = .;
+  } > RAM
+}
+ASSERT(_stack_start > ORIGIN(RAM) && _stack_start <= ADDR(.text),
+       "runtime stack must lie in RAM below program text");

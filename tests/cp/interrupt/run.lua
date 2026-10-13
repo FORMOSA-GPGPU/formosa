@@ -30,26 +30,23 @@ local function word(addr)
   local bytes = system:read_bytes(addr, 4)
   return bytes[1] + bytes[2] * 256 + bytes[3] * 65536 + bytes[4] * 16777216
 end
-local function wait_word(addr, expected)
-  for _ = 1, 128 do
-    system:step(64)
-    if word(addr) == expected then return end
-  end
-  error(string.format("interrupt test: expected %d at 0x%x, got %d", expected, addr, word(addr)))
-end
-local ok, err = pcall(function()
-  local elf = workload.ELF(elf_path)
-  assert(system:load_elf(elf))
-  system:boot(elf.entry)
-  wait_word(0x3004, 1)
-  for count = 1, 2 do
+local phase, count = "ready", 1
+system:run(elf_path, function()
+  if phase == "ready" then
+    if word(0x3004) ~= 1 then return nil end
     ext_int:write(true)
-    wait_word(0x3000, count)
+    phase = "handler"
+  elseif phase == "handler" then
+    if word(0x3000) ~= count then return nil end
     ext_int:write(false)
-    wait_word(0x3008, count)
+    phase = "return"
+  else
+    if word(0x3008) ~= count then return nil end
     assert(word(0x3000) == count, "interrupt counted more than once")
+    if count == 2 then return true end
+    count = count + 1
+    ext_int:write(true)
+    phase = "handler"
   end
-end)
-system:close()
-assert(ok, err)
+end, { chunk_cycles = 64, max_cycles = 5 * 8192 })
 print(args.core .. ": two external interrupts handled and returned")

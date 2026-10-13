@@ -5,14 +5,26 @@ SPDX-License-Identifier: Apache-2.0
 
 # CPU test harness
 
-After building, run from the repository root using your LV executable:
+Build and run every available adapter from the repository root:
 
 ```sh
-build/bin/lv tests/cp/riscv-test/run.lua -h
-build/bin/lv tests/cp/riscv-test/run.lua --core cp.command_processor
-build/bin/lv tests/cp/riscv-test/run.lua --core simtix.scalar_core
-build/bin/lv tests/cp/interrupt/run.lua --core cp.command_processor
-build/bin/lv tests/cp/prog0/run.lua --core simtix.scalar_core --golden tests/cp/prog0/rv64.golden
+direnv exec . cmake -S . -B build-cp -G Ninja -DCMAKE_BUILD_TYPE=Release \
+  '-DENABLE_PROJECTS=simtix;tests' -DTESTS_ENABLE_TESTS=cp -DCP_TEST_CORES=all
+direnv exec . cmake --build build-cp -j 8
+direnv exec . ctest --test-dir build-cp -L cp --output-on-failure
+```
+
+Run individual programs using the LV executable from the same build:
+
+```sh
+direnv exec . build-cp/bin/lv tests/cp/riscv-test/run.lua -h
+direnv exec . build-cp/bin/lv tests/cp/riscv-test/run.lua --core cp.command_processor
+direnv exec . build-cp/bin/lv tests/cp/riscv-test/run.lua --core simtix.scalar_core
+direnv exec . build-cp/bin/lv tests/cp/interrupt/run.lua --core cp.command_processor
+direnv exec . build-cp/bin/lv tests/cp/prog0/run.lua --core simtix.scalar_core --golden tests/cp/prog0/rv64.golden
+direnv exec . build-cp/bin/lv tests/cp/coremark/run.lua --core cp.command_processor
+direnv exec . build-cp/bin/lv tests/cp/coremark/run.lua --core simtix.scalar_core --profile validation
+direnv exec . build-cp/bin/lv tests/cp/dhrystone/run.lua --core simtix.scalar_core
 ```
 
 `--core` is a Lua module name, passed directly to `require`. The runner finds
@@ -31,8 +43,14 @@ golden file when using a custom ELF.
   with `lv.sc_module`. They expose capabilities, ports, and `boot(entry)`.
 - `platform.lua`: the test platform's memory layout and reset duration in cycles.
 - `system.lua`: builds memory and UART, wires the core, and runs an ELF.
-- Each program directory owns its sources, runner, and result checks.
+- Each program directory owns its sources, runner, result checks, and checker tests.
   Programs select compatible cores by capability; `interrupt/` requires `has_ext_int`.
+- `runtime/`: the bare-metal C runtime library, with startup, platform linking,
+  UART `printf`/`vprintf`, and nanolibc string functions. Each ISA is compiled once
+  and shared by its C test programs.
+- `coremark/` and `dhrystone/` are independent benchmark programs;
+  `benchmark/` supplies only their measurement mailbox, linker fragment, and checker.
+- `runtime_test.lua` checks the shared execution lifecycle using synthetic programs.
 
 ## Add a core
 
@@ -63,6 +81,13 @@ golden file when using a custom ELF.
 3. Add the ELF build and test registration in `<program>/CMakeLists.txt`, then
    `add_subdirectory(<program>)` here. Follow
    [the ISA registration](riscv-test/CMakeLists.txt) to use `CP_SELECTED_CORES`.
+
+C programs can call `add_cp_runtime(rv64im)` and link `cp-runtime-rv64im` to
+reuse startup, platform layout, standard headers, and console/string support.
+See [the standalone runtime test](runtime/CMakeLists.txt) for a complete example.
+The runtime initializes `gp`, `sp`, and BSS, calls `main`, then halts if it returns.
+It imposes no program completion or benchmark protocol; the program and its Lua
+checker own that contract.
 
 Update `workflows.lua` for CI coverage. Each program owns its result checks;
 core adapters are shared across programs.

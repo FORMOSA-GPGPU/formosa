@@ -185,6 +185,12 @@ void ScalarCore::Execute() {
   get_source_op(packet_e_->instr.rs2(), &packet_e_->rs2_data);
   get_source_op(packet_e_->instr.rs3(), &packet_e_->rs3_data);
 
+  // A load-use stall leaves at least one source operand unresolved. In
+  // particular, a JALR must not redirect fetch using that stale value.
+  if (stall_) {
+    return;
+  }
+
   ExecContext ctx = {
       .pc = packet_e_->pc,
       .tmask = dummy_tmask_,

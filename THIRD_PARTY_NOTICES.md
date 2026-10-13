@@ -52,6 +52,16 @@ redistributing source or binaries.
 | `fw/tinyprintf` | tinyprintf by Kustaa Nyholm, originally published by Spare Time Labs at `http://www.sparetimelabs.com/tinyprintf/tinyprintf.php`. The `cjlano/tinyprintf` distribution preserves the project with LGPL-2.1-or-later and BSD-new license options. | FORMOSA uses tinyprintf under the BSD-new option; see `fw/tinyprintf/LICENSE.BSD-new`. The source files also retain the original LGPL-2.1-or-later notice from the upstream dual-license source. |
 | `simtix/src/cores/encoding.h` | Auto-generated RISC-V CSR encoding header from `riscv-opcodes`. | BSD-3-Clause with RISC-V International copyright, as stated in the file header. |
 
+## CPU benchmark tests
+
+| FORMOSA path | Source / attribution | License / notice |
+| --- | --- | --- |
+| `tests/cp/coremark/upstream` | Unmodified CoreMark benchmark files from [EEMBC CoreMark at `1f483d5`](https://github.com/eembc/coremark/tree/1f483d5b8316753a742cbf5590caf5bd0a4e4777), copyright 2018 Embedded Microprocessor Benchmark Consortium. | Apache-2.0 source notices and the CoreMark acceptable use agreement are retained in `tests/cp/coremark/upstream/LICENSE.md`. CoreMark is a registered trademark of EEMBC; retain the upstream reporting rules when publishing scores. |
+| `tests/cp/dhrystone/main.c` and `third-party/riscv-tests/benchmarks/dhrystone` | Dhrystone C 2.2 from [riscv-tests at `1eb47d9`](https://github.com/riscv-software-src/riscv-tests/tree/1eb47d946c55f55cab8653c224c2993acc0276bd/benchmarks/dhrystone), based on Reinhold P. Weicker's Dhrystone 2.1 and Steven Pemberton's 2.2 packaging. The local `main.c` adapts initialization, timing, reporting, and validation. | Retain the Regents of the University of California's redistribution conditions and disclaimer in `tests/cp/dhrystone/LICENSE`, along with the upstream file-level attribution. |
+
+FORMOSA's CPU test runtime, benchmark integration, and CoreMark port files use
+Apache-2.0. Their license does not replace the upstream notices above.
+
 ## OpenCL benchmark tests
 
 Rodinia input fixtures and NN dataset generation material came through the

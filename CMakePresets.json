@@ -620,7 +620,7 @@
       },
       "filter": {
         "include": {
-          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.harness$"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.runtime\\.simtix\\.scalar_core$|^cp\\.(coremark|coremark-validation|dhrystone)\\.simtix\\.scalar_core$|^cp\\.(harness|riscv-test\\.check|benchmark\\.check)$"
         }
       },
       "name": "simtix.scalar_core.coverage",
@@ -635,7 +635,7 @@
       },
       "filter": {
         "include": {
-          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.harness$"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.runtime\\.simtix\\.scalar_core$|^cp\\.(coremark|coremark-validation|dhrystone)\\.simtix\\.scalar_core$|^cp\\.(harness|riscv-test\\.check|benchmark\\.check)$"
         }
       },
       "name": "simtix.scalar_core.debug",
@@ -650,7 +650,7 @@
       },
       "filter": {
         "include": {
-          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.harness$"
+          "name": "^cp\\.riscv-test\\.simtix\\.scalar_core$|^cp\\.prog0\\.simtix\\.scalar_core$|^cp\\.runtime\\.simtix\\.scalar_core$|^cp\\.(coremark|coremark-validation|dhrystone)\\.simtix\\.scalar_core$|^cp\\.(harness|riscv-test\\.check|benchmark\\.check)$"
         }
       },
       "name": "simtix.scalar_core.release",
