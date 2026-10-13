@@ -49,14 +49,15 @@ GhostScheduler::GhostScheduler(const sc_module_name &name,
   sensitive << clock.pos();
 }
 
-void GhostScheduler::ResolveControl(uint32_t wid, uint64_t unique_id) {
+void GhostScheduler::ResolveControl(uint32_t wid,
+                                    std::optional<uint64_t> unique_id) {
   if (wid >= num_warps_ || wid % num_subcores_ != subcore_id_) {
     return;
   }
 
   uint32_t local_wid = get_local_wid(wid);
   if (warps_[local_wid].control_pending &&
-      warps_[local_wid].control_unique_id == unique_id) {
+      (!unique_id || warps_[local_wid].control_unique_id == *unique_id)) {
     warps_[local_wid].control_pending = false;
     warps_[local_wid].control_unique_id = 0;
     warps_[local_wid].update_pending = true;

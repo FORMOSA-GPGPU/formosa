@@ -270,7 +270,10 @@ void Backend::Execute2() {
     retire = true;
   }
 
-  if (packet->instr.is_control()) {
+  // Keep dispatch stopped while every lane is waiting at a barrier or has
+  // exited, including the drain interval before the warp state is published.
+  if (packet->instr.is_control() &&
+      lane_state_.HasRunnableLanes(get_local_wid(packet->wid))) {
     core_->NotifyControlResolved(packet->wid, packet->unique_id);
   }
 

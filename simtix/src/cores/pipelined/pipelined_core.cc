@@ -130,6 +130,10 @@ void PipelinedCore::Resume(const sc_dt::sc_bv_base &cwm) {
   for (int w = 0; w < num_warps_; ++w) {
     if (cwm[w].to_bool()) {
       backends_[get_backend_id(w)].ClearBarrier(w);
+      // Release the ghost dispatch hold left by the fully stopped barrier.
+      if (enable_ghost_scheduler_) {
+        ghost_for(w).ResolveControl(w);
+      }
       frontend_.SyncPC(w);
     }
   }

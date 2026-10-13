@@ -51,8 +51,9 @@ class GhostScheduler : public sc_module {
                  const Param &pp, const GhostParam &gp, uint32_t subcore_id,
                  ToGhostSchedulerIntf *core);
 
-  // Records that a matching control instruction has finished resolving.
-  void ResolveControl(uint32_t wid, uint64_t unique_id);
+  // Resolves the pending control, requiring an ID match when one is supplied.
+  void ResolveControl(uint32_t wid,
+                      std::optional<uint64_t> unique_id = std::nullopt);
 
   // Defers a warp flush until the scheduler performs its next state update.
   void RequestFlush(uint32_t wid);
