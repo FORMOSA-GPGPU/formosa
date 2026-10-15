@@ -102,8 +102,9 @@ bool Cache::HasPendingPipelineWork() const {
          victim_buffer_mem_req_out_queue_.used() > 0 ||
          victim_buffer_mem_resp_queue_.used() > 0 ||
          victim_buffer_.HasPendingWork() || bypass_req_queue_.used() > 0 ||
-         mem_resp_queue_.used() > 0 || !mem_inflight_packets_.empty() ||
-         atomic_sequencer_.IsBusy() || !line_escape_hazards_.empty();
+         mem_resp_queue_.used() > 0 || mem_response_slots_in_use_ != 0 ||
+         !mem_inflight_packets_.empty() || atomic_sequencer_.IsBusy() ||
+         !line_escape_hazards_.empty();
 }
 
 /**
@@ -119,7 +120,8 @@ bool Cache::HasPendingCommandWritebackWork() const {
          victim_buffer_mem_req_out_queue_.used() > 0 ||
          victim_buffer_mem_resp_queue_.used() > 0 ||
          victim_buffer_.HasPendingWork() || mem_resp_queue_.used() > 0 ||
-         !mem_inflight_packets_.empty() || !line_escape_hazards_.empty();
+         mem_response_slots_in_use_ != 0 || !mem_inflight_packets_.empty() ||
+         !line_escape_hazards_.empty();
 }
 
 /**

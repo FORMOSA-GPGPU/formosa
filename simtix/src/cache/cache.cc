@@ -210,7 +210,8 @@ Cache::Cache(const sc_module_name &name, const Param &p)
       victim_buffer_mem_resp_queue_("victim_buffer_mem_resp_queue",
                                     config_.pipeline_queue_size),
       bypass_req_queue_("bypass_req_queue", config_.pipeline_queue_size),
-      mem_resp_queue_("mem_resp_queue", config_.pipeline_queue_size) {
+      mem_resp_queue_("mem_resp_queue",
+                      config_.mshr_entries + config_.pipeline_queue_size) {
   for (const auto &region : non_cacheable_regions_) {
     if (region.size == 0) {
       continue;
@@ -459,10 +460,6 @@ void Cache::AcceptMemResponse() {
     return;
   }
 
-  // The single memory-response FIFO is handled strictly head-of-line. This
-  // relies on downstream memory not reordering a read response ahead of an
-  // earlier write response. If downstream memory gains such reordering, revisit
-  // this routing because refill and write-buffer backpressure can form a cycle.
   tlm::tlm_generic_payload *peek_trans = nullptr;
   bool success = source_.peek_resp_port->nb_peek(peek_trans);
   assert(success);
@@ -495,11 +492,6 @@ void Cache::AcceptMemResponse() {
                      "write_buffer_mem_resp_queue", peek_packet);
       return;
     }
-  } else if (!mem_resp_queue_.nb_can_put()) {
-    MarkBlockReason("mem_resp_full", false);
-    LogPacketEvent(cache_log::Category::kMem, "blocked", "mem_resp_full",
-                   "mem_resp_queue", peek_packet);
-    return;
   }
 
   tlm::tlm_generic_payload *trans = nullptr;
@@ -517,8 +509,6 @@ void Cache::AcceptMemResponse() {
 
   if (packet->type == PacketType::kBypassCoreReq) {
     packet->type = PacketType::kBypassCoreResp;
-    LogPacketEvent(cache_log::Category::kMem, "response_route", "accepted",
-                   "mem_resp_queue", packet);
   } else if (trans->is_write()) {
     tlm::tlm_fifo<Packet *> *response_queue = nullptr;
     const char *response_destination = nullptr;
@@ -544,13 +534,17 @@ void Cache::AcceptMemResponse() {
     assert(packet->type == PacketType::kMshrReadReq);
     packet->type = PacketType::kRefill;
     packet->GetCacheOwnedPayload()->PrepareRefillWrite();
-    LogPacketEvent(cache_log::Category::kMem, "response_route", "accepted",
-                   "mem_resp_queue", packet);
   }
 
-  // Enqueue the packet to memory response queue
+  // Every issued MSHR read/bypass request reserves a slot until the tag stage
+  // consumes its response. Thus the transport head always has room here, even
+  // when refill processing is blocked, exposing any following write ACK.
+  assert(mem_response_slots_in_use_ > 0);
+  assert(mem_resp_queue_.nb_can_put());
   success = mem_resp_queue_.nb_put(packet);
   assert(success);
+  LogPacketEvent(cache_log::Category::kMem, "response_route", "accepted",
+                 "mem_resp_queue", packet);
   MarkProgress("mem_response_route");
 }
 
@@ -692,6 +686,8 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
     success = mem_resp_queue_.nb_get(packet);
     assert(success);
     assert(packet == mem_resp_packet);
+    assert(mem_response_slots_in_use_ > 0);
+    --mem_response_slots_in_use_;
     MarkProgress("tag_select_bypass_response");
     LogPacketEvent(cache_log::Category::kArb, "selected", "none",
                    "bypass_response", packet);
@@ -878,6 +874,8 @@ void Cache::AccessTagArrayStage() {
     success = mem_resp_queue_.nb_get(dequeued_packet);
     assert(success);
     assert(dequeued_packet == tag_array_packet);
+    assert(mem_response_slots_in_use_ > 0);
+    --mem_response_slots_in_use_;
     if (tag_array_packet->is_write() && tag_array_packet->is_victim_dirty) {
       IncrementLineEscapeHazardForLine(
           ToLineAddress(tag_array_packet->victim_address));
@@ -1559,9 +1557,18 @@ void Cache::SendMemRequest() {
   bool success = false;
 
   // Requests in sink/core input stages do not reserve memory output slots.
-  // Ready bypass requests take precedence over all other request queues.
+  // Bypass requests with a response reservation take precedence over all other
+  // request queues.
   // A continuously ready bypass queue can therefore starve the others.
-  if (bypass_req_queue_.nb_can_get()) {
+  const size_t response_capacity = mem_resp_queue_.size();
+  assert(mem_response_slots_in_use_ <= response_capacity);
+  const bool response_slot_available =
+      mem_response_slots_in_use_ < response_capacity;
+  if (!response_slot_available && (bypass_req_queue_.nb_can_get() ||
+                                   mshr_file_mem_req_queue_.nb_can_get())) {
+    MarkBlockReason("mem_response_slots_full", false);
+  }
+  if (response_slot_available && bypass_req_queue_.nb_can_get()) {
     // Core-request bypass path.
     success = bypass_req_queue_.nb_get(packet);
     assert(success);
@@ -1583,7 +1590,8 @@ void Cache::SendMemRequest() {
     defer_mshr_mem_req_for_write_buffer_ = false;
   }
 
-  if (packet == nullptr && mshr_file_mem_req_queue_.nb_can_get()) {
+  if (packet == nullptr && response_slot_available &&
+      mshr_file_mem_req_queue_.nb_can_get()) {
     if (ShouldDeferMshrMemRequestForWriteBuffer()) {
       defer_mshr_mem_req_for_write_buffer_ = true;
       MarkBlockReason("defer_mshr_for_write_buffer", false);
@@ -1615,6 +1623,11 @@ void Cache::SendMemRequest() {
          packet->type == PacketType::kVictimWriteReq ||
          packet->type == PacketType::kMemWriteReq);
   tlm::tlm_generic_payload *trans = packet->GetTlmGp();
+  if (packet->type == PacketType::kMshrReadReq ||
+      packet->type == PacketType::kBypassCoreReq) {
+    assert(response_slot_available);
+    ++mem_response_slots_in_use_;
+  }
   success = source_.req_port->nb_write(trans);
   assert(success);
   MarkProgress("mem_request_issue");

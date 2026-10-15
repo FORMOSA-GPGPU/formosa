@@ -335,7 +335,11 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   tlm::tlm_fifo<Packet *> victim_buffer_mem_resp_queue_;
 
   tlm::tlm_fifo<Packet *> bypass_req_queue_;
+  // Reserve one queue slot per issued MSHR read or bypass request until the tag
+  // stage consumes its response. Inflight requests plus queued responses never
+  // exceed this queue's capacity. Payload storage is owned by the requests.
   tlm::tlm_fifo<Packet *> mem_resp_queue_;
+  size_t mem_response_slots_in_use_ = 0;
 
   AtomicSequencer atomic_sequencer_;
 

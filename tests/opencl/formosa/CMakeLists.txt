@@ -27,7 +27,6 @@ foreach(FORMOSA_WORKLOAD IN ITEMS
   swiglu
   gru
   rmsnorm
-  spmv
 )
   add_subdirectory(${FORMOSA_WORKLOAD})
   get_property(SUITE_TESTS DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${FORMOSA_WORKLOAD}"

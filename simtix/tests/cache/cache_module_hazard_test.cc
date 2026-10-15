@@ -14,14 +14,30 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
             "mshr_deadlock_bench",
             MakeParam(WriteMissPolicy::kWriteAllocate,
                       WriteHitPolicy::kWriteThrough, 1, 1, 1, 2, 1)),
-        write_resp_hol_bench_(
-            "write_resp_hol_bench",
-            MakeParam(WriteMissPolicy::kWriteNoAllocate,
-                      WriteHitPolicy::kWriteThrough, 1, 2, 1, 1, 2)),
+        write_resp_hol_bench_("write_resp_hol_bench",
+                              [] {
+                                Param param =
+                                    MakeParam(WriteMissPolicy::kWriteNoAllocate,
+                                              WriteHitPolicy::kWriteThrough, 1,
+                                              3, 1, 1, 2);
+                                param.non_cacheable_regions.push_back(
+                                    {.addr = 0x1000, .size = 0x1000});
+                                return param;
+                              }()),
         write_buffer_pressure_bench_(
             "write_buffer_pressure_bench",
             MakeParam(WriteMissPolicy::kWriteNoAllocate,
                       WriteHitPolicy::kWriteThrough, 1, 2, 1, 1, 2)),
+        response_capacity_bench_(
+            "response_capacity_bench",
+            [] {
+              Param param =
+                  MakeParam(WriteMissPolicy::kWriteNoAllocate,
+                            WriteHitPolicy::kWriteThrough, 1, 17, 1, 1, 2);
+              param.non_cacheable_regions.push_back(
+                  {.addr = 0x1000, .size = 0x1000});
+              return param;
+            }()),
         dirty_refill_deadlock_bench_(
             "dirty_refill_deadlock_bench",
             [] {
@@ -76,6 +92,7 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
     mshr_deadlock_bench_.clock_.write(false);
     write_resp_hol_bench_.clock_.write(false);
     write_buffer_pressure_bench_.clock_.write(false);
+    response_capacity_bench_.clock_.write(false);
     dirty_refill_deadlock_bench_.clock_.write(false);
     replay_hazard_refill_bench_.clock_.write(false);
     replay_visibility_bench_.clock_.write(false);
@@ -92,7 +109,10 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
       TestMshrFullPipelineRefillDeadlock();
     });
     RunBench("write_resp_hol_bench", [this] {
-      TestWriteResponseBypassesRefillHeadOfLine();
+      TestWriteResponseProgressWithBlockedRefills();
+    });
+    RunBench("response_capacity_bench", [this] {
+      TestMemResponseReservations(response_capacity_bench_, 19);
     });
     RunBench("write_buffer_pressure_bench", [this] {
       TestWriteBufferPressureDefersMshrReads();
@@ -177,14 +197,14 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
            "queue");
   }
 
-  void TestWriteResponseBypassesRefillHeadOfLine() {
+  void TestWriteResponseProgressWithBlockedRefills() {
     CacheModuleTester view(write_resp_hol_bench_.cache_);
     const auto refill_block = Sequence(16, 0x80);
 
     auto *read = write_resp_hol_bench_.core_.SendRead(0x40, 4);
-    (void)read;
-    write_resp_hol_bench_.core_.SendRead(0x60, 4);
-    Expect(write_resp_hol_bench_.WaitForMemoryRequests(2, 32),
+    auto *second_read = write_resp_hol_bench_.core_.SendRead(0x60, 4);
+    auto *third_read = write_resp_hol_bench_.core_.SendRead(0x80, 4);
+    Expect(write_resp_hol_bench_.WaitForMemoryRequests(3, 32),
            "head-of-line regression read misses reach memory");
     ExpectReadRequest(write_resp_hol_bench_, 0, 0x40, 16,
                       "head-of-line regression first read miss is block "
@@ -194,9 +214,9 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
                       "aligned");
 
     write_resp_hol_bench_.core_.SendWrite(0x00, Sequence(4, 0x10));
-    Expect(write_resp_hol_bench_.WaitForMemoryRequests(3, 32),
+    Expect(write_resp_hol_bench_.WaitForMemoryRequests(4, 32),
            "head-of-line regression first write reaches memory");
-    ExpectWriteRequest(write_resp_hol_bench_, 2, 0x00,
+    ExpectWriteRequest(write_resp_hol_bench_, 3, 0x00,
                        LineWriteData(16, 0, Sequence(4, 0x10)),
                        "head-of-line regression first write is line masked",
                        LineWriteMask(16, 0, 4));
@@ -214,7 +234,7 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
     }
     Expect(write_buffer_input_full,
            "head-of-line regression fills the cache-to-write-buffer queue");
-    Expect(write_resp_hol_bench_.memory_.request_count() == 3,
+    Expect(write_resp_hol_bench_.memory_.request_count() == 4,
            "queued writes wait for the only write-buffer entry");
 
     write_resp_hol_bench_.core_.SendWrite(0x30, Sequence(4, 0x40));
@@ -243,12 +263,179 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
       write_resp_hol_bench_.AdvanceCycle();
     }
     Expect(refill_responses_blocked,
-           "refills fill the memory-response queue while tag output is full");
+           "refills remain queued while tag output is full");
 
-    write_resp_hol_bench_.memory_.RespondAt(2);
-    Expect(write_resp_hol_bench_.WaitForMemoryRequests(4, 32),
-           "write response bypasses the full memory-response queue and frees "
+    // The third refill must stay ahead of the write ACK in the response FIFO.
+    write_resp_hol_bench_.memory_.RespondAt(2, refill_block);
+    write_resp_hol_bench_.memory_.RespondAt(3);
+    auto *source = write_resp_hol_bench_.cache_.source();
+    for (size_t delta = 0; delta < 8 && source->resp_port->num_available() < 2;
+         ++delta) {
+      wait(sc_core::SC_ZERO_TIME);
+    }
+    Expect(
+        source->resp_port->num_available() == 2,
+        "blocked refill and write ACK are both present in the response FIFO");
+    tlm::tlm_generic_payload *head = nullptr;
+    Expect(source->peek_resp_port->nb_peek(head) &&
+               head == write_resp_hol_bench_.memory_.request(2),
+           "blocked refill precedes the write ACK");
+
+    view.AcceptMemResponse();
+    wait(sc_core::SC_ZERO_TIME);
+    Expect(view.Queues().mem_resp == 3 &&
+               view.Queues().mem_response_slots_in_use == 3,
+           "third refill occupies its reserved response slot");
+    Expect(source->resp_port->num_available() == 1 &&
+               source->peek_resp_port->nb_peek(head) &&
+               head == write_resp_hol_bench_.memory_.request(3),
+           "receiving the refill exposes the following ACK without reordering");
+
+    view.AcceptMemResponse();
+    wait(sc_core::SC_ZERO_TIME);
+    Expect(view.Queues().write_buffer_mem_resp == 1,
+           "following write ACK is routed exactly once");
+    Expect(
+        source->resp_port->num_available() == 0 && view.Queues().mem_resp == 3,
+        "write ACK retires while the retained refill still waits");
+
+    Expect(write_resp_hol_bench_.WaitForMemoryRequests(5, 32),
+           "write ACK progresses independently of blocked refills and frees "
            "a write-buffer entry");
+
+    size_t next_response = 4;
+    bool drained = false;
+    for (size_t cycle = 0; cycle < 256; ++cycle) {
+      while (next_response < write_resp_hol_bench_.memory_.request_count()) {
+        write_resp_hol_bench_.memory_.RespondAt(next_response++);
+      }
+      write_resp_hol_bench_.AdvanceCycle();
+      const auto queues = view.Queues();
+      const auto writes = view.WriteBufferState();
+      if (write_resp_hol_bench_.core_.response_count() == 8 &&
+          queues.mem_response_slots_in_use == 0 && queues.mem_resp == 0 &&
+          queues.mem_inflight_packets == 0 &&
+          queues.write_buffer_mem_req == 0 &&
+          queues.write_buffer_mem_req_out == 0 &&
+          queues.write_buffer_mem_resp == 0 && writes.pending_entries == 0 &&
+          writes.inflight_entries == 0) {
+        drained = true;
+        break;
+      }
+    }
+    Expect(drained,
+           "retained refills and writes drain with all credits returned");
+    for (auto *response : {read, second_read, third_read}) {
+      Expect(write_resp_hol_bench_.core_.HasResponse(response) &&
+                 PayloadData(response) == Slice(refill_block, 0, 4),
+             "retained refill delivers the original read data");
+    }
+    if (drained) {
+      TestMemResponseReservations(write_resp_hol_bench_, 5);
+    }
+  }
+
+  void TestMemResponseReservations(CacheBench &bench, size_t credits) {
+    CacheModuleTester view(bench.cache_);
+    const size_t request_begin = bench.memory_.request_count();
+    const size_t response_begin = bench.core_.response_count();
+    std::vector<tlm::tlm_generic_payload *> requests;
+    for (size_t i = 0; i <= credits; ++i) {
+      const uint64_t address = 0x1000 + i * 16;
+      requests.push_back(i == 0 || i == credits
+                             ? bench.core_.SendWrite(
+                                   address, Sequence(4, i == 0 ? 0x80 : 0xA0))
+                             : bench.core_.SendRead(address, 4));
+    }
+    Expect(bench.WaitForMemoryRequests(request_begin + credits, 128),
+           "bypass requests reserve the available response descriptors");
+    Expect(bench.memory_.request(request_begin)->is_write() &&
+               bench.memory_.RequestData(request_begin) == Sequence(4, 0x80),
+           "uncached write uses the credited bypass path with original data");
+    for (size_t cycle = 0; cycle < 16; ++cycle) {
+      bench.AdvanceCycle();
+    }
+    Expect(bench.memory_.request_count() == request_begin + credits &&
+               view.Queues().mem_response_slots_in_use == credits &&
+               view.Queues().bypass_req == 1,
+           "no-credit bypass write remains queued without memory side effects");
+
+    bench.core_.SendWrite(0x90, Sequence(4, 0x70));
+    Expect(
+        bench.WaitForMemoryRequests(request_begin + credits + 1, 64),
+        "write-buffer requests can issue while data-response credits are full");
+    Expect(bench.memory_.request(request_begin + credits)->is_write(),
+           "the write, not the unreserved bypass, uses the memory output");
+    Expect(bench.WaitForCoreResponses(response_begin + 1, 32),
+           "write acceptance returns its normal core response");
+
+    for (size_t remaining = credits; remaining > 0; --remaining) {
+      const size_t i = remaining - 1;
+      bench.memory_.RespondAtWithStatus(
+          request_begin + i,
+          i == 1 ? tlm::TLM_GENERIC_ERROR_RESPONSE : tlm::TLM_OK_RESPONSE,
+          Sequence(4, static_cast<uint8_t>(0x80 + i)));
+    }
+    bench.memory_.RespondAt(request_begin + credits);
+    // TlmSource's default response FIFO holds 16 entries. Exercise its retry
+    // path with a write ACK that cannot initially enter that FIFO.
+    const size_t visible_responses = std::min<size_t>(credits + 1, 16);
+    for (size_t delta = 0;
+         delta < 8 &&
+         bench.cache_.source()->resp_port->num_available() < visible_responses;
+         ++delta) {
+      wait(sc_core::SC_ZERO_TIME);
+    }
+    Expect(
+        bench.cache_.source()->resp_port->num_available() == visible_responses,
+        "reserved replies fill the bounded transport FIFO");
+    for (size_t i = 0; i <= credits; ++i) {
+      for (size_t delta = 0; delta < 8 && !view.HasMemoryResponse(); ++delta) {
+        wait(sc_core::SC_ZERO_TIME);
+      }
+      view.AcceptMemResponse();
+      wait(sc_core::SC_ZERO_TIME);
+    }
+    Expect(view.Queues().mem_resp == static_cast<int>(credits) &&
+               view.Queues().mem_response_slots_in_use == credits &&
+               view.Queues().write_buffer_mem_resp == 1 &&
+               bench.cache_.source()->resp_port->num_available() == 0,
+           "bounded data-response storage allows the following ACK to retire");
+
+    Expect(bench.WaitForMemoryRequests(request_begin + credits + 2, 128),
+           "a consumed response returns a credit to the queued bypass");
+    Expect(bench.memory_.request(request_begin + credits + 1)->is_write() &&
+               bench.memory_.RequestData(request_begin + credits + 1) ==
+                   Sequence(4, 0xA0),
+           "queued uncached write issues with its original data after credit "
+           "return");
+    bench.memory_.RespondAt(request_begin + credits + 1, Sequence(4, 0xA0));
+    Expect(bench.WaitForCoreResponses(response_begin + credits + 2, 256),
+           "all credited bypass responses reach the core");
+    for (size_t j = 0; j < credits; ++j) {
+      const size_t i = credits - j - 1;
+      Expect(
+          bench.core_.response(response_begin + 1 + j) == requests[i],
+          "buffered bypass responses retain their return order and identity");
+      Expect(
+          requests[i]->get_response_status() ==
+              (i == 1 ? tlm::TLM_GENERIC_ERROR_RESPONSE : tlm::TLM_OK_RESPONSE),
+          "buffered bypass response preserves the memory status");
+      if (i != 1) {
+        Expect(PayloadData(requests[i]) ==
+                   Sequence(4, static_cast<uint8_t>(0x80 + i)),
+               "buffered bypass response preserves the memory data");
+      }
+    }
+    Expect(
+        bench.core_.response(response_begin + credits + 1) == requests.back() &&
+            requests.back()->get_response_status() == tlm::TLM_OK_RESPONSE &&
+            PayloadData(requests.back()) == Sequence(4, 0xA0),
+        "the queued bypass completes once its reservation becomes available");
+    const auto queues = view.Queues();
+    Expect(queues.mem_resp == 0 && queues.mem_response_slots_in_use == 0 &&
+               queues.mem_inflight_packets == 0,
+           "bypass completion returns every response reservation");
   }
 
   void TestWriteBufferPressureDefersMshrReads() {
@@ -492,8 +679,9 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
     queues = view.Queues();
     Expect(queues.tag_array_resp == 1,
            "first refill occupies the tag-to-data pipeline queue");
-    Expect(queues.mem_resp == 0,
-           "first refill is consumed before the second response is accepted");
+    Expect(queues.mem_resp == 1 && queues.mem_response_slots_in_use == 1,
+           "second response occupies its reserved slot as first refill is "
+           "consumed");
     Expect(queues.core_req == 1, "core request waits behind refill priority");
 
     tag_priority_bench_.AdvanceCycle();
@@ -889,6 +1077,7 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
   CacheBench mshr_deadlock_bench_;
   CacheBench write_resp_hol_bench_;
   CacheBench write_buffer_pressure_bench_;
+  CacheBench response_capacity_bench_;
   CacheBench dirty_refill_deadlock_bench_;
   CacheBench replay_hazard_refill_bench_;
   CacheBench replay_visibility_bench_;

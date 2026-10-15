@@ -162,6 +162,7 @@ class CacheModuleTester {
     int write_buffer_mem_resp = 0;
     int bypass_req = 0;
     int mem_resp = 0;
+    size_t mem_response_slots_in_use = 0;
     size_t mem_inflight_packets = 0;
   };
 
@@ -254,6 +255,7 @@ class CacheModuleTester {
         .write_buffer_mem_resp = dut_.write_buffer_mem_resp_queue_.used(),
         .bypass_req = dut_.bypass_req_queue_.used(),
         .mem_resp = dut_.mem_resp_queue_.used(),
+        .mem_response_slots_in_use = dut_.mem_response_slots_in_use_,
         .mem_inflight_packets = dut_.mem_inflight_packets_.size(),
     };
   }
