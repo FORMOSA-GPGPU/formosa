@@ -20,12 +20,15 @@ parser:option("-s --stats", "Output path of the stat"):args(1)
 ConfigCli.add_options(parser, true)
 parser:option("--drain", "Extra drain cycles after the main run"):convert(tonumber):default(5000)
 parser:flag("--keep-alive", "Ignore client Terminate and keep the simulation running")
+parser
+  :option("--agent-socket-path", "Path of the socket that clients connect to (AGENT_SOCKET_PATH)")
+  :default("/tmp/formosa.sock")
 
 local args = parser:parse({ ... })
 local config = ConfigCli.load(args)
 
 local system = System("System", config, {
-  agent_socket_path = "/tmp/formosa.sock",
+  agent_socket_path = args.agent_socket_path,
   keep_alive = args.keep_alive,
 })
 
