@@ -7,9 +7,146 @@
 
 from pathlib import Path
 import re
+import json
+
+from verify import validate
 import subprocess
 import sys
 import tempfile
+
+
+def verify_new_comparators(compiler, source_root, directory):
+    level1 = source_root / "opencl/level1"
+
+    def function(path, signature):
+        source = (level1 / path).read_text()
+        start = source.index(signature)
+        return source[start : source.index("\n}\n", start) + 3]
+
+    code = (
+        "#include <algorithm>\n#include <vector>\n#include <iostream>\n"
+        "#include <math.h>\n#include <stdlib.h>\n#include <string>\n"
+        '#include "MD.h"\nusing namespace std;\n'
+        '#include "OptionParser.h"\n'
+        "struct cplxflt {float x,y;};\nstruct cplxdbl {double x,y;};\n"
+        + function(
+            "md/MD.cpp",
+            "template <class T, class forceVecType, class posVecType>\nbool checkResults",
+        )
+        + function("sort/Sort.cpp", "bool verifySort(")
+        + function("sort/Sort.cpp", "void\naddBenchmarkSpecOptions(")
+        + function("sort/Sort.cpp", "static void initializeSortInput(")
+        + function("gemm/GEMM.cpp", "template <class T>\nvoid verifyGemm(")
+        + function("fft/FFT.cpp", "template <class T2>\nvoid verifyTransform(")
+        + r"""
+int main(int argc, char **argv) {
+    string kind = argv[1];
+    int fault = atoi(argv[2]);
+    if (kind == "sort-input") {
+        OptionParser op;
+        addBenchmarkSpecOptions(op);
+        if (fault && !op.parse(vector<string>{"--validation-input"})) return 1;
+        unsigned input[1024];
+        initializeSortInput(input, 1024, op);
+        if (!fault) {
+            for (unsigned i = 0; i < 1024; ++i)
+                if (input[i] != i % 16) return 1;
+        } else {
+            if (*max_element(input, input + 1024) <= 0x0fffffffu) return 1;
+            sort(input, input + 1024);
+            if (unique(input, input + 1024) - input < 900) return 1;
+        }
+        return 0;
+    }
+    if (kind == "sort") {
+        unsigned input[] = {3, 0, 2, 1}, actual[] = {0, 1, 2, 3};
+        if (fault) fill(actual, actual + 4, 0);
+        return verifySort(actual, input, 4) ? 0 : 1;
+    }
+    if (kind == "md") {
+        float4 positions[] = {{0,0,0,0}, {1,0,0,0}};
+        float4 forces[] = {{64,0,0,0}, {-64,0,0,0}};
+        int neighbors[256];
+        for (int i=0; i<128; ++i) {neighbors[2*i]=1; neighbors[2*i+1]=0;}
+        if (fault == 1) forces[0].x = 0;
+        if (fault == 2) forces[0].x = NAN;
+        if (fault == 3) forces[0].y = INFINITY;
+        return checkResults<float,float4,float4>(forces, positions, neighbors, 2) ? 0 : 1;
+    }
+    if (kind == "gemm") {
+        float a[] = {1, 2, 3, 4}, b[] = {5, 6, 7, 8};
+        float actual[] = {23,34,31,46};
+        if (fault == 1) fill(actual, actual + 4, 0);
+        if (fault == 2) actual[0] = NAN;
+        if (fault == 3) actual[0] = INFINITY;
+        verifyGemm(a, b, actual, vector<float>(4, 0), 2, false);
+    }
+    if (kind == "fft") {
+        cplxflt input[512] = {}, actual[512];
+        input[0].x = 1;
+        for (int i=0; i<512; ++i) actual[i] = {1,0};
+        if (fault == 1) copy(input, input + 512, actual);
+        if (fault == 2) actual[0].x = NAN;
+        if (fault == 3) actual[0].y = INFINITY;
+        verifyTransform(input, actual, 512, false);
+    }
+}
+"""
+    )
+    source, program = Path(directory, "numerics.cpp"), Path(directory, "numerics")
+    source.write_text(code)
+    subprocess.run(
+        [
+            compiler,
+            "-std=c++11",
+            "-I",
+            str(level1 / "md"),
+            "-I",
+            str(source_root / "common"),
+            str(source),
+            str(source_root / "common/OptionParser.cpp"),
+            str(source_root / "common/Option.cpp"),
+            "-o",
+            str(program),
+        ],
+        check=True,
+    )
+    for validation_input in ("0", "1"):
+        subprocess.run([str(program), "sort-input", validation_input], check=True)
+    for kind in ("sort", "md", "gemm", "fft"):
+        for fault in range(2 if kind == "sort" else 4):
+            result = subprocess.run(
+                [str(program), kind, str(fault)], capture_output=True, text=True
+            )
+            assert result.returncode == (1 if fault else 0), (
+                kind,
+                fault,
+                result.stdout + result.stderr,
+            )
+
+    # The S3D wrapper must reject incomplete, duplicated and corrupt grid output.
+    reference = json.loads((Path(__file__).parent / "references/s3d.json").read_text())[
+        "species"
+    ]
+    output = "\n".join(
+        f"S3D {precision} {species} {point} {value}"
+        for precision, values in reference.items()
+        for species, value in enumerate(values)
+        for point in range(512)
+    )
+    validate("s3d", output)
+    for corrupt in (
+        "",
+        output + "\n" + output.splitlines()[0],
+        output.replace(output.splitlines()[0], "S3D 4 0 0 0", 1),
+        output.replace(output.splitlines()[0], "S3D 4 0 0 nan", 1),
+    ):
+        try:
+            validate("s3d", corrupt)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("S3D accepted corrupt output")
 
 
 def main():
@@ -83,6 +220,7 @@ def main():
     for value in ["nan", "inf", "-inf"]:
         cases.extend([("1", value, False), (value, "1", False), (value, value, False)])
     with tempfile.TemporaryDirectory(prefix="shoc-validation-") as directory:
+        verify_new_comparators(compiler, source_root, directory)
         for kind, code in programs.items():
             source, program = Path(directory, kind + ".cpp"), Path(directory, kind)
             source.write_text(code)

@@ -74,6 +74,52 @@ def generate(output):
         )
     )
 
+    histogram = [3000 + (0 if i < 512 else i * 13 % 127) for i in range(512 * 16)]
+    (output / "histo.bin").write_bytes(
+        struct.pack("<4I", 512, 16, 1024, 8)
+        + struct.pack(f"<{len(histogram)}I", *histogram)
+    )
+
+    for name, offset in [("reference", 0), ("current", 3)]:
+        pixels = [(x * 7 + y * 13 + offset) % 256 for y in range(16) for x in range(16)]
+        (output / f"sad-{name}.bin").write_bytes(
+            struct.pack("<2H", 16, 16) + struct.pack(f"<{len(pixels)}H", *pixels)
+        )
+
+    for name, offset in [("data", 0), ("random", 0.37)]:
+        (output / f"tpacf-{name}.txt").write_text(
+            "".join(
+                f"{i * 0.71 + offset:.6f} {(i * 7 % 83) - 41 + offset:.6f}\n"
+                for i in range(256)
+            )
+        )
+
+    (output / "mri-gridding.uks").write_text(
+        "aquisition.numsamples=32\n"
+        "aquisition.kmax=1 1 1\n"
+        "aquisition.matrixSize=8 8 4\n"
+        "reconstruction.matrixSize=8 8 4\n"
+        "gridding.matrixSize=8 8 4\n"
+        "gridding.oversampling=2\n"
+        "kernel.width=3\n"
+        "kernel.useLUT=0\n"
+    )
+    (output / "mri-gridding.uks.data").write_bytes(
+        b"".join(
+            floats(
+                [
+                    (i % 7 + 1) / 8,
+                    (i % 5 - 2) / 8,
+                    ((i * 3) % 13 - 6) / 8,
+                    ((i * 5) % 13 - 6) / 8,
+                    ((i * 7) % 13 - 6) / 8,
+                    1,
+                ]
+            )
+            for i in range(32)
+        )
+    )
+
 
 if __name__ == "__main__":
     generate(Path(sys.argv[1]))

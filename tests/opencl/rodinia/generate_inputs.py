@@ -56,6 +56,16 @@ def generate(output):
     (output / "input.rgb").write_bytes(
         bytes((index * 7 + index // 3) % 256 for index in range(32 * 32 * 3))
     )
+    # A nonuniform mesh exercises interior, wing and far-field faces, plus
+    # padding to the original 192-lane work-group size.
+    mesh = ["5"]
+    for cell in range(5):
+        mesh.append(
+            f"{1 + cell / 8} {(cell + 1) % 5 + 1} 0.1 0 0 "
+            f"{(cell - 1) % 5 + 1} -0.1 0 0 "
+            "0 0.03 0.1 0 -1 -0.03 -0.1 0"
+        )
+    (output / "cfd.txt").write_text("\n".join(mesh) + "\n")
     data = Path(__file__).resolve().parent / "data/myocyte"
     params = (data / "params.txt").read_text().split()
     if len(params) != 16 or len((data / "y.txt").read_text().split()) != 91:

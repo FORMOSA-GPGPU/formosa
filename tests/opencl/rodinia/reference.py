@@ -16,9 +16,10 @@ def f32(value):
 
 def unpack(path, code="f"):
     data = path.read_bytes()
-    if len(data) % 4:
+    width = struct.calcsize("<" + code)
+    if len(data) % width:
         raise ValueError("incomplete numeric readback")
-    return struct.unpack("<" + code * (len(data) // 4), data)
+    return struct.unpack("<" + code * (len(data) // width), data)
 
 
 def compare(actual, expected, absolute=0, relative=0):

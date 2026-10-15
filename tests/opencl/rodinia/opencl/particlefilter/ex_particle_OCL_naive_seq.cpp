@@ -542,6 +542,7 @@ static int allocate(int Nparticles, int countOnes){
 
   
 
+    return 0;
 }//eo allocate
 
 /**
@@ -771,6 +772,7 @@ int particleFilter(int * I, int IszX, int IszY, int Nfr, int * seed, int Npartic
     free(CDF);
     free(u);
     free(ind);
+    return 0;
 }
 
 int main(int argc, char * argv[]) {

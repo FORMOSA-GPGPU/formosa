@@ -55,6 +55,15 @@ add_executable(rodinia_streamcluster_reference
 target_link_libraries(rodinia_streamcluster_reference PRIVATE OpenMP::OpenMP_CXX m)
 add_dependencies(rodinia_streamcluster rodinia_streamcluster_reference)
 
+add_rodinia(rodinia_cfd "${UPSTREAM}/opencl/cfd/euler3d.cpp"
+  "${CMAKE_CURRENT_BINARY_DIR}/timing_cxx.cpp")
+add_executable(rodinia_cfd_reference "${UPSTREAM}/openmp/cfd/euler3d_cpu.cpp")
+target_link_libraries(rodinia_cfd_reference PRIVATE OpenMP::OpenMP_CXX m)
+# Bound the integration workload while retaining the upstream 192-lane kernels.
+target_compile_definitions(rodinia_cfd PRIVATE TIMING iterations=2)
+target_compile_definitions(rodinia_cfd_reference PRIVATE iterations=2 block_length=192)
+add_dependencies(rodinia_cfd rodinia_cfd_reference)
+
 set(BACKPROP_SOURCES "${UPSTREAM}/opencl/backprop/backprop.c"
   "${UPSTREAM}/opencl/backprop/imagenet.c" "${UPSTREAM}/opencl/backprop/facetrain.c")
 set_source_files_properties(${BACKPROP_SOURCES} PROPERTIES LANGUAGE CXX)
@@ -67,15 +76,16 @@ add_executable(rodinia_backprop_reference backprop_reference.cpp
 target_include_directories(rodinia_backprop_reference PRIVATE "${UPSTREAM}/opencl/backprop")
 target_link_libraries(rodinia_backprop_reference PRIVATE OpenMP::OpenMP_CXX m)
 add_dependencies(rodinia_backprop rodinia_backprop_reference rodinia_readback)
-set_target_properties(rodinia_backprop rodinia_backprop_reference PROPERTIES EXCLUDE_FROM_ALL YES)
-configure_file("${UPSTREAM}/opencl/backprop/backprop_kernel.cl"
-  "${CMAKE_CURRENT_BINARY_DIR}/backprop/backprop_kernel.cl" COPYONLY)
-# This target is diagnostic: upstream's first reduction doubles the dot product.
-# It is intentionally not registered as a numerically passing benchmark.
 
 add_rodinia(rodinia_particlefilter
   "${UPSTREAM}/opencl/particlefilter/ex_particle_OCL_single_seq.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/timing_cxx.cpp")
+add_rodinia(rodinia_particlefilter_double
+  "${UPSTREAM}/opencl/particlefilter/ex_particle_OCL_double_seq.cpp"
+  "${CMAKE_CURRENT_BINARY_DIR}/timing_cxx.cpp")
+target_compile_definitions(rodinia_particlefilter_double PRIVATE TIMING)
+add_rodinia(rodinia_particlefilter_naive
+  "${UPSTREAM}/opencl/particlefilter/ex_particle_OCL_naive_seq.cpp")
 add_rodinia(rodinia_dwt2d "${UPSTREAM}/opencl/dwt2d/main.cpp"
   "${CMAKE_CURRENT_BINARY_DIR}/timing_cxx.cpp")
 target_compile_definitions(rodinia_particlefilter PRIVATE TIMING)
@@ -91,7 +101,9 @@ foreach(PAIR "btree;b+tree" "srad;srad" "myocyte;myocyte" "lavamd;lavaMD")
   set_target_properties(rodinia_${NAME} PROPERTIES C_STANDARD 99 C_STANDARD_REQUIRED YES)
   target_compile_definitions(rodinia_${NAME} PRIVATE TIMING)
 endforeach()
-set_target_properties(rodinia_myocyte PROPERTIES EXCLUDE_FROM_ALL YES)
+add_executable(rodinia_myocyte_reference myocyte_reference.c)
+target_link_libraries(rodinia_myocyte_reference PRIVATE OpenMP::OpenMP_C m)
+add_dependencies(rodinia_myocyte rodinia_myocyte_reference)
 target_compile_definitions(rodinia_lavamd PRIVATE OUTPUT)
 # Upstream b+tree's main declaration omits the return type (pre-C99 syntax).
 target_compile_options(rodinia_btree PRIVATE -Wno-implicit-int)
@@ -148,9 +160,19 @@ add_rodinia_test(srad srad CONFIG large_sm OUTPUT output/image_out.pgm
 
 add_rodinia_test(particlefilter particlefilter CONFIG large_sm READBACK OUTPUT output.txt
   ARGS -x 16 -y 16 -z 3 -np 256)
-# Myocyte finishes quickly, but repeated CPU OpenCL runs do not agree numerically.
-# Keep an original-source diagnostic target, without declaring a passing test.
-stage_rodinia_files(myocyte myocyte)
+add_rodinia_test(particlefilter_double particlefilter CONFIG large_sm READBACK OUTPUT output.txt
+  ARGS -x 16 -y 16 -z 3 -np 256)
+add_rodinia_test(particlefilter_naive particlefilter CONFIG large_sm READBACK
+  ARGS -x 16 -y 16 -z 3 -np 256)
+add_rodinia_test(backprop backprop CONFIG large_sm READBACK ARGS -n 32
+  REFERENCE rodinia_backprop_reference)
+add_rodinia_test(cfd cfd CONFIG large_sm READBACK OUTPUT density.txt
+  ARGS ctest.mesh REFERENCE rodinia_cfd_reference
+  REFERENCE_ARGS "${INPUT_DIR}/cfd.txt")
+configure_file("${INPUT_DIR}/cfd.txt" "${CMAKE_CURRENT_BINARY_DIR}/cfd/ctest.mesh" COPYONLY)
+add_rodinia_test(myocyte myocyte CONFIG large_sm OUTPUT output.txt
+  ARGS -time 1 -r . REFERENCE rodinia_myocyte_reference
+  REFERENCE_ARGS "${UPSTREAM}/data/myocyte/y.txt" "${UPSTREAM}/data/myocyte/params.txt" output.txt)
 foreach(INPUT y.txt params.txt)
   configure_file("${INPUT_DIR}/myocyte/${INPUT}"
     "${CMAKE_CURRENT_BINARY_DIR}/myocyte/${INPUT}" COPYONLY)

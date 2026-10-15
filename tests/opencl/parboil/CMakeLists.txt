@@ -63,11 +63,12 @@ function(add_parboil NAME VARIANT REFERENCE_VARIANT)
     CONFIG "${CASE_CONFIG}"
     WORKING_DIRECTORY "${RUN_DIR}"
     WRAPPER ${WRAPPER}
-    ARGS ${CASE_ARGS} -o result.dat)
+    ARGS -o result.dat ${CASE_ARGS})
   foreach(SM IN LISTS OPENCL_SMS)
     set_property(TEST opencl.parboil.${NAME}.${SM} APPEND PROPERTY LABELS benchmark parboil)
+    # Leave headroom for Debug/coverage and concurrent CI workloads.
     set_tests_properties(opencl.parboil.${NAME}.${SM} PROPERTIES
-      RESOURCE_LOCK ${TARGET} TIMEOUT 180)
+      RESOURCE_LOCK ${TARGET} TIMEOUT 600)
   endforeach()
 endfunction()
 
@@ -109,3 +110,36 @@ add_parboil(cutcp opencl_base base
   SOURCES main.c cutoff.c cutcpu.c excl.c output.c readatom.c ocl.c
   REFERENCE_SOURCES main.c cutcpu.c excl.c output.c readatom.c
   ARGS -i "${INPUT_DIR}/cutcp.pqr")
+
+add_parboil(histo opencl_base base
+  CONFIG large_sm
+  SOURCES main.cpp util.cpp OpenCL_common.cpp
+  REFERENCE_SOURCES main.c util.c
+  ARGS -i "${INPUT_DIR}/histo.bin" 2)
+
+add_parboil(lbm opencl_base cpu
+  SOURCES main.c lbm.c ocl.c
+  REFERENCE_SOURCES main.c lbm.c
+  ARGS 3)
+# Keep the upstream volume as the default; use a small nontrivial cavity here.
+foreach(TARGET parboil_lbm parboil_lbm_reference)
+  target_compile_definitions(${TARGET} PRIVATE SIZE_X=8 SIZE_Y=8 SIZE_Z=8)
+endforeach()
+
+add_parboil(mri-gridding opencl_base base
+  CONFIG large_sm
+  SOURCES main.cpp CPU_kernels.c OpenCL_interface.cpp scanLargeArray.cpp sort.cpp OpenCL_common.cpp
+  REFERENCE_SOURCES main.c CPU_kernels.c
+  ARGS -i "${INPUT_DIR}/mri-gridding.uks" 128)
+
+add_parboil(sad opencl_base cpu
+  CONFIG large_sm
+  SOURCES main.cpp image.c file.c OpenCL_common.cpp
+  REFERENCE_SOURCES main.c image.c file.c sad_cpu.c
+  ARGS -i "${INPUT_DIR}/sad-reference.bin,${INPUT_DIR}/sad-current.bin")
+
+add_parboil(tpacf opencl_base base
+  CONFIG large_sm
+  SOURCES main.cc args.cc model.cc
+  REFERENCE_SOURCES main.c args.c model_io.c model_compute_cpu.c
+  ARGS -i "${INPUT_DIR}/tpacf-data.txt,${INPUT_DIR}/tpacf-random.txt" -- -n 1 -p 256)

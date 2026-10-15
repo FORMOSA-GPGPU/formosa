@@ -7,6 +7,7 @@
 
 import argparse
 import base64
+import bisect
 import json
 import math
 from pathlib import Path
@@ -72,7 +73,43 @@ def verify_readbacks(
             raise ValueError("missing Backprop reference or training readbacks")
         reference_file = directory / "cpu-partials.bin"
         run([reference, str(reference_file)])
-        cpu.compare(cpu.unpack(files[0]), cpu.unpack(reference_file), 1e-5, 1e-5)
+        expected = cpu.unpack(reference_file)
+        cpu.compare(cpu.unpack(files[0]), expected[:32], 1e-5, 1e-5)
+        # Index zero is the CPU bias input; the GPU kernel handles bias
+        # separately and leaves this unused input slot untouched.
+        cpu.compare(cpu.unpack(files[1])[1:], expected[32:64])
+        cpu.compare(cpu.unpack(files[2]), expected[64:], 1e-10, 1e-7)
+    elif kind == "cfd":
+        if len(files) != 1:
+            raise ValueError("missing CFD solution readback")
+        values = cpu.unpack(files[0])
+        if len(values) != 5 * 192:
+            raise ValueError("CFD padded solution is incomplete")
+        for field in range(5):
+            base = field * 192
+            cpu.compare(values[base + 5 : base + 192], [values[base + 4]] * 187)
+    elif kind == "particlefilter_naive":
+        uploads = sorted(directory.glob("upload-*.bin"))
+        if len(files) != 4 or len(uploads) != 8:
+            raise ValueError("missing Particlefilter resampling transfers")
+        for frame in range(2):
+            x, y, cdf, thresholds = [
+                cpu.unpack(f, "d") for f in uploads[frame * 4 : frame * 4 + 4]
+            ]
+            if (
+                any(len(values) != 256 for values in [x, y, cdf, thresholds])
+                or any(
+                    not math.isfinite(v)
+                    for values in [x, y, cdf, thresholds]
+                    for v in values
+                )
+                or any(a > b for a, b in zip(cdf, cdf[1:]))
+                or abs(cdf[-1] - 1) > 1e-12
+            ):
+                raise ValueError("invalid Particlefilter resampling inputs")
+            indices = [min(bisect.bisect_left(cdf, u), 255) for u in thresholds]
+            cpu.compare(cpu.unpack(files[frame * 2], "d"), [y[i] for i in indices])
+            cpu.compare(cpu.unpack(files[frame * 2 + 1], "d"), [x[i] for i in indices])
     elif kind == "lavamd":
         uploads = sorted(directory.glob("upload-*.bin"))
         if len(files) != 1 or len(uploads) != 4:
@@ -113,9 +150,10 @@ def verify_readbacks(
                     expected
                 ):
                     raise ValueError(f"DWT output {suffix} differs from CPU reference")
-        elif kind == "particlefilter":
+        elif kind in ["particlefilter", "particlefilter_double"]:
+            code = "d" if kind == "particlefilter_double" else "f"
             for file in files[2::3]:
-                weights = cpu.unpack(file)
+                weights = cpu.unpack(file, code)
                 if any(v < 0 for v in weights) or abs(sum(weights) - 1) > 1e-5:
                     raise ValueError("Particlefilter weights are not normalized")
             values = dict(
@@ -123,7 +161,7 @@ def verify_readbacks(
             )
             if set(values) != {"XE", "YE", "distance"}:
                 raise ValueError("missing Particlefilter position output")
-            x, y, weights = [cpu.unpack(file) for file in files[-3:]]
+            x, y, weights = [cpu.unpack(file, code) for file in files[-3:]]
             xe = sum(a * w for a, w in zip(x, weights))
             ye = sum(a * w for a, w in zip(y, weights))
             cpu.compare(
@@ -247,8 +285,12 @@ def main():
             "kmeans",
             "nn",
             "backprop",
+            "myocyte",
+            "cfd",
             "lavamd",
             "particlefilter",
+            "particlefilter_double",
+            "particlefilter_naive",
             "dwt2d",
             "streamcluster",
         ],
@@ -274,7 +316,7 @@ def main():
                 f"LD_PRELOAD={args.readback_library}",
                 f"FORMOSA_BENCHMARK_READBACK={directory}",
             ]
-            if args.kind == "lavamd":
+            if args.kind in ["lavamd", "particlefilter_naive"]:
                 recorded_command.insert(
                     index + 3, f"FORMOSA_BENCHMARK_UPLOAD={directory}"
                 )
@@ -287,9 +329,11 @@ def main():
                 args.output,
                 args.reference,
             )
-        print(f"Rodinia {args.kind}: validation passed", flush=True)
-        return 0
-    output = run(command)
+        if args.kind != "cfd":
+            print(f"Rodinia {args.kind}: validation passed", flush=True)
+            return 0
+    else:
+        output = run(command)
     if args.kind == "lud":
         if ">>>Verify<<<<" not in output:
             raise ValueError("LU verification did not complete")
@@ -372,6 +416,42 @@ def main():
                     )
                 for identifier in expected:
                     cpu.compare(actual[identifier], expected[identifier], 2e-6)
+            elif args.kind == "myocyte":
+
+                def states(path):
+                    rows = re.findall(
+                        r"y\[0\]\[(\d+)\]\[(\d+)\]=\s*(\S+)", path.read_text()
+                    )
+                    if [(int(t), int(i)) for t, i, _ in rows] != [
+                        (t, i) for t in range(2) for i in range(91)
+                    ]:
+                        raise ValueError("Myocyte states are incomplete")
+                    return [float(value) for _, _, value in rows]
+
+                cpu.compare(
+                    states(args.output),
+                    states(reference_directory / "output.txt"),
+                    1e-6,
+                    1e-4,
+                )
+            elif args.kind == "cfd":
+                for name, columns in [
+                    ("density", 1),
+                    ("momentum", 3),
+                    ("density_energy", 1),
+                ]:
+                    actual = Path(name + ".txt").read_text().split()
+                    expected = (reference_directory / name).read_text().split()
+                    if actual[:2] != ["5", "192"] or expected[:2] != actual[:2]:
+                        raise ValueError("CFD mesh dimensions are incorrect")
+                    if len(actual) != 2 + 5 * columns:
+                        raise ValueError("CFD solution is incomplete")
+                    cpu.compare(
+                        list(map(float, actual[2:])),
+                        list(map(float, expected[2:])),
+                        2e-5,
+                        2e-5,
+                    )
     print(f"Rodinia {args.kind}: validation passed", flush=True)
     return 0
 

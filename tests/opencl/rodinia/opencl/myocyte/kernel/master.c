@@ -152,7 +152,7 @@ master(	fp timeinst,
 
 	clSetKernelArg(	kernel, 
 					0, 
-					sizeof(int), 
+					sizeof(fp),
 					(void *) &timeinst);
 	clSetKernelArg(	kernel, 
 					1, 

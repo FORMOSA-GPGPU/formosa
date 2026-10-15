@@ -17,6 +17,11 @@
 #include "ResultDatabase.h"
 #include "OptionParser.h"
 
+// Each executable can preserve its benchmark's original repetition default.
+#ifndef SHOC_DEFAULT_PASSES
+#define SHOC_DEFAULT_PASSES "10"
+#endif
+
 #ifdef PARALLEL
 #include <ParallelResultDatabase.h>
 #include <ParallelHelpers.h>
@@ -89,7 +94,7 @@ int main(int argc, char *argv[])
         op.addOption("platform", OPT_INT, "0", "specify OpenCL platform to use",
                 'p');
         op.addOption("device", OPT_VECINT, "", "specify device(s) to run on", 'd');
-        op.addOption("passes", OPT_INT, "10", "specify number of passes", 'n');
+        op.addOption("passes", OPT_INT, SHOC_DEFAULT_PASSES, "specify number of passes", 'n');
         op.addOption("size", OPT_VECINT, "1", "specify problem size", 's');
         op.addOption("infoDevices", OPT_BOOL, "",
                 "show info for available platforms and devices", 'i');

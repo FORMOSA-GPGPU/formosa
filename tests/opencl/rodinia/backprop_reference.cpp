@@ -27,6 +27,13 @@ int main(int argc, char **argv) {
   FILE *file = fopen(argv[1], "wb");
   if (!file) return 1;
   bool complete = fwrite(partials, sizeof(float), 32, file) == 32;
+  float output_error, hidden_error;
+  bpnn_train(net, &output_error, &hidden_error);
+  complete &= fwrite(net->input_units + 1, sizeof(float), layer_size, file) ==
+              layer_size;
+  for (int input = 0; input <= layer_size; ++input)
+    complete &=
+        fwrite(net->input_weights[input], sizeof(float), 17, file) == 17;
   if (fclose(file)) complete = false;
   bpnn_free(net);
   return complete ? 0 : 1;

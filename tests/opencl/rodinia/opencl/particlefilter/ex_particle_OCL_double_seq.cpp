@@ -1043,6 +1043,7 @@ int particleFilter(unsigned char * I, int IszX, int IszY, int Nfr, int * seed, i
     free(CDF);
     free(ind);
     free(u);
+    return 0;
 }
 
 int main(int argc, char * argv[]) {

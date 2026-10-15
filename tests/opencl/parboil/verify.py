@@ -20,12 +20,17 @@ def run(command, cwd=None):
         command, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True
     )
     print(result.stdout, end="", flush=True)
-    if result.returncode or re.search(r"\b(?:ERROR|Error|error)\s*[:!]", result.stdout):
+    if result.returncode or re.search(
+        r"\b(?:ERROR|Error|error)(?:\s*[:!]|\s*\()", result.stdout
+    ):
         raise ValueError("benchmark reported an error")
 
 
 def read_output(path, kind):
-    if kind == "sgemm":
+    if kind == "tpacf":
+        values = list(map(int, path.read_text().split()))
+        shape, count = (60,), 60
+    elif kind == "sgemm":
         fields = path.read_text().split()
         shape = tuple(map(int, fields[:2]))
         if len(shape) != 2 or min(shape) <= 0:
@@ -34,7 +39,21 @@ def read_output(path, kind):
         count = shape[0] * shape[1]
     else:
         data = path.read_bytes()
-        if kind == "cutcp":
+        if kind == "histo":
+            shape = struct.unpack_from("<2I", data)
+            size = count = shape[0] * shape[1]
+            values = list(data[8:])
+        elif kind == "sad":
+            size, reserved = struct.unpack_from("<2I", data)
+            if reserved != 0:
+                raise ValueError("invalid SAD header")
+            shape, count = (size,), size * 41 * 1089
+            values = list(struct.unpack(f"<{count}H", data[8:]))
+        elif kind == "lbm":
+            size = count = len(data) // 4
+            shape = (size,)
+            values = list(struct.unpack(f"<{count}f", data))
+        elif kind == "cutcp":
             magnitude, size = struct.unpack_from("<fI", data)
             shape = (size,)
             values = [magnitude, *struct.unpack(f"<{2 * size}f", data[8:])]
@@ -42,7 +61,7 @@ def read_output(path, kind):
         else:
             size = struct.unpack_from("<I", data)[0]
             shape = (size,)
-            count = size * (2 if kind == "mri-q" else 1)
+            count = size * {"mri-q": 2, "mri-gridding": 3}.get(kind, 1)
             values = list(struct.unpack(f"<{count}f", data[4:]))
         if size <= 0:
             raise ValueError("invalid output dimensions")
@@ -68,15 +87,28 @@ def compare(kind, output, reference):
         "mri-q": 0.002,
         "spmv": 0.002,
         "cutcp": 0.005,
+        "histo": 0,
+        "sad": 0,
+        "tpacf": 0,
+        "lbm": 0.002,
+        "mri-gridding": 0.002,
     }[kind]
-    absolute = {"sgemm": 0.01, "stencil": 0.001, "cutcp": 1e-4}.get(
-        kind, 1e-4 * max(abs(v) for v in expected)
-    )
+    absolute = {
+        "sgemm": 0.01,
+        "stencil": 0.001,
+        "cutcp": 1e-4,
+        "histo": 0,
+        "sad": 0,
+        "tpacf": 0,
+    }.get(kind, 1e-4 * max(abs(v) for v in expected))
     for index, (actual, wanted) in enumerate(zip(values, expected)):
         tolerance = absolute
         ratio = relative
         if kind == "cutcp" and index == 0:
             ratio = 0.0025
+        if kind == "mri-gridding" and index >= 2 * shape[0]:
+            # Density counts must match exactly even when grid magnitudes are large.
+            tolerance = ratio = 0
         if abs(actual - wanted) > max(tolerance, ratio * abs(wanted)):
             raise ValueError(
                 f"output {index} differs from CPU reference: {actual} vs {wanted}"
@@ -86,7 +118,20 @@ def compare(kind, output, reference):
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--kind", choices=["sgemm", "stencil", "mri-q", "spmv", "cutcp"], required=True
+        "--kind",
+        choices=[
+            "sgemm",
+            "stencil",
+            "mri-q",
+            "spmv",
+            "cutcp",
+            "histo",
+            "lbm",
+            "mri-gridding",
+            "sad",
+            "tpacf",
+        ],
+        required=True,
     )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--reference", required=True)
@@ -103,7 +148,7 @@ def main():
         ) as directory:
             reference = Path(directory) / "result.dat"
             run(
-                [args.reference, *args.reference_arg, "-o", str(reference)],
+                [args.reference, "-o", str(reference), *args.reference_arg],
                 cwd=directory,
             )
             compare(args.kind, args.output, reference)

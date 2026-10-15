@@ -12,7 +12,7 @@ tests/opencl/rodinia/readback.c as a shared library linked with -ldl.
 
 Link the hosts against a CPU OpenCL ICD and select its library paths in the
 environment. Never generate references with Formosa's runtime. Supply the
-two hosts, readback library, and backend/compiler description through the
+desired hosts, readback library, and backend/compiler description through the
 options below; review regenerated outputs before replacing checked-in files.
 """
 
@@ -31,8 +31,9 @@ from reference import unpack
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--particlefilter", required=True, type=Path)
-    parser.add_argument("--dwt2d", required=True, type=Path)
+    parser.add_argument("--particlefilter", type=Path)
+    parser.add_argument("--particlefilter-double", type=Path)
+    parser.add_argument("--dwt2d", type=Path)
     parser.add_argument("--readback-library", required=True, type=Path)
     parser.add_argument(
         "--backend", required=True, help="CPU ICD version and host compiler"
@@ -41,6 +42,8 @@ def main():
         "--output", type=Path, default=Path(__file__).parent / "references"
     )
     args = parser.parse_args()
+    if not any([args.particlefilter, args.particlefilter_double, args.dwt2d]):
+        parser.error("supply at least one CPU benchmark host")
     support = Path(__file__).resolve().parent
     upstream = support
     args.output.mkdir(parents=True, exist_ok=True)
@@ -53,6 +56,13 @@ def main():
             0,
         ),
         (
+            "particlefilter_double",
+            ["-x", "16", "-y", "16", "-z", "3", "-np", "256"],
+            "d",
+            1e-5,
+            1e-8,
+        ),
+        (
             "dwt2d",
             ["-D", "32x32", "-l", "1", "-5", "input.rgb", "result.dwt"],
             "i",
@@ -61,12 +71,19 @@ def main():
         ),
     ]
     for kind, command_args, code, absolute, relative in cases:
+        if not getattr(args, kind):
+            continue
+        source_directory = (
+            "particlefilter" if kind.startswith("particlefilter") else kind
+        )
         with tempfile.TemporaryDirectory(prefix=f"rodinia-cpu-{kind}-") as directory:
             work = Path(directory)
             generate(work)
-            for file in (upstream / "opencl" / kind).rglob("*"):
+            for file in (upstream / "opencl" / source_directory).rglob("*"):
                 if file.is_file() and file.suffix in [".cl", ".h"]:
-                    destination = work / file.relative_to(upstream / "opencl" / kind)
+                    destination = work / file.relative_to(
+                        upstream / "opencl" / source_directory
+                    )
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(file, destination)
             reads = work / "readbacks"
@@ -84,7 +101,7 @@ def main():
                 timeout=120,
             )
             files = sorted(reads.glob("readback-*.bin"))
-            if len(files) != (9 if kind == "particlefilter" else 3):
+            if len(files) != (9 if kind.startswith("particlefilter") else 3):
                 raise ValueError(f"incomplete CPU readbacks for {kind}")
             reference = {
                 "SPDX-FileCopyrightText": "2026 CASLab, National Cheng Kung University",
@@ -94,7 +111,7 @@ def main():
                 "arrays": [],
             }
             for index, file in enumerate(files):
-                weight = kind == "particlefilter" and index % 3 == 2
+                weight = kind.startswith("particlefilter") and index % 3 == 2
                 reference["arrays"].append(
                     {
                         "type": code,

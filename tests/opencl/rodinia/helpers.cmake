@@ -74,7 +74,8 @@ function(add_rodinia_test NAME DIRECTORY)
   foreach(SM IN LISTS OPENCL_SMS)
     set_property(TEST opencl.${CASE_ID}.${SM} APPEND PROPERTY LABELS benchmark rodinia)
     # Upstream hosts can write fixed filenames. Each dataset gets its own cwd.
+    # Leave headroom for Debug/coverage and concurrent CI workloads.
     set_tests_properties(opencl.${CASE_ID}.${SM} PROPERTIES
-      RESOURCE_LOCK rodinia_${NAME} TIMEOUT 300)
+      RESOURCE_LOCK rodinia_${NAME} TIMEOUT 600)
   endforeach()
 endfunction()
