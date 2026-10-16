@@ -17,6 +17,7 @@ formosa/
 ├── simtix/        SIMT instruction-set simulator (C++)
 ├── fw/            Command-processor firmware
 ├── hal/           Hardware Abstraction Layer (HAL) + REAL
+├── ilha/          Ilha Lua Hardware Architecture — system platform
 ├── libcomm/       Virtual-platform IPC library
 ├── lv/            Lunaverse — shared runtime utilities (logging, Lua bindings)
 ├── formosa-llvm/  Nix packaging: LLVM toolchain (compiler-rt, newlib)

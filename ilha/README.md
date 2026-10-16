@@ -4,70 +4,179 @@ SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
 SPDX-License-Identifier: Apache-2.0
 -->
 
-# Ilha
+# ILHA
 
-Ilha (Ilha Lua Hardware Architecture) is FORMOSA's concrete system platform.
-It owns the Lua system composition, fixed hardware/software address ABI,
-loadable hardware configurations, platform runfiles, and the LV plugin used by
-the platform.
+ILHA (Ilha Lua Hardware Architecture) composes Lunaverse modules and SM
+implementations into the FORMOSA system platform. It owns system configuration,
+the hardware/software address-map ABI, platform runfiles, and platform-specific
+LV bindings. simtix owns the SM implementations.
 
-The default `apccas2026` configuration models one 16-warp by 4-lane SM and an
-LPDDR4 DRAM. Launchers accept `--config <name-or-file.lua>` for a complete
-configuration, plus `--system-config`, `--sm`, and `--sm-param` overrides.
-Relative resource paths are resolved from the configuration file that supplies
-them.
+## Choose a system configuration
 
-The maintained `large_sm` configuration keeps one SM but expands it to 32
-warps by 32 threads (1024 threads total) and selects LPDDR4-3200. It can be
-selected with `--config <runfiles>/configs/large_sm.lua`.
+After building the simulator and its platform runfiles, launch the daemon from
+the build directory's `bin/` folder. The examples below use `build/`:
 
-Configurations contain `system` and `sm` tables. Named tables merge recursively,
-arrays replace the previous array, and explicit command-line overrides apply
-last. Selecting a different SM clears the previous SM's parameters.
+```bash
+# APCCAS2026 defaults: one SM, 16 warps × 4 lanes, LPDDR4.
+./build/bin/daemon.lua
 
-`ilha.config` is the APCCAS2026 configuration singleton. A runner constructs one
-system per process and applies configuration files and command-line settings
-through one `override()` method. Configuration-file loading belongs to
-`ilha.config_cli`:
+# One larger SM: 32 warps × 32 lanes (1024 threads), LPDDR4-3200.
+./build/bin/daemon.lua --config large_sm
+```
+
+[`lua/config.lua`](lua/config.lua) holds the APCCAS2026 defaults.
+[`configs/apccas2026.lua`](configs/apccas2026.lua) returns `{}`; named and external
+configuration files supply overrides to those defaults. For example:
 
 ```lua
----@type ilha.config
+-- experiment.lua
+return {
+  system = {
+    num_sm = 2,
+    threads_per_warp = 32,
+    warps_per_core = 32,
+    dram_config = "dram/experiment.json",
+  },
+  sm = {
+    module = "simtix.pipelined_sm",
+    param = {
+      dcache = { cache_size_bytes = 0x8000 },
+    },
+  },
+}
+```
+
+```bash
+./build/bin/daemon.lua --config ./experiment.lua
+```
+
+`dram/experiment.json` resolves relative to `experiment.lua`. Use an existing
+DRAMSys configuration and its referenced resources at that path.
+
+## Override system and SM parameters separately
+
+`system` controls system-wide configuration; `sm.module` selects the SM
+implementation and `sm.param` holds its microarchitecture parameters.
+
+```lua
+-- system.lua: contents of the system block only.
+return {
+  num_sm = 2,
+  clock_period_ns = 2.5,
+}
+```
+
+```lua
+-- sm.lua: parameters for the selected SM only.
+---@type simtix.pipelined_sm.param
+local param = {
+  core = { num_subcores = 4 },
+  icache = { replacement_policy = "lru" },
+  dcache = { num_banks = 4, cache_size_bytes = 0x8000 },
+}
+return param
+```
+
+```bash
+./build/bin/daemon.lua --config large_sm \
+  --system-config ./system.lua \
+  --sm simtix.pipelined_sm --sm-param ./sm.lua
+```
+
+[`lua/config_cli.lua`](lua/config_cli.lua) applies settings in this fixed order,
+regardless of argument order:
+
+```text
+APCCAS2026 defaults → --config → --system-config → --sm → --sm-param
+```
+
+Named tables merge recursively; arrays replace the previous array. Changing
+`sm.module` clears the old SM parameters. Each runner process configures one
+system through the `ilha.config` singleton.
+
+I-cache fields use `simtix.Cache.Param`; D-cache fields use
+`simtix.banked_cache.param`. Unspecified component fields use `LV_SCHEMA`
+defaults or the owning Lua composition's defaults. APCCAS2026 explicitly
+selects its D-cache capacity, WriteBack policy, and MSHR count in `ilha.config`.
+Parameter annotations provide LuaLS completion and navigation; system fields
+are inferred from the defaults table. CacheController is wired inside the SM
+and is not an `sm.param` field.
+
+## Compose and run the system in Lua
+
+A custom runner can apply overrides directly before constructing the system:
+
+```lua
+-- Run inside LV, which supplies sc and the registered component bindings.
 local Config = require("ilha.config")
-return Config:override({
-  system = { threads_per_warp = 32, warps_per_core = 32 },
+local System = require("ilha.system")
+
+Config:override({
+  system = { num_sm = 2 },
   sm = { param = { dcache = { cache_size_bytes = 0x8000 } } },
+})
+
+local system = System("System", Config, {
+  agent_socket_path = "/tmp/formosa.sock",
+})
+system:start(1000) -- simulation cycles
+sc.stop()
+```
+
+Derived values are methods, so overrides need no separate recomputation:
+
+```lua
+local Config = require("ilha.config")
+Config:override({ system = { threads_per_warp = 32, warps_per_core = 32 } })
+assert(Config.system:threads_per_core() == 1024)
+```
+
+System validates the configuration, creates the shared fabric, memories, CP,
+and host agent, and instantiates the selected SM for each ID. The SM constructor
+receives only its system settings, parameters, and platform address map:
+
+```lua
+-- Equivalent to one SM construction inside ilha.system:
+local make_sm = require(Config.sm.module)
+local sm = make_sm("SM0", {
+  id = 0,
+  config = Config.system,
+  params = Config.sm.param,
+  address_map = require("ilha.addr_map"),
 })
 ```
 
-Class names and parameter annotations connect LuaLS to the actual tables;
-field lists are inferred from those tables. The named
-system defaults define its LuaLS-visible fields; methods calculate derived
-values and `override()` validates structural overrides. SM-specific fields stay
-in the owning module, such as `simtix.pipelined_sm.param`. Annotate SM parameter
-files with the selected module's type for editor checks; runtime construction
-checks hardware constraints without maintaining a second SM field whitelist.
-I-cache parameters use `simtix.Cache.Param`. D-cache parameters use
-`simtix.banked_cache.param`, which includes the Cache fields plus banked
-composition keys such as `num_banks`. Unspecified fields use the Cache
-`LV_SCHEMA` defaults and BankedCache composition defaults. APCCAS2026
-explicitly selects the D-cache values that differ from those generic
-component defaults. CacheController is wired inside the SM; it is not an
-`sm.param` field.
+The atomic and pipelined simtix compositions instantiate ILHA bindings, so
+those complete compositions require the ILHA plugin to be linked.
 
-Software-visible platform data is generated from `lua/addr_map.lua` into the
-build tree. CMake invokes the xmake Lua generator automatically, including for
-HAL/firmware-only builds. Generated files are not committed.
+## Keep software and hardware consistent
 
-SystemInfo at `0x60000` exposes runtime hardware capabilities through the fixed
-address-map ABI. HAL reads this table after connecting to the simulator; hardware
-capabilities are no longer published through environment variables. ABI v1 has
-a valid length of `0x40`; each field is an unsigned 64-bit little-endian value
-and must be read individually at its generated offset.
+[`lua/addr_map.lua`](lua/addr_map.lua) is the fixed address-map ABI SSOT.
+CMake invokes two xmake Lua backends, including for HAL/firmware-only builds:
 
-Simtix continues to own its Lua SM compositions. The atomic and pipelined SM
-compositions instantiate Ilha bindings, so the Ilha plugin must be linked when
-those complete platform compositions are used.
+```text
+ilha/lua/addr_map.lua
+  ├─ scripts/generate_header.lua → build/generated/ilha/formosa_addr_map.h
+  └─ scripts/generate_linker.lua → build/generated/ilha/ilha_memory.ld
+```
 
-The DMA offsets and status values in the generator intentionally shadow LV's
-component-owned constants. This temporary duplication remains until LV has a
-generic component MMIO-to-software-header workflow (issue #41).
+Generated files stay in the build tree. Changing an experimental configuration
+does not change the fixed address-map ABI.
+
+Runtime capabilities come from the same settings that construct the hardware:
+
+```text
+Config.system.num_sm = 2
+  ├─ System instantiates SM0 and SM1
+  └─ SystemInfo.NUM_SM = 2 → HAL reads it when connecting
+```
+
+SystemInfo is a `simple.ConstantTable` on `fab_agent` at `0x60000`, accessible
+to both the host and CP. ABI v1 contains version, length, SM count, warp/lane
+counts, local-memory size, shared-cache size, and cache-block size. Its valid
+length is `0x40`; each field is read individually as an unsigned 64-bit
+little-endian value using generated offsets. HAL validates version and length
+on connection; there is no hardware-configuration environment dump.
+
+DMA offsets and status values currently shadow LV's component-owned contract
+until a generic MMIO header-generation workflow is available (issue #41).

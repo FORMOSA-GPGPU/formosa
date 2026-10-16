@@ -118,7 +118,14 @@ local config = {
   components = {
     ["ilha.platform"] = {
       paths = {
-        "ilha/**",
+        "ilha/CMakeLists.txt",
+        "ilha/daemon.lua",
+        "ilha/configs/**",
+        "ilha/include/**",
+        "ilha/lua/**",
+        "ilha/scripts/**",
+        "ilha/src/**",
+        "ilha/tests/**",
         "cmake/IlhaPlatformData.cmake",
       },
       depends = { "lv.liblv", "lv.lua", "lv.bindings.build" },
@@ -420,10 +427,9 @@ local config = {
     },
     ["tests.opencl"] = {
       paths = {
-        "ilha/**",
         "tests/opencl/**",
       },
-      depends = { "formosa-pocl" },
+      depends = { "formosa-pocl", "ilha.platform" },
     },
     ["tests.kernel-sim"] = {
       paths = { "tests/kernel-sim/**" },
