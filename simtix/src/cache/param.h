@@ -30,7 +30,7 @@ struct NonCacheableEntry {
 };
 
 struct Param {
-  ReplacementPolicy replacement_policy = ReplacementPolicy::kRandom;
+  ReplacementPolicy replacement_policy = ReplacementPolicy::kLRU;
   WriteHitPolicy write_hit_policy = WriteHitPolicy::kWriteThrough;
   WriteMissPolicy write_miss_policy = WriteMissPolicy::kWriteAllocate;
 
