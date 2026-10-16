@@ -41,15 +41,15 @@ function(fetch_spmv_matrix NAME URL HASH ARCHIVE MTX_FILE)
 endfunction()
 
 # 1. MSC00726 (Regular/Small) - Group: Boeing
-# The legacy collection host only serves HTTP; use its public S3 HTTPS endpoint.
-set(MSC_URL "https://s3.us-east-2.amazonaws.com/sparse-files.engr.tamu.edu/MM/Boeing/msc00726.tar.gz")
+# Use CASLab mirrors of the original SuiteSparse archives for reliable CI downloads.
+set(MSC_URL "https://wiki.caslab.ee.ncku.edu.tw/static-sites/files/spmv/data/msc00726.tar.gz")
 set(MSC_HASH "3b5cf6684c8f6f264ff5d67988aa07c327ff5be6286bfe11b00f482e2c45578c")
 set(MSC_ARCHIVE "${SPMV_DATA_DIR}/msc00726.tar.gz")
 set(MSC_MTX "${SPMV_DATA_DIR}/msc00726/msc00726.mtx")
 fetch_spmv_matrix("msc00726" "${MSC_URL}" "${MSC_HASH}" "${MSC_ARCHIVE}" "${MSC_MTX}")
 
 # 2. DC2 (Irregular/Large) - Group: IBM_EDA
-set(DC2_URL "https://s3.us-east-2.amazonaws.com/sparse-files.engr.tamu.edu/MM/IBM_EDA/dc2.tar.gz")
+set(DC2_URL "https://wiki.caslab.ee.ncku.edu.tw/static-sites/files/spmv/data/dc2.tar.gz")
 set(DC2_HASH "14e039beb453b1d4c9c94471f3a699b18acafb5b0e508e3cb7cf5cba1f4288d1")
 set(DC2_ARCHIVE "${SPMV_DATA_DIR}/dc2.tar.gz")
 set(DC2_MTX "${SPMV_DATA_DIR}/dc2/dc2.mtx")
