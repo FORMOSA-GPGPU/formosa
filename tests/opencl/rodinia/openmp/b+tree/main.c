@@ -57,6 +57,7 @@
 //	LIBRARIES
 //======================================================================================================================================================150
 
+#include <stdlib.h>
 #include <stdio.h>									// (in directory known to compiler)			needed by printf, stderr
 #include <limits.h>									// (in directory known to compiler)			needed by INT_MIN, INT_MAX
 // #include <sys/time.h>							// (in directory known to compiler)			needed by ???

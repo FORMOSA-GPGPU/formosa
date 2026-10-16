@@ -10,7 +10,7 @@ enable_language(ASM)
 set(TARGET pfreader_tester.elf)
 
 # Using FORMOSA LLVM's clang in the nix shell for now.
-set(CMAKE_C_COMPILER ${CLANG})
+apple_cross_cc_shim(CMAKE_C_COMPILER "${CLANG}")
 set(CMAKE_ASM_COMPILER ${CMAKE_C_COMPILER})
 set(CMAKE_C_FLAGS "--target=riscv64 -march=rv64im")
 set(CMAKE_ASM_FLAGS "--target=riscv64 -march=rv64im")

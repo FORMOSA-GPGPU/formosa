@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "hotspot.h"
 
 //Primitives for timing

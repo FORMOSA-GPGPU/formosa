@@ -19,6 +19,8 @@
 	on 15/03/2011
 ***********************************************/
 
+//#define ENABLE_THREADS  // comment this out to disable threads
+
 #include "streamcluster.h"
 #include "CLHelper.h"
 #include "streamcluster_cl.h"
@@ -38,7 +40,6 @@ using namespace std;
 
 //#define PRINTINFO 			//comment this out to disable output
 //#define PROFILE_TMP 					// comment this out to disable instrumentation code
-//#define ENABLE_THREADS  // comment this out to disable threads
 //#define INSERT_WASTE 		//uncomment this to insert waste computation into dist function
 
 #define CACHE_LINE 512 		// cache line in byte
@@ -169,7 +170,7 @@ float dist(Point p1, Point p2, int dim)
 }
 
 /* run speedy on the points, return total cost of solution */
-float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_barrier_t* barrier)
+float pspeedy(Points *points, float z, long *kcenter, int pid, StreamclusterBarrier* barrier)
 {
 #ifdef PROFILE_TMP
   double t1 = gettime();
@@ -327,7 +328,7 @@ cnt_speedy++;
 
 float pFL(Points *points, int *feasible, int numfeasible,
 	  float z, long *k, int kmax, float cost, long iter, float e, 
-	  int pid, pthread_barrier_t* barrier)
+	  int pid, StreamclusterBarrier* barrier)
 {
 #ifdef PROFILE_TMP
 	double t1 = gettime();
@@ -378,7 +379,7 @@ float pFL(Points *points, int *feasible, int numfeasible,
   return(cost);
 }
 
-int selectfeasible_fast(Points *points, int **feasible, int kmin, int pid, pthread_barrier_t* barrier)
+int selectfeasible_fast(Points *points, int **feasible, int kmin, int pid, StreamclusterBarrier* barrier)
 {
 #ifdef PROFILE_TMP
   double t1 = gettime();
@@ -453,7 +454,7 @@ int selectfeasible_fast(Points *points, int **feasible, int kmin, int pid, pthre
 
 /* compute approximate kmedian on the points */
 float pkmedian(Points *points, long kmin, long kmax, long* kfinal,
-	       int pid, pthread_barrier_t* barrier )
+	       int pid, StreamclusterBarrier* barrier )
 {
   int i;
   float cost;
@@ -697,11 +698,11 @@ void localSearch( Points* points, long kmin, long kmax, long* kfinal ) {
   double t1 = gettime();
 #endif
 
-    pthread_barrier_t barrier;
+    StreamclusterBarrier barrier;
 #ifdef ENABLE_THREADS
     pthread_barrier_init(&barrier,NULL,nproc);
-#endif
     pthread_t* threads = new pthread_t[nproc];
+#endif
     pkmedian_arg_t* arg = new pkmedian_arg_t[nproc];
 
 
@@ -726,7 +727,9 @@ void localSearch( Points* points, long kmin, long kmax, long* kfinal ) {
 #endif
     }
 
+#ifdef ENABLE_THREADS
     delete[] threads;
+#endif
     delete[] arg;
 #ifdef ENABLE_THREADS
     pthread_barrier_destroy(&barrier);

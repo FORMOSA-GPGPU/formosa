@@ -1,6 +1,9 @@
 #ifndef __OCLH__
 #define __OCLH__
 
+#include <stdio.h>
+#include <stdlib.h>
+
 typedef struct {
 	cl_context clContext;
 	cl_command_queue clCommandQueue;

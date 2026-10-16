@@ -4,7 +4,6 @@
 #include <errno.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include <error.h>
 /*#include "dwt_cuda/dwt.h"
 #include "dwt_cuda/common.h"
 #include "dwt.h"

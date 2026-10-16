@@ -5,9 +5,7 @@
  *cr                         All Rights Reserved
  *cr
  ***************************************************************************/
-#include <endian.h>
 #include <stdlib.h>
-#include <malloc.h>
 #include <stdio.h>
 #include <inttypes.h>
 

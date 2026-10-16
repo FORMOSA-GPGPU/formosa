@@ -6,13 +6,14 @@
  *cr
  ***************************************************************************/
 
-#include <endian.h>
+#include "../alloc.h"
+
 #include <stdlib.h>
-#include <malloc.h>
 #include <stdio.h>
 #include <inttypes.h>
 
-#if __BYTE_ORDER != __LITTLE_ENDIAN
+#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || \
+    __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 # error "File I/O is not implemented for this system: wrong endianness."
 #endif
 
@@ -34,21 +35,21 @@ void inputData(char* fName, int* _numK, int* _numX,
   *_numK = numK;
   fread (&numX, sizeof (int), 1, fid);
   *_numX = numX;
-  *kx = (float *) memalign(16, numK * sizeof (float));
+  *kx = (float *) mriq_alloc(numK * sizeof (float));
   fread (*kx, sizeof (float), numK, fid);
-  *ky = (float *) memalign(16, numK * sizeof (float));
+  *ky = (float *) mriq_alloc(numK * sizeof (float));
   fread (*ky, sizeof (float), numK, fid);
-  *kz = (float *) memalign(16, numK * sizeof (float));
+  *kz = (float *) mriq_alloc(numK * sizeof (float));
   fread (*kz, sizeof (float), numK, fid);
-  *x = (float *) memalign(16, numX * sizeof (float));
+  *x = (float *) mriq_alloc(numX * sizeof (float));
   fread (*x, sizeof (float), numX, fid);
-  *y = (float *) memalign(16, numX * sizeof (float));
+  *y = (float *) mriq_alloc(numX * sizeof (float));
   fread (*y, sizeof (float), numX, fid);
-  *z = (float *) memalign(16, numX * sizeof (float));
+  *z = (float *) mriq_alloc(numX * sizeof (float));
   fread (*z, sizeof (float), numX, fid);
-  *phiR = (float *) memalign(16, numK * sizeof (float));
+  *phiR = (float *) mriq_alloc(numK * sizeof (float));
   fread (*phiR, sizeof (float), numK, fid);
-  *phiI = (float *) memalign(16, numK * sizeof (float));
+  *phiI = (float *) mriq_alloc(numK * sizeof (float));
   fread (*phiI, sizeof (float), numK, fid);
   fclose (fid); 
 }

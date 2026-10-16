@@ -6,13 +6,12 @@
  *cr
  ***************************************************************************/
 
-#include <endian.h>
 #include <stdlib.h>
-#include <malloc.h>
 #include <stdio.h>
 #include <inttypes.h>
 
-#if __BYTE_ORDER != __LITTLE_ENDIAN
+#if !defined(__BYTE_ORDER__) || !defined(__ORDER_LITTLE_ENDIAN__) || \
+    __BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__
 # error "File I/O is not implemented for this system: wrong endianness."
 #endif
 

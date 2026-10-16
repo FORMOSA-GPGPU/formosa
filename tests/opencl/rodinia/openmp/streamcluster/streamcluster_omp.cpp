@@ -46,6 +46,8 @@ using namespace std;
 //#define ENABLE_THREADS  // comment this out to disable threads
 //#define INSERT_WASTE //uncomment this to insert waste computation into dist function
 
+#include "../../streamcluster_barrier.h"
+
 #define CACHE_LINE 512 // cache line in byte
 
 /* this structure represents a point */
@@ -182,7 +184,7 @@ float dist(Point p1, Point p2, int dim)
 }
 
 /* run speedy on the points, return total cost of solution */
-float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_barrier_t* barrier)
+float pspeedy(Points *points, float z, long *kcenter, int pid, StreamclusterBarrier* barrier)
 {
 #ifdef PROFILE
   double t1 = gettime();
@@ -348,7 +350,7 @@ float pspeedy(Points *points, float z, long *kcenter, int pid, pthread_barrier_t
 /* z is the facility cost, x is the number of this point in the array 
    points */
 
-double pgain(long x, Points *points, double z, long int *numcenters, int pid, pthread_barrier_t* barrier)
+double pgain(long x, Points *points, double z, long int *numcenters, int pid, StreamclusterBarrier* barrier)
 {
   //  printf("pgain pthread %d begin\n",pid);
 #ifdef ENABLE_THREADS
@@ -596,7 +598,7 @@ double pgain(long x, Points *points, double z, long int *numcenters, int pid, pt
 
 float pFL(Points *points, int *feasible, int numfeasible,
 	  float z, long *k, double cost, long iter, float e, 
-	  int pid, pthread_barrier_t* barrier)
+	  int pid, StreamclusterBarrier* barrier)
 {
 #ifdef ENABLE_THREADS
   pthread_barrier_wait(barrier);
@@ -642,7 +644,7 @@ float pFL(Points *points, int *feasible, int numfeasible,
   return(cost);
 }
 
-int selectfeasible_fast(Points *points, int **feasible, int kmin, int pid, pthread_barrier_t* barrier)
+int selectfeasible_fast(Points *points, int **feasible, int kmin, int pid, StreamclusterBarrier* barrier)
 {
 #ifdef PROFILE
   double t1 = gettime();
@@ -719,7 +721,7 @@ int selectfeasible_fast(Points *points, int **feasible, int kmin, int pid, pthre
 
 /* compute approximate kmedian on the points */
 float pkmedian(Points *points, long kmin, long kmax, long* kfinal,
-	       int pid, pthread_barrier_t* barrier )
+	       int pid, StreamclusterBarrier* barrier )
 {
   int i;
   double cost;
@@ -960,7 +962,7 @@ struct pkmedian_arg_t
   long kmax;
   long* kfinal;
   int pid;
-  pthread_barrier_t* barrier;
+  StreamclusterBarrier* barrier;
 };
 
 void* localSearchSub(void* arg_) {
@@ -976,11 +978,11 @@ void localSearch( Points* points, long kmin, long kmax, long* kfinal ) {
   double t1 = gettime();
 #endif
 
-    pthread_barrier_t barrier;
+    StreamclusterBarrier barrier;
 #ifdef ENABLE_THREADS
     pthread_barrier_init(&barrier,NULL,nproc);
-#endif
     pthread_t* threads = new pthread_t[nproc];
+#endif
     pkmedian_arg_t* arg = new pkmedian_arg_t[nproc];
 
 
@@ -1005,7 +1007,9 @@ void localSearch( Points* points, long kmin, long kmax, long* kfinal ) {
 #endif
     }
 
+#ifdef ENABLE_THREADS
     delete[] threads;
+#endif
     delete[] arg;
 #ifdef ENABLE_THREADS
     pthread_barrier_destroy(&barrier);

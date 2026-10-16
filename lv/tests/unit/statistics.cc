@@ -200,7 +200,7 @@ void check_scalar_lookup() {
   if (static_cast<Integer>(retained.get("reset_alias")) != 0) {
     LV_FATAL("Retained data did not reset");
   }
-  lua["test_stats"] = sol::nil;
+  lua["test_stats"] = sol::lua_nil;
 }
 
 void check_expression_ownership() {

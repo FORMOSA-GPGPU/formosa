@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "OpenCL_helper_library.h"
 
 // Loads the kernel source code from the specified file into a C string and returns the string pointer

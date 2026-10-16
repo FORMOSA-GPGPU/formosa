@@ -6,6 +6,8 @@
  *cr
  ***************************************************************************/
 
+#include "../alloc.h"
+
 #define PI   3.1415926535897932384626433832795029f
 #define PIx2 6.2831853071795864769252867665590058f
 
@@ -61,9 +63,9 @@ ComputeQCPU(int numK, int numX,
 void createDataStructsCPU(int numK, int numX, float** phiMag,
 	 float** Qr, float** Qi)
 {
-  *phiMag = (float* ) memalign(16, numK * sizeof(float));
-  *Qr = (float*) memalign(16, numX * sizeof (float));
+  *phiMag = (float* ) mriq_alloc(numK * sizeof(float));
+  *Qr = (float*) mriq_alloc(numX * sizeof (float));
   memset((void *)*Qr, 0, numX * sizeof(float));
-  *Qi = (float*) memalign(16, numX * sizeof (float));
+  *Qi = (float*) mriq_alloc(numX * sizeof (float));
   memset((void *)*Qi, 0, numX * sizeof(float));
 }

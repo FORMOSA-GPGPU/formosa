@@ -3,14 +3,9 @@
 #include <time.h>
 #include <assert.h>
 
-#include "timer.h"
+#include <chrono>
 
 void run(int argc, char** argv);
-
-/* define timer macros */
-#define pin_stats_reset()   startCycle()
-#define pin_stats_pause(cycles)   stopCycle(cycles)
-#define pin_stats_dump(cycles)    printf("timer: %Lu\n", cycles)
 
 #define BENCH_PRINT
 
@@ -82,15 +77,13 @@ void run(int argc, char** argv)
 {
     init(argc, argv);
 
-    unsigned long long cycles;
-
     int *src, *dst, *temp;
     int min;
 
     dst = result;
     src = new int[cols];
 
-    pin_stats_reset();
+    const auto start = std::chrono::steady_clock::now();
     for (int t = 0; t < rows-1; t++) {
         temp = src;
         src = dst;
@@ -106,8 +99,9 @@ void run(int argc, char** argv)
         }
     }
 
-    pin_stats_pause(cycles);
-    pin_stats_dump(cycles);
+    const auto elapsed = std::chrono::steady_clock::now() - start;
+    printf("timer (ns): %lld\n", static_cast<long long>(
+        std::chrono::duration_cast<std::chrono::nanoseconds>(elapsed).count()));
 
 #ifdef BENCH_PRINT
     for (int i = 0; i < cols; i++)

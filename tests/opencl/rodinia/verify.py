@@ -311,9 +311,13 @@ def main():
         with tempfile.TemporaryDirectory(prefix="formosa-readbacks-") as directory:
             recorded_command = list(command)
             index = recorded_command.index("--") + 1
+            preload = (
+                "DYLD_INSERT_LIBRARIES" if sys.platform == "darwin" else "LD_PRELOAD"
+            )
+            # Set this on the native host, after the runner's shell boundary.
             recorded_command[index:index] = [
                 "/usr/bin/env",
-                f"LD_PRELOAD={args.readback_library}",
+                f"{preload}={args.readback_library}",
                 f"FORMOSA_BENCHMARK_READBACK={directory}",
             ]
             if args.kind in ["lavamd", "particlefilter_naive"]:

@@ -10,6 +10,7 @@
 //	LIBRARIES
 //======================================================================================================================================================150
 
+#include <stdlib.h>
 #include <CL/cl.h>									// (in directory provided to compiler)		needed by OpenCL types and functions
 #include <string.h>									// (in directory known to compiler)			needed by memset
 

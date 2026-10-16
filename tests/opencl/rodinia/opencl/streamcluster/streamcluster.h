@@ -32,6 +32,7 @@
 #include <math.h>
 #include <sys/resource.h>
 #include <limits.h>
+#include "../../streamcluster_barrier.h"
 
 
 #ifdef ENABLE_PARSEC_HOOKS
@@ -63,7 +64,7 @@ struct pkmedian_arg_t
   long kmax;
   long* kfinal;
   int pid;
-  pthread_barrier_t* barrier;
+  StreamclusterBarrier* barrier;
 };
 
 class PStream {
@@ -138,11 +139,11 @@ void shuffle(Points*);
 void intshuffle(int*, int);
 float waste(float);
 float dist(Point, Point, int);
-float pspeedy(Points*, float, long, int, pthread_barrier_t*);
-float pgain_old(long, Points*, float, long int*, int, pthread_barrier_t*);
-float pFL(Points*, int*, int, float, long*, float, long, float, int, pthread_barrier_t*);
-int selectfeasible_fast(Points*, int**, int, int, pthread_barrier_t*);
-float pkmedian(Points*, long, long, long*, int, pthread_barrier_t*);
+float pspeedy(Points*, float, long, int, StreamclusterBarrier*);
+float pgain_old(long, Points*, float, long int*, int, StreamclusterBarrier*);
+float pFL(Points*, int*, int, float, long*, float, long, float, int, StreamclusterBarrier*);
+int selectfeasible_fast(Points*, int**, int, int, StreamclusterBarrier*);
+float pkmedian(Points*, long, long, long*, int, StreamclusterBarrier*);
 int contcenters(Points*);
 void copycenters(Points*, Points*, long*, long);
 void* localSearchSub(void*);

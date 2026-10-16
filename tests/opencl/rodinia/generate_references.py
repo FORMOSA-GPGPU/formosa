@@ -8,7 +8,8 @@
 Build separate hosts from tests/opencl/rodinia/opencl.
 Use -O3 -std=c++11 -DTIMING, link -lm, and compile the original util/timing.c
 as a verbatim .cpp translation unit. DWT2D also needs -DOUTPUT. Compile
-tests/opencl/rodinia/readback.c as a shared library linked with -ldl.
+tests/opencl/rodinia/readback.c as a shared library linked with -ldl on Linux
+or the same OpenCL ICD loader as the hosts on Darwin.
 
 Link the hosts against a CPU OpenCL ICD and select its library paths in the
 environment. Never generate references with Formosa's runtime. Supply the
@@ -23,6 +24,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from generate_inputs import generate
@@ -90,9 +92,12 @@ def main():
             reads.mkdir()
             environment = dict(
                 os.environ,
-                LD_PRELOAD=str(args.readback_library.resolve()),
                 FORMOSA_BENCHMARK_READBACK=str(reads),
             )
+            preload = (
+                "DYLD_INSERT_LIBRARIES" if sys.platform == "darwin" else "LD_PRELOAD"
+            )
+            environment[preload] = str(args.readback_library.resolve())
             subprocess.run(
                 [str(getattr(args, kind).resolve()), *command_args],
                 cwd=work,

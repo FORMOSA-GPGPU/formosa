@@ -3,7 +3,7 @@
 
 lv_register_lua_namespace(cp "${CMAKE_CURRENT_SOURCE_DIR}")
 enable_language(ASM)
-set(CMAKE_ASM_COMPILER ${CLANG})
+apple_cross_cc_shim(CMAKE_ASM_COMPILER "${CLANG}")
 
 set(CP_AVAILABLE_CORES cp.command_processor)
 if("simtix" IN_LIST ENABLE_PROJECTS)

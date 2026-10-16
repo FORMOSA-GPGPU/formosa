@@ -6,8 +6,9 @@
  *cr
  ***************************************************************************/
 
+#include "../alloc.h"
+
 #include <stdio.h>
-#include <malloc.h>
 #include <CL/cl.h>
 #include "ocl.h"
 #include "macros.h"
@@ -110,8 +111,8 @@ void computeQ_GPU (int numK,int numX,
 void createDataStructsCPU(int numK, int numX, float** phiMag,
 	 float** Qr, float** Qi)
 {
-  *phiMag = (float* ) memalign(16, numK * sizeof(float));
-  *Qr = (float*) memalign(16, numX * sizeof (float));
-  *Qi = (float*) memalign(16, numX * sizeof (float));
+  *phiMag = (float* ) mriq_alloc(numK * sizeof(float));
+  *Qr = (float*) mriq_alloc(numX * sizeof (float));
+  *Qi = (float*) mriq_alloc(numX * sizeof (float));
 }
 

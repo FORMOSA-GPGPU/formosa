@@ -24,6 +24,7 @@
  *  -O3 -lm -ffast-math -funroll-all-loops
  */
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <sys/time.h>
 #include <parboil.h>

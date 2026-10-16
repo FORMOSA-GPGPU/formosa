@@ -1,6 +1,7 @@
 
 
 #include "OpenCL_common.h"
+#include <stdlib.h>
 #include <string.h>
 
 // -1 for NO suitable device found, 0 if an appropriate device was found

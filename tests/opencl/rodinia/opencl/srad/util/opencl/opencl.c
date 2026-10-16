@@ -6,6 +6,7 @@ extern "C" {
 //	INCLUDE/DEFINE
 //===============================================================================================================================================================================================================200
 
+#include <stdlib.h>
 #include <stdio.h>					// (in path known to compiler)		needed by printf
 
 #include <CL/cl.h>					// (in path specified to compiler)	needed by OpenCL types

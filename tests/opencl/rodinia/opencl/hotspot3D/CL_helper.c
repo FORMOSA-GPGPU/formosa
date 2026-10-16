@@ -1,3 +1,4 @@
+#include <stdlib.h>
 #include "CL_helper.h"
 #include <sys/time.h>
 

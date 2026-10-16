@@ -148,7 +148,7 @@ SC_MODULE(Agent) {
       Send(libcomm::Msg::Respond(msg).status(libcomm::Status::CmdErr), peer);
       return;
     }
-    if (msg.addr() != 0) wait(sc_time(msg.addr(), SC_NS));
+    if (msg.addr() != 0) wait(sc_time(static_cast<double>(msg.addr()), SC_NS));
     const auto ns = static_cast<uint64_t>(sc_time_stamp() / sc_time(1, SC_NS));
     Send(libcomm::Msg::Respond(msg).addr(ns), peer);
   }
