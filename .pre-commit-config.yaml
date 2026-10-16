@@ -7,7 +7,7 @@
 # Preserve imported benchmark sources and notices without formatting changes.
 exclude: >-
   (?x)^(
-    third-party/(?![^/]+\.cmake$|stb/(?:CMakeLists\.txt|libstb\.c)$).*
+    third-party/(?!riscv-opcodes$|[^/]+\.cmake$|stb/(?:CMakeLists\.txt|libstb\.c)$).*
     | build/
     | tests/cp/coremark/upstream/
     | tests/cp/dhrystone/(?:main\.c$|LICENSE$)
@@ -28,6 +28,14 @@ repos:
 
   - repo: local
     hooks:
+      - id: generate-encoding
+        name: Generate instruction encodings
+        entry: bash scripts/gen-encoding.sh
+        language: system
+        pass_filenames: false
+        # Submodule pointers are directories, not regular files.
+        types: []
+        files: '^(\.pre-commit-config\.yaml|scripts/gen-encoding\.sh|simtix/src/cores/(encoding\.h|xformosa\.txt)|third-party/riscv-opcodes)$'
       - id: generate-presets
         name: Generate Presets
         entry: xmake workflow generate

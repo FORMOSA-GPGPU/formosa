@@ -213,11 +213,13 @@ if ((${#paths[@]} > 0)); then
 fi
 
 collect_file() {
-  local path="$1"
+  local path="${1#./}"
   [[ -f "$path" ]] || return 0
   is_excluded "$path" && return 0
   is_owned "$path" || return 0
   lint_files+=("$path")
+  # Preserve this generated upstream header's notices; still lint its license.
+  [[ "$path" == "simtix/src/cores/encoding.h" ]] && return 0
   is_header_file "$path" || return 0
   has_existing_notice "$path" && return 0
   files+=("$path")
