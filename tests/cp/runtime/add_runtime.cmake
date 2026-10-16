@@ -30,7 +30,7 @@ function(add_cp_runtime ARCH)
   set(SUPPORT "${CMAKE_CURRENT_FUNCTION_LIST_DIR}")
   set(NANOLIBC "${formosa_SOURCE_DIR}/fw/nanolibc/c")
   set(TINYPRINTF "${formosa_SOURCE_DIR}/fw/tinyprintf")
-  add_library(${RUNTIME} OBJECT "${SUPPORT}/start.S" "${SUPPORT}/stdio.c"
+  add_library(${RUNTIME} OBJECT "${SUPPORT}/start.S" "${SUPPORT}/stdio.c" "${SUPPORT}/arithmetic.c"
     "${NANOLIBC}/string.c" "${TINYPRINTF}/tinyprintf.c")
   target_include_directories(${RUNTIME} PUBLIC "${NANOLIBC}/include"
     PRIVATE "${TINYPRINTF}")

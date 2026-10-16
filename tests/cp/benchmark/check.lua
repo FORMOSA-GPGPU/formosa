@@ -11,7 +11,7 @@ function M.checker(system)
     return b[1] + b[2] * 256 + b[3] * 65536 + b[4] * 16777216
   end
   return function(_, elapsed)
-    local phase = word(0x1000)
+    local phase = word(0x8000)
     if phase == previous then return nil end
     assert(
       phase == previous + 1,
@@ -23,7 +23,7 @@ function M.checker(system)
     elseif phase == 2 then
       stopped = elapsed
     elseif phase == 3 then
-      local iterations, errors = word(0x1004), word(0x1008)
+      local iterations, errors = word(0x8004), word(0x8008)
       assert(errors == 0, "benchmark validation failed: " .. errors .. " errors")
       assert(iterations > 0, "benchmark reported zero iterations")
       assert(started and stopped and stopped > started, "missing benchmark timing interval")

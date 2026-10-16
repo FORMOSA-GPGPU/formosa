@@ -8,7 +8,7 @@ local function checker(iterations, errors)
   local system = {}
   function system:read_bytes(addr, size)
     assert(size == 4)
-    local value = assert(({ [0x1000] = phase, [0x1004] = iterations, [0x1008] = errors })[addr])
+    local value = assert(({ [0x8000] = phase, [0x8004] = iterations, [0x8008] = errors })[addr])
     local bytes = {}
     for i = 1, 4 do
       bytes[i] = value % 256

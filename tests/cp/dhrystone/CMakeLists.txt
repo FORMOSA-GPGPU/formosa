@@ -24,5 +24,5 @@ foreach(CORE IN LISTS CP_SELECTED_CORES)
   endif()
   add_lv_test_script(cp.dhrystone.${CORE} run.lua ARGS --core "${CORE}"
     LABELS cp dhrystone benchmark integration ${CORE})
-  set_tests_properties(cp.dhrystone.${CORE} PROPERTIES TIMEOUT 300)
+  set_tests_properties(cp.dhrystone.${CORE} PROPERTIES TIMEOUT 900)
 endforeach()

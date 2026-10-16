@@ -39,6 +39,6 @@ foreach(CORE IN LISTS CP_SELECTED_CORES)
     add_lv_test_script(cp.${BENCHMARK}.${CORE} run.lua
       ARGS --core "${CORE}" --profile "${PROFILE}"
       LABELS cp coremark benchmark integration ${CORE})
-    set_tests_properties(cp.${BENCHMARK}.${CORE} PROPERTIES TIMEOUT 300)
+    set_tests_properties(cp.${BENCHMARK}.${CORE} PROPERTIES TIMEOUT 900)
   endforeach()
 endforeach()

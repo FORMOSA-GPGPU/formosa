@@ -86,8 +86,13 @@ C programs can call `add_cp_runtime(rv64im)` and link `cp-runtime-rv64im` to
 reuse startup, platform layout, standard headers, and console/string support.
 See [the standalone runtime test](runtime/CMakeLists.txt) for a complete example.
 The runtime initializes `gp`, `sp`, and BSS, calls `main`, then halts if it returns.
+It supplies unsigned 64-bit division for printf on RV32.
 It imposes no program completion or benchmark protocol; the program and its Lua
 checker own that contract.
+
+The benchmark mailbox occupies `0x8000..0x800b`, above the stack and below
+text. Low RAM remains available for reset boot code; the benchmark linker
+checks that the mailbox does not overlap the stack or text.
 
 Update `workflows.lua` for CI coverage. Each program owns its result checks;
 core adapters are shared across programs.
