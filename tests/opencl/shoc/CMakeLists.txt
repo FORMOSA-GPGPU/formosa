@@ -112,6 +112,10 @@ function(add_shoc_test NAME)
 endfunction()
 
 add_shoc_test(spmv CONFIG large_sm --passes 1 --iterations 1 --mm_filename "${INPUT_DIR}/matrix.mtx")
+# All ten comparisons exceed the suite's 180-second limit in Debug CI on atomic SM.
+foreach(SM IN LISTS OPENCL_SMS)
+  set_tests_properties(opencl.shoc.spmv.${SM} PROPERTIES TIMEOUT 600)
+endforeach()
 add_shoc_test(stencil2d --customSize 32,32 --lsize 8,8 --num-iters 2 --passes 1 --warmupPasses 0)
 
 add_shoc_test(bfs CONFIG large_sm --passes 1 --graph_file "${INPUT_DIR}/graph.metis" --algo 1)
