@@ -65,6 +65,7 @@ function(add_kernel_sim_test NAME LUA_SCRIPT)
 endfunction()
 
 add_subdirectory(2mm)
+add_subdirectory(barrier)
 add_subdirectory(bfs)
 add_subdirectory(convolution)
 add_subdirectory(fractal-tree)

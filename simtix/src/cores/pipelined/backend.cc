@@ -235,7 +235,15 @@ void Backend::Execute2() {
   }
 
   if (HasFlag(flag, ExecFlag::BARRIER)) {
-    lane_state_.ArriveBarrier(get_local_wid(packet->wid), packet->tmask);
+    uint32_t local_wid = get_local_wid(packet->wid);
+    pending_barrier_wpc_[local_wid] = packet->wpc;
+    if (auto earlier_pc =
+            lane_state_.ArriveBarrier(local_wid, packet->tmask, packet->wpc)) {
+      LV_WARNING(
+          "{}: warp {} has lanes waiting at different barriers "
+          "(pc {:#x} and {:#x})",
+          name(), packet->wid, *earlier_pc, packet->wpc);
+    }
     retire = true;
   }
 
@@ -353,7 +361,7 @@ void Backend::ProcessWarpStates() {
       core_->NotifyEcall(wid, pending_ecall_wpc_[local_wid]);
     } else if (lane_state_.BarrierReady(local_wid)) {
       // Keep arrivals stopped until WGI resumes this warp.
-      core_->NotifyBarrier(wid);
+      core_->NotifyBarrier(wid, pending_barrier_wpc_[local_wid]);
     }
   }
 }
@@ -459,6 +467,15 @@ void Backend::UpdatePC(Packet *packet) {
   core_->NoteFlush(packet->wid, reason, wpc, producer_id);
   core_->Redirect(packet->wid, wpc);
   issue_suppressed_warps_[packet->wid] = 1;
+}
+
+void Backend::ResumeFromBarrier(uint32_t wid) {
+  lane_state_.ClearBarrier(get_local_wid(wid));
+  // Lanes that exited or waited elsewhere may have run last, so the frontend's
+  // next PC can be on no released lane's path.
+  uint64_t next_pc = ArbitratePC(wid);
+  core_->NoteFlush(wid, FlushReason::kMisc, next_pc, 0);
+  core_->Redirect(wid, next_pc);
 }
 
 uint64_t Backend::ArbitratePC(uint32_t wid) {

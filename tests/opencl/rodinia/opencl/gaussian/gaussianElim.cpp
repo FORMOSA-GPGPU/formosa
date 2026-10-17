@@ -114,6 +114,10 @@ int main(int argc, char *argv[]) {
     if(size < 1)
     {
 	fp = fopen(filename, "r");
+	if (fp == NULL) {
+	    perror(filename);
+	    return 1;
+	}
 	fscanf(fp, "%d", &size);
 
 	a = (float *) malloc(size * size * sizeof(float));
@@ -473,7 +477,7 @@ int parseCommandline(int argc, char *argv[], char* filename,
               break;
             case 'f': // matrix file
               i++;
-	      strncpy(filename,argv[i],100);
+	      snprintf(filename,200,"%s",argv[i]);
 	      printf("Read file from %s \n", filename);
               break;
             case 'h': // help

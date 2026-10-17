@@ -169,7 +169,13 @@ void AtomicCore::MainProc() {
     }
 
     if (HasFlag(flag, ExecFlag::BARRIER)) {
-      lane_state_.ArriveBarrier(wid, tmask_);
+      if (auto earlier_pc = lane_state_.ArriveBarrier(wid, tmask_, wpc)) {
+        LV_WARNING(
+            "{}: warp {} has lanes waiting at different barriers "
+            "(pc {:#x} and {:#x})",
+            name(), wid, *earlier_pc, wpc);
+      }
+      barrier_pc_[wid] = wpc;
       stats_.committed_custom_instr[wid]++;
     }
 

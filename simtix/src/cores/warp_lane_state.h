@@ -8,6 +8,7 @@
 
 #include <cassert>
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace simtix {
@@ -25,12 +26,27 @@ class WarpLaneState {
                  sc_dt::sc_bv_base{false, static_cast<int>(num_lanes)}),
         exited_(num_warps,
                 sc_dt::sc_bv_base{false, static_cast<int>(num_lanes)}),
-        states_(num_warps, State::kRunnable) {}
+        states_(num_warps, State::kRunnable),
+        first_barrier_pc_(num_warps, 0),
+        divergence_reported_(num_warps, false) {}
 
-  void ArriveBarrier(uint32_t wid, const sc_dt::sc_bv_base &lanes) {
+  // Records lanes arriving at the barrier at pc. OpenCL requires every
+  // work-item to reach the same barrier, so when earlier lanes of this round
+  // wait at another PC, returns that PC, once per warp until Reset.
+  std::optional<uint64_t> ArriveBarrier(uint32_t wid,
+                                        const sc_dt::sc_bv_base &lanes,
+                                        uint64_t pc) {
     assert(lanes != 0);
+    std::optional<uint64_t> divergent_pc;
+    if (barrier_[wid] == 0) {
+      first_barrier_pc_[wid] = pc;
+    } else if (first_barrier_pc_[wid] != pc && !divergence_reported_[wid]) {
+      divergence_reported_[wid] = true;
+      divergent_pc = first_barrier_pc_[wid];
+    }
     barrier_[wid] |= lanes;
     UpdateState(wid);
+    return divergent_pc;
   }
 
   void Exit(uint32_t wid, const sc_dt::sc_bv_base &lanes) {
@@ -48,6 +64,7 @@ class WarpLaneState {
     barrier_[wid] = 0;
     exited_[wid] = 0;
     states_[wid] = State::kRunnable;
+    divergence_reported_[wid] = false;
   }
 
   bool LaneRunnable(uint32_t wid, uint32_t lane) const {
@@ -86,6 +103,9 @@ class WarpLaneState {
   std::vector<sc_dt::sc_bv_base> exited_;
   // Cache reductions separately so scheduler scans do not load full masks.
   std::vector<State> states_;
+  // PC of the first barrier arrival in the current round.
+  std::vector<uint64_t> first_barrier_pc_;
+  std::vector<bool> divergence_reported_;
 };
 
 }  // namespace simtix

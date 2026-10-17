@@ -4,13 +4,15 @@
 
 #include "wg_initializer.h"
 
-#include <fmt/core.h>
+#include <fmt/format.h>
 #include <ilha/warp_ctrl.h>
 #include <liblv/binding.h>
+#include <liblv/log.h>
 #include <sysc/datatypes/bit/sc_bv_base.h>
 #include <systemc.h>
 
 #include <algorithm>
+#include <iterator>
 #include <memory>
 #include <string>
 #include <vector>
@@ -379,9 +381,29 @@ void WGInitializer::HandleBarrierWarps() {
       }
     }
 
-    if (barrier_count != processing_wg_info_[wg_idx].warp_count ||
-        has_pending_resume) {
+    if (has_pending_resume) {
       continue;
+    }
+
+    ProcessingWGInfo &info = processing_wg_info_[wg_idx];
+    // Exited warps never arrive, so the remaining warps can never resume.
+    // OpenCL requires every work-item of a work-group to reach each barrier.
+    if (info.completed_warps > 0 &&
+        barrier_count + info.completed_warps == info.warp_count) {
+      ReportBarrierDeadlock(wg_idx);
+    }
+
+    if (barrier_count != info.warp_count) {
+      continue;
+    }
+
+    if (!info.barrier_divergence_reported && BarrierPCsDiffer(wg_idx)) {
+      info.barrier_divergence_reported = true;
+      LV_WARNING(
+          "{}: WG slot {} (kernel_pc={:#x}, info_ptr={:#x}) resumes warps "
+          "waiting at different barriers (warp@pc: {})",
+          name(), wg_idx, info.kernel_pc, info.info_ptr,
+          FormatBarrierWarps(wg_idx));
     }
 
     for (int i = 0; i < cwm_.length(); ++i) {
@@ -402,6 +424,46 @@ void WGInitializer::HandleBarrierWarps() {
   for (int wg_idx : wg_scratch_) {
     TraceWGSlotInstant(wg_idx, "Barrier resume");
   }
+}
+
+void WGInitializer::ReportBarrierDeadlock(int wg_idx) {
+  const ProcessingWGInfo &info = processing_wg_info_[wg_idx];
+  LV_FATAL(
+      "{}: barrier deadlock in WG slot {} (kernel_pc={:#x}, info_ptr={:#x}): "
+      "{} of {} warps exited while the rest wait at a barrier "
+      "(warp@pc: {})",
+      name(), wg_idx, info.kernel_pc, info.info_ptr, info.completed_warps,
+      info.warp_count, FormatBarrierWarps(wg_idx));
+}
+
+bool WGInitializer::BarrierPCsDiffer(int wg_idx) {
+  const sc_dt::sc_bv_base &barrier_mask = core_->barrier_mask();
+  const auto &barrier_pc = core_->barrier_pc();
+  int first = -1;
+  for (int i = 0; i < barrier_mask.length(); ++i) {
+    if (!barrier_mask[i].to_bool() || processing_wg_ids_[i] != wg_idx) {
+      continue;
+    }
+    if (first < 0) {
+      first = i;
+    } else if (barrier_pc[i] != barrier_pc[first]) {
+      return true;
+    }
+  }
+  return false;
+}
+
+std::string WGInitializer::FormatBarrierWarps(int wg_idx) {
+  const sc_dt::sc_bv_base &barrier_mask = core_->barrier_mask();
+  const auto &barrier_pc = core_->barrier_pc();
+  std::string warps;
+  for (int i = 0; i < barrier_mask.length(); ++i) {
+    if (barrier_mask[i].to_bool() && processing_wg_ids_[i] == wg_idx) {
+      fmt::format_to(std::back_inserter(warps), "{}{}@{:#x}",
+                     warps.empty() ? "" : ", ", i, barrier_pc[i]);
+    }
+  }
+  return warps;
 }
 
 void WGInitializer::DispatchRemainingWarps() {

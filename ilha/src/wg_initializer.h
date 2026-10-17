@@ -142,6 +142,7 @@ class WGInitializer : public sc_module {
     uint64_t warp_count;
     uint64_t activated_warps;
     uint64_t completed_warps;
+    bool barrier_divergence_reported = false;
   };
   std::vector<ProcessingWGInfo> processing_wg_info_;
   uint32_t processing_wg_count_ = 0;
@@ -185,6 +186,9 @@ class WGInitializer : public sc_module {
 
   void HandleExceptionWarps();
   void HandleBarrierWarps();
+  [[noreturn]] void ReportBarrierDeadlock(int wg_idx);
+  bool BarrierPCsDiffer(int wg_idx);
+  std::string FormatBarrierWarps(int wg_idx);
   void DispatchRemainingWarps();
   void DispatchNewWG();
   void EmitWarpCtrlCommand(const WarpCtrlCommand &cmd);

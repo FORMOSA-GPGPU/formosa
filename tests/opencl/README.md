@@ -97,7 +97,8 @@ The imported sources retain upstream algorithms, with these corrections:
   element to itself. Myocyte writes CAM communication values to the communication
   buffer and passes time as floating point. CFD accepts positional paths safely
   and uses a valid C++ stream-open check; padded cells copy the last real cell's
-  normals instead of reading uninitialized memory.
+  normals instead of reading uninitialized memory. Gaussian NUL-terminates
+  matrix paths up to its 200-byte buffer and reports open failures.
 - Parboil SGEMM: declare `int main` and return success from both matrix readers.
 - Parboil TPACF: synchronize local histogram initialization before atomics.
   MRI-Gridding fixes ambiguous OpenCL integer overloads, initializes padded

@@ -127,8 +127,9 @@ class PipelinedCore : public BaseCore,
     }
   }
 
-  void NotifyBarrier(uint32_t wid) override {
+  void NotifyBarrier(uint32_t wid, uint64_t wpc) override {
     wmask_ = 1 << wid;
+    barrier_pc_[wid] = wpc;
     WarpStateTransition(&barrier_mask_, &active_mask_, wmask_);
   }
 

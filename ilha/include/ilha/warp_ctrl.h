@@ -82,6 +82,10 @@ class WarpCtrl {
   virtual const std::vector<uint64_t> &mcause() = 0;
   virtual const std::vector<uint64_t> &mepc() = 0;
   virtual const std::vector<uint64_t> &mtval() = 0;
+
+  // PC of each warp's most recent barrier arrival. Valid while the warp is in
+  // barrier_mask().
+  virtual const std::vector<uint64_t> &barrier_pc() = 0;
 };
 
 }  // namespace ilha

@@ -36,7 +36,8 @@ class StubWarpCtrl : public sc_module, public WarpCtrl {
         exception_mask_(false, static_cast<int>(warps_per_core)),
         mcause_(warps_per_core, 0),
         mepc_(warps_per_core, 0),
-        mtval_(warps_per_core, 0) {
+        mtval_(warps_per_core, 0),
+        barrier_pc_(warps_per_core, 0) {
     /* Masks are now initialized in the constructor's initializer list */
 
     SC_THREAD(Update);
@@ -178,6 +179,7 @@ class StubWarpCtrl : public sc_module, public WarpCtrl {
   const std::vector<uint64_t> &mcause() override { return mcause_; }
   const std::vector<uint64_t> &mepc() override { return mepc_; }
   const std::vector<uint64_t> &mtval() override { return mtval_; }
+  const std::vector<uint64_t> &barrier_pc() override { return barrier_pc_; }
 
   void set_clock(sc_clock *clock) {
     clock_ = clock;
@@ -297,6 +299,7 @@ class StubWarpCtrl : public sc_module, public WarpCtrl {
   std::vector<uint64_t> mcause_;
   std::vector<uint64_t> mepc_;
   std::vector<uint64_t> mtval_;
+  std::vector<uint64_t> barrier_pc_;
 };
 
 namespace {

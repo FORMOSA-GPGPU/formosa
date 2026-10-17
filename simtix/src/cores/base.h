@@ -40,7 +40,8 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
         mcause_(num_warps_),
         mtval_(num_warps_),
         mscratch_(num_warps_),
-        minstret_(num_warps_) {
+        minstret_(num_warps_),
+        barrier_pc_(num_warps_) {
     SC_METHOD(McycleIncrement);
     sensitive << clock.pos();
     SC_THREAD(WarpCtrlCommandThread);
@@ -78,6 +79,8 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
   const std::vector<uint64_t> &mepc() override { return mepc_; }
 
   const std::vector<uint64_t> &mtval() override { return mtval_; }
+
+  const std::vector<uint64_t> &barrier_pc() override { return barrier_pc_; }
 
   uint64_t mcycle() const { return mcycle_.read(); }
 
@@ -286,6 +289,9 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
   std::vector<uint64_t> mtval_;
   std::vector<uint64_t> mscratch_;
   std::vector<uint64_t> minstret_;
+
+  // Per-warp PC of the latest barrier arrival, reported through WarpCtrl
+  std::vector<uint64_t> barrier_pc_;
 
   // Per-core CSRs
   sc_signal<uint64_t> mcycle_;

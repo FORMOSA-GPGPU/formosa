@@ -34,7 +34,7 @@ class ToBackendIntf : public ToArbitratorIntf {
  public:
   virtual ~ToBackendIntf() = default;
   virtual const WarpMask &active_warps() const = 0;
-  virtual void NotifyBarrier(uint32_t wid) = 0;
+  virtual void NotifyBarrier(uint32_t wid, uint64_t wpc) = 0;
   virtual void NotifyEcall(uint32_t wid, uint64_t wpc) = 0;
   virtual void NotifyException(uint32_t wid, uint64_t wpc, uint64_t cause,
                                uint64_t tval) = 0;
@@ -83,6 +83,7 @@ class Backend : public sc_module {
         inflight_counter_(num_local_warps_),
         lane_state_(num_local_warps_, p.num_lanes),
         pending_ecall_wpc_(num_local_warps_),
+        pending_barrier_wpc_(num_local_warps_),
         pending_exceptions_(num_local_warps_),
         alu_delay_q_("alu_delay_q_", pp.alu_latency, pp.alu_ticks_per_output),
         mdu_delay_q_("mdu_delay_q_", pp.mdu_latency, pp.mdu_ticks_per_output),
@@ -159,9 +160,9 @@ class Backend : public sc_module {
 
   void ResetLaneState(uint32_t wid) { lane_state_.Reset(get_local_wid(wid)); }
 
-  void ClearBarrier(uint32_t wid) {
-    lane_state_.ClearBarrier(get_local_wid(wid));
-  }
+  // Releases the warp's lanes waiting at the barrier and redirects fetch to the
+  // PC arbitrated among its runnable lanes.
+  void ResumeFromBarrier(uint32_t wid);
 
   bool LaneRunnable(uint32_t wid, uint32_t lane) const {
     return lane_state_.LaneRunnable(get_local_wid(wid), lane);
@@ -256,6 +257,7 @@ class Backend : public sc_module {
   std::vector<uint32_t> inflight_counter_;
   WarpLaneState lane_state_;
   std::vector<uint64_t> pending_ecall_wpc_;
+  std::vector<uint64_t> pending_barrier_wpc_;
 
   // Deferred non-ECALL trap state for each warp.
   std::vector<PendingException> pending_exceptions_;
