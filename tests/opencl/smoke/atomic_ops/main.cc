@@ -22,6 +22,7 @@ namespace {
 constexpr size_t kElements = 256;
 constexpr size_t kLocalSize = 64;
 constexpr size_t kLocalElements = kLocalSize;
+constexpr size_t kC11Groups = 2;
 
 constexpr const char *kRed = "\033[0;31m";
 constexpr const char *kGreen = "\033[0;32m";
@@ -38,13 +39,15 @@ enum class Operation : size_t {
   Xchg,
   Min,
   Max,
+  Cmpxchg,
   Count,
 };
 
 constexpr size_t kOperationCount = static_cast<size_t>(Operation::Count);
 
 constexpr std::array<const char *, kOperationCount> kOperationNames = {
-    "add", "sub", "inc", "dec", "and", "or", "xor", "xchg", "min", "max",
+    "add", "sub",  "inc", "dec", "and",     "or",
+    "xor", "xchg", "min", "max", "cmpxchg",
 };
 
 template <typename T>
@@ -62,6 +65,11 @@ constexpr size_t FlatIndex(Operation op, size_t element_count, size_t gid) {
 
 template <typename T>
 T MakeInitialValue(Operation op, size_t gid) {
+  if (op == Operation::Cmpxchg) {
+    using U = std::make_unsigned_t<T>;
+    return static_cast<T>((U{1} << (sizeof(T) * 8 - 1)) |
+                          static_cast<U>(gid + 64));
+  }
   if constexpr (std::is_signed_v<T>) {
     switch (op) {
       case Operation::Add:
@@ -84,6 +92,7 @@ T MakeInitialValue(Operation op, size_t gid) {
         return static_cast<T>(static_cast<long long>(gid) - 80);
       case Operation::Max:
         return static_cast<T>(static_cast<long long>(gid) - 40);
+      case Operation::Cmpxchg:
       case Operation::Count:
         break;
     }
@@ -109,6 +118,7 @@ T MakeInitialValue(Operation op, size_t gid) {
         return static_cast<T>(gid + 900);
       case Operation::Max:
         return static_cast<T>(gid + 1100);
+      case Operation::Cmpxchg:
       case Operation::Count:
         break;
     }
@@ -133,6 +143,7 @@ T MakeOperandValue(Operation op, size_t gid, T initial) {
       return static_cast<T>((gid * 7) | 0x080u);
     case Operation::Xor:
       return static_cast<T>((gid * 11) ^ 0x055u);
+    case Operation::Cmpxchg:
     case Operation::Xchg:
       if constexpr (std::is_signed_v<T>) {
         return static_cast<T>(500 - static_cast<long long>(gid));
@@ -159,7 +170,7 @@ T MakeOperandValue(Operation op, size_t gid, T initial) {
 }
 
 template <typename T>
-T ApplyExpected(Operation op, T initial, T operand) {
+T ApplyExpected(Operation op, T initial, T operand, size_t gid) {
   switch (op) {
     case Operation::Add:
       return static_cast<T>(initial + operand);
@@ -177,6 +188,8 @@ T ApplyExpected(Operation op, T initial, T operand) {
       return static_cast<T>(initial ^ operand);
     case Operation::Xchg:
       return operand;
+    case Operation::Cmpxchg:
+      return (gid & 1) ? initial : operand;
     case Operation::Min:
       if constexpr (std::is_signed_v<T>) {
         return std::min(initial, operand);
@@ -282,7 +295,7 @@ bool CompareIndependentResults(const char *label, size_t element_count,
     for (size_t gid = 0; gid < element_count; ++gid) {
       size_t idx = FlatIndex(op, element_count, gid);
       T expected_old = initials[idx];
-      T expected_final = ApplyExpected(op, initials[idx], operands[idx]);
+      T expected_final = ApplyExpected(op, initials[idx], operands[idx], gid);
 
       if (old_values[idx] != expected_old ||
           final_values[idx] != expected_final) {
@@ -498,6 +511,97 @@ bool RunContendedLocalAddTest(cl::Context &context, cl::CommandQueue &queue,
   return CheckPermutation(label, old_values, 0, kLocalElements) && ok;
 }
 
+bool RunC11Test(cl::Context &context, cl::CommandQueue &queue,
+                const cl::Device &device, const char *options,
+                const char *il_path = nullptr) {
+  std::ifstream stream(il_path ? il_path : C11_KERNEL_PATH, std::ios::binary);
+  if (!stream) return false;
+  std::string source{std::istreambuf_iterator<char>(stream),
+                     std::istreambuf_iterator<char>()};
+  cl::Program program;
+  if (il_path) {
+    auto create = reinterpret_cast<clCreateProgramWithILKHR_fn>(
+        clGetExtensionFunctionAddressForPlatform(
+            device.getInfo<CL_DEVICE_PLATFORM>()(),
+            "clCreateProgramWithILKHR"));
+    if (!create) return false;
+    cl_int error = CL_SUCCESS;
+    cl_program raw = create(context(), source.data(), source.size(), &error);
+    if (error != CL_SUCCESS || raw == nullptr) return false;
+    program = cl::Program(raw);
+  } else {
+    program = cl::Program(context, source);
+  }
+  try {
+    program.build(options);
+  } catch (const cl::BuildError &) {
+    std::cerr << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(device)
+              << std::endl;
+    return false;
+  }
+  std::array<cl_ulong, 8> storage{};
+  std::array<cl_uint, 3 * kC11Groups> result{};
+  std::vector<cl_uint> old_values(2 * kLocalSize * kC11Groups);
+  cl::Buffer storage_buf(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                         sizeof(storage), storage.data());
+  cl::Buffer result_buf(context, CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR,
+                        sizeof(result), result.data());
+  cl::Buffer old_values_buf(context, CL_MEM_READ_WRITE,
+                            sizeof(cl_uint) * old_values.size());
+  bool passed = true;
+  for (const char *name :
+       {"c11_i32", "c11_u32", "c11_i64", "c11_u64", "c11_f32", "c11_f64"}) {
+    result.fill(0xdeadbeef);
+    queue.enqueueWriteBuffer(result_buf, CL_TRUE, 0, sizeof(result),
+                             result.data());
+    std::fill(old_values.begin(), old_values.end(), 0xdeadbeef);
+    queue.enqueueWriteBuffer(old_values_buf, CL_TRUE, 0,
+                             sizeof(cl_uint) * old_values.size(),
+                             old_values.data());
+    cl::Kernel kernel(program, name);
+    kernel.setArg(0, storage_buf);
+    kernel.setArg(1, result_buf);
+    kernel.setArg(2, old_values_buf);
+    queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+                               cl::NDRange(kLocalSize * kC11Groups),
+                               cl::NDRange(kLocalSize));
+    queue.enqueueReadBuffer(result_buf, CL_FALSE, 0, sizeof(result),
+                            result.data());
+    queue.enqueueReadBuffer(old_values_buf, CL_FALSE, 0,
+                            sizeof(cl_uint) * old_values.size(),
+                            old_values.data());
+    queue.finish();
+    for (size_t group = 0; group < kC11Groups; ++group) {
+      const size_t offset = 3 * group;
+      bool ok = result[offset] == 0 && result[offset + 1] == kLocalSize &&
+                result[offset + 2] == kLocalSize;
+      const size_t old_offset = 2 * kLocalSize * group;
+      ok &= CheckPermutation("C11 global CAS", old_values, old_offset,
+                             kLocalSize);
+      ok &= CheckPermutation("C11 local CAS", old_values,
+                             old_offset + kLocalSize, kLocalSize);
+      std::cout << name << " " << options << " group=" << group
+                << ": errors=" << result[offset]
+                << " global=" << result[offset + 1]
+                << " local=" << result[offset + 2] << std::endl;
+      passed &= ok;
+    }
+  }
+  result.fill(0xdeadbeef);
+  queue.enqueueWriteBuffer(result_buf, CL_TRUE, 0, sizeof(result),
+                           result.data());
+  cl::Kernel flag(program, "c11_flag");
+  flag.setArg(0, storage_buf);
+  flag.setArg(1, result_buf);
+  queue.enqueueNDRangeKernel(flag, cl::NullRange, cl::NDRange(1),
+                             cl::NDRange(1));
+  queue.enqueueReadBuffer(result_buf, CL_TRUE, 0, sizeof(cl_uint),
+                          result.data());
+  std::cout << "c11_flag " << options << ": errors=" << result[0] << std::endl;
+  passed &= result[0] == 0;
+  return passed;
+}
+
 }  // namespace
 
 int main(int argc, char **argv) {
@@ -519,6 +623,10 @@ int main(int argc, char **argv) {
   cl::Device device = devices[0];
   cl::Context context({device});
   cl::CommandQueue queue(context, device);
+
+  if (argc == 2) {
+    return RunC11Test(context, queue, device, "", argv[1]) ? 0 : 1;
+  }
 
   std::ifstream kernel_stream(KERNEL_PATH);
   if (!kernel_stream) {
@@ -564,6 +672,8 @@ int main(int argc, char **argv) {
                                           "local_u32_add_contended");
   ok &= RunContendedLocalAddTest<cl_ulong>(context, queue, program,
                                            "local_u64_add_contended");
+
+  ok &= RunC11Test(context, queue, device, "-cl-std=CL3.0");
 
   if (!ok) {
     std::cerr << kRed << "Atomic ops test failed" << kReset << std::endl;

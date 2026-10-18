@@ -50,8 +50,14 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
             }()),
         replay_hazard_refill_bench_(
             "replay_hazard_refill_bench",
-            MakeParam(WriteMissPolicy::kWriteAllocate,
-                      WriteHitPolicy::kWriteThrough, 1, 2, 2, 1, 2)),
+            [] {
+              auto param =
+                  MakeParam(WriteMissPolicy::kWriteAllocate,
+                            WriteHitPolicy::kWriteThrough, 1, 4, 2, 1, 2);
+              param.non_cacheable_regions.push_back(
+                  {.addr = 0x100, .size = 16});
+              return param;
+            }()),
         replay_visibility_bench_(
             "replay_visibility_bench",
             MakeParam(WriteMissPolicy::kWriteAllocate,
@@ -562,6 +568,8 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
     CacheModuleTester view(replay_hazard_refill_bench_.cache_);
     const auto block_a = Sequence(16, 0x10);
     const auto block_b = Sequence(16, 0x60);
+    const auto block_c = Sequence(16, 0x70);
+    const auto block_d = Sequence(16, 0x80);
     const auto patch = Sequence(4, 0xA0);
 
     auto *write_a = replay_hazard_refill_bench_.core_.SendWrite(0x04, patch);
@@ -580,14 +588,23 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
     ExpectReadRequest(replay_hazard_refill_bench_, 1, 0x40, 16,
                       "younger same-set miss is block aligned");
 
+    auto *bypass = replay_hazard_refill_bench_.core_.SendAtomic(
+        0x100, U32Bytes(1), simtix::AtomicExtension::Op::kAdd);
+    Expect(replay_hazard_refill_bench_.WaitForMemoryRequests(3, 32),
+           "non-cacheable atomic reaches memory before the replay write");
+    auto *read_c = replay_hazard_refill_bench_.core_.SendRead(0x80, 4);
+    auto *read_d = replay_hazard_refill_bench_.core_.SendRead(0xc0, 4);
+    Expect(replay_hazard_refill_bench_.WaitForMemoryRequests(5, 32),
+           "more same-set misses reach memory than pipeline response slots");
+
     replay_hazard_refill_bench_.memory_.RespondAt(0, block_a);
     Expect(replay_hazard_refill_bench_.WaitForCoreResponses(1, 32),
            "first write replay responds to the core");
     Expect(replay_hazard_refill_bench_.core_.HasResponse(write_a),
            "first write replay response is observed");
-    Expect(replay_hazard_refill_bench_.WaitForMemoryRequests(3, 32),
+    Expect(replay_hazard_refill_bench_.WaitForMemoryRequests(6, 32),
            "write-through replay emits a writeback request");
-    ExpectWriteRequest(replay_hazard_refill_bench_, 2, 0x00,
+    ExpectWriteRequest(replay_hazard_refill_bench_, 5, 0x00,
                        LineWriteData(16, 4, patch),
                        "write-through replay emits the patched line write",
                        LineWriteMask(16, 4, patch.size()));
@@ -607,10 +624,14 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
            "younger same-set refill waits while same-line replay is blocked "
            "by the write-through response");
 
-    replay_hazard_refill_bench_.memory_.RespondAt(2);
-    Expect(replay_hazard_refill_bench_.WaitForCoreResponses(3, 64),
-           "blocked replay and younger refill both complete after write "
-           "response");
+    // A bypass response and more refills arrive before the write ack. They
+    // must not block the ack needed to release the older same-line replay.
+    replay_hazard_refill_bench_.memory_.RespondAt(2, U32Bytes(7));
+    replay_hazard_refill_bench_.memory_.RespondAt(3, block_c);
+    replay_hazard_refill_bench_.memory_.RespondAt(4, block_d);
+    replay_hazard_refill_bench_.memory_.RespondAt(5);
+    Expect(replay_hazard_refill_bench_.WaitForCoreResponses(6, 128),
+           "refills and bypass response cannot hide the replay's write ack");
     Expect(replay_hazard_refill_bench_.core_.HasResponse(read_a),
            "blocked same-line replay response is observed");
     Expect(PayloadData(read_a) == patch,
@@ -619,6 +640,16 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
            "younger same-set refill response is observed");
     Expect(PayloadData(read_b) == Slice(block_b, 0, 4),
            "younger same-set refill returns its block data");
+    Expect(replay_hazard_refill_bench_.core_.HasResponse(bypass),
+           "bypass response completes despite the blocked refill");
+    Expect(PayloadData(bypass) == U32Bytes(7),
+           "bypass response preserves the returned atomic value");
+    Expect(replay_hazard_refill_bench_.core_.HasResponse(read_c) &&
+               replay_hazard_refill_bench_.core_.HasResponse(read_d),
+           "all younger same-set refills complete");
+    Expect(PayloadData(read_c) == Slice(block_c, 0, 4) &&
+               PayloadData(read_d) == Slice(block_d, 0, 4),
+           "all younger refills preserve their response data");
   }
 
   void TestRefillWaitsForReplayVisibility() {

@@ -5,7 +5,7 @@
 #pragma OPENCL EXTENSION cl_khr_int64_base_atomics : enable
 #pragma OPENCL EXTENSION cl_khr_int64_extended_atomics : enable
 
-#define OP_COUNT 10
+#define OP_COUNT 11
 #define OP_ADD 0
 #define OP_SUB 1
 #define OP_INC 2
@@ -16,11 +16,12 @@
 #define OP_XCHG 7
 #define OP_MIN 8
 #define OP_MAX 9
+#define OP_CMPXCHG 10
 #define LOCAL_OP_STRIDE 64
 
 #define DEFINE_GLOBAL_OPS_KERNEL(NAME, TYPE, FN_ADD, FN_SUB, FN_INC, FN_DEC,   \
                                  FN_AND, FN_OR, FN_XOR, FN_XCHG, FN_MIN,       \
-                                 FN_MAX)                                        \
+                                 FN_MAX, FN_CMPXCHG)                                        \
   __kernel void NAME(volatile __global TYPE *values,                            \
                      __global const TYPE *operands,                             \
                      __global TYPE *old_values)                                 \
@@ -47,6 +48,9 @@
     old_values[idx] = FN_MIN(&values[idx], operands[idx]);                      \
     idx = OP_MAX * stride + gid;                                                \
     old_values[idx] = FN_MAX(&values[idx], operands[idx]);                      \
+    idx = OP_CMPXCHG * stride + gid;                                           \
+    TYPE expected = values[idx] ^ (TYPE)(gid & 1);                             \
+    old_values[idx] = FN_CMPXCHG(&values[idx], expected, operands[idx]);                      \
   }
 
 #define DEFINE_CONTENDED_GLOBAL_ADD_KERNEL(NAME, TYPE, FN_ADD)                  \
@@ -58,7 +62,7 @@
 
 #define DEFINE_LOCAL_OPS_KERNEL(NAME, TYPE, FN_ADD, FN_SUB, FN_INC, FN_DEC,    \
                                 FN_AND, FN_OR, FN_XOR, FN_XCHG, FN_MIN,        \
-                                FN_MAX)                                         \
+                                FN_MAX, FN_CMPXCHG)                                         \
   __kernel void NAME(__global const TYPE *initials,                             \
                      __global const TYPE *operands,                             \
                      __global TYPE *final_values,                               \
@@ -87,6 +91,8 @@
     values[idx] = initials[idx];                                                \
     idx = OP_MAX * stride + lid;                                                \
     values[idx] = initials[idx];                                                \
+    idx = OP_CMPXCHG * stride + lid;                                            \
+    values[idx] = initials[idx];                                                \
     barrier(CLK_LOCAL_MEM_FENCE);                                               \
     idx = OP_ADD * stride + lid;                                                \
     old_values[idx] = FN_ADD(&values[idx], operands[idx]);                      \
@@ -108,6 +114,9 @@
     old_values[idx] = FN_MIN(&values[idx], operands[idx]);                      \
     idx = OP_MAX * stride + lid;                                                \
     old_values[idx] = FN_MAX(&values[idx], operands[idx]);                      \
+    idx = OP_CMPXCHG * stride + lid;                                           \
+    TYPE expected = values[idx] ^ (TYPE)(lid & 1);                             \
+    old_values[idx] = FN_CMPXCHG(&values[idx], expected, operands[idx]);                      \
     barrier(CLK_LOCAL_MEM_FENCE);                                               \
     idx = OP_ADD * stride + lid;                                                \
     final_values[idx] = values[idx];                                            \
@@ -129,6 +138,8 @@
     final_values[idx] = values[idx];                                            \
     idx = OP_MAX * stride + lid;                                                \
     final_values[idx] = values[idx];                                            \
+    idx = OP_CMPXCHG * stride + lid;                                            \
+    final_values[idx] = values[idx];                                            \
   }
 
 #define DEFINE_CONTENDED_LOCAL_ADD_KERNEL(NAME, TYPE, FN_ADD)                   \
@@ -149,16 +160,16 @@
 
 DEFINE_GLOBAL_OPS_KERNEL(atomic_ops_global_i32, int, atomic_add, atomic_sub,
                          atomic_inc, atomic_dec, atomic_and, atomic_or,
-                         atomic_xor, atomic_xchg, atomic_min, atomic_max)
+                         atomic_xor, atomic_xchg, atomic_min, atomic_max, atomic_cmpxchg)
 DEFINE_GLOBAL_OPS_KERNEL(atomic_ops_global_u32, uint, atomic_add, atomic_sub,
                          atomic_inc, atomic_dec, atomic_and, atomic_or,
-                         atomic_xor, atomic_xchg, atomic_min, atomic_max)
+                         atomic_xor, atomic_xchg, atomic_min, atomic_max, atomic_cmpxchg)
 DEFINE_GLOBAL_OPS_KERNEL(atomic_ops_global_i64, long, atom_add, atom_sub,
                          atom_inc, atom_dec, atom_and, atom_or, atom_xor,
-                         atom_xchg, atom_min, atom_max)
+                         atom_xchg, atom_min, atom_max, atom_cmpxchg)
 DEFINE_GLOBAL_OPS_KERNEL(atomic_ops_global_u64, ulong, atom_add, atom_sub,
                          atom_inc, atom_dec, atom_and, atom_or, atom_xor,
-                         atom_xchg, atom_min, atom_max)
+                         atom_xchg, atom_min, atom_max, atom_cmpxchg)
 
 DEFINE_CONTENDED_GLOBAL_ADD_KERNEL(atomic_contended_global_u32, uint,
                                    atomic_add)
@@ -166,16 +177,16 @@ DEFINE_CONTENDED_GLOBAL_ADD_KERNEL(atomic_contended_global_u64, ulong,
                                    atom_add)
 DEFINE_LOCAL_OPS_KERNEL(atomic_ops_local_i32, int, atomic_add, atomic_sub,
                         atomic_inc, atomic_dec, atomic_and, atomic_or,
-                        atomic_xor, atomic_xchg, atomic_min, atomic_max)
+                        atomic_xor, atomic_xchg, atomic_min, atomic_max, atomic_cmpxchg)
 DEFINE_LOCAL_OPS_KERNEL(atomic_ops_local_u32, uint, atomic_add, atomic_sub,
                         atomic_inc, atomic_dec, atomic_and, atomic_or,
-                        atomic_xor, atomic_xchg, atomic_min, atomic_max)
+                        atomic_xor, atomic_xchg, atomic_min, atomic_max, atomic_cmpxchg)
 DEFINE_LOCAL_OPS_KERNEL(atomic_ops_local_i64, long, atom_add, atom_sub,
                         atom_inc, atom_dec, atom_and, atom_or, atom_xor,
-                        atom_xchg, atom_min, atom_max)
+                        atom_xchg, atom_min, atom_max, atom_cmpxchg)
 DEFINE_LOCAL_OPS_KERNEL(atomic_ops_local_u64, ulong, atom_add, atom_sub,
                         atom_inc, atom_dec, atom_and, atom_or, atom_xor,
-                        atom_xchg, atom_min, atom_max)
+                        atom_xchg, atom_min, atom_max, atom_cmpxchg)
 DEFINE_CONTENDED_LOCAL_ADD_KERNEL(atomic_contended_local_u32, uint, atomic_add)
 DEFINE_CONTENDED_LOCAL_ADD_KERNEL(atomic_contended_local_u64, ulong, atom_add)
 

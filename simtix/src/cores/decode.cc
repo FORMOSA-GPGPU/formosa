@@ -16,6 +16,8 @@ Instr Decode(uint32_t iword) {
       return Decoder<InstrLoad>::Decode(iword);
     case kAmo:
       return Decoder<InstrAmo>::Decode(iword);
+    case kMiscMem:
+      return Decoder<InstrFence>::Decode(iword);
     case kStore:
       return Decoder<InstrStore>::Decode(iword);
     case kBranch:

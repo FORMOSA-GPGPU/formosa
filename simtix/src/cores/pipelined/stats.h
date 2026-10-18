@@ -137,6 +137,7 @@ struct Stats : public BaseCore::Stats {
   Array store_instr_time;
   Array amo_instr_time;
   Array system_instr_time;
+  Array fence_instr_time;
   Array fp_instr_time;
   Array custom_instr_time;
 
@@ -147,6 +148,7 @@ struct Stats : public BaseCore::Stats {
   Formula<Real> avg_store_instr_time;
   Formula<Real> avg_amo_instr_time;
   Formula<Real> avg_system_instr_time;
+  Formula<Real> avg_fence_instr_time;
   Formula<Real> avg_fp_instr_time;
   Formula<Real> avg_custom_instr_time;
 
@@ -295,6 +297,10 @@ struct Stats : public BaseCore::Stats {
         LV_STAT(system_instr_time,
                 "Accumulated execution time of system instructions per warp",
                 param.num_warps),
+        LV_STAT(fence_instr_time,
+                "Accumulated execution time of FENCE instructions per warp "
+                "(subset of system instruction time)",
+                param.num_warps),
         LV_STAT(fp_instr_time,
                 "Accumulated execution time of floating-point instructions per "
                 "warp",
@@ -335,6 +341,8 @@ struct Stats : public BaseCore::Stats {
                 "Average execution time of AMO instructions (ns)"),
         LV_STAT(avg_system_instr_time,
                 "Average execution time of system instructions (ns)"),
+        LV_STAT(avg_fence_instr_time,
+                "Average execution time of FENCE instructions (ns)"),
         LV_STAT(avg_fp_instr_time,
                 "Average execution time of floating-point instructions (ns)"),
         LV_STAT(avg_custom_instr_time,
@@ -397,6 +405,8 @@ struct Stats : public BaseCore::Stats {
         (amo_instr_time.sum() / committed_amo_instr.sum()) * tick_to_ns;
     avg_system_instr_time =
         (system_instr_time.sum() / committed_system_instr.sum()) * tick_to_ns;
+    avg_fence_instr_time =
+        (fence_instr_time.sum() / committed_fence_instr.sum()) * tick_to_ns;
     avg_fp_instr_time =
         (fp_instr_time.sum() / committed_fp_instr.sum()) * tick_to_ns;
     avg_custom_instr_time =

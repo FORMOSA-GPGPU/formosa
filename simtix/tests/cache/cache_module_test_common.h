@@ -440,8 +440,10 @@ class CoreEndpoint : public sc_core::sc_module {
 
   tlm::tlm_generic_payload *SendAtomic(uint64_t address,
                                        std::vector<uint8_t> operand,
-                                       simtix::AtomicExtension::Op op) {
-    return Send(address, tlm::TLM_READ_COMMAND, std::move(operand), op);
+                                       simtix::AtomicExtension::Op op,
+                                       uint64_t compare_value = 0) {
+    return Send(address, tlm::TLM_READ_COMMAND, std::move(operand), op,
+                compare_value);
   }
 
   size_t response_count() const { return responses_.size(); }
@@ -462,7 +464,8 @@ class CoreEndpoint : public sc_core::sc_module {
  private:
   tlm::tlm_generic_payload *Send(
       uint64_t address, tlm::tlm_command command, std::vector<uint8_t> data,
-      std::optional<simtix::AtomicExtension::Op> atomic_op = std::nullopt) {
+      std::optional<simtix::AtomicExtension::Op> atomic_op = std::nullopt,
+      uint64_t compare_value = 0) {
     auto payload = std::make_unique<tlm::tlm_generic_payload>();
     auto owned_data = std::make_unique<std::vector<uint8_t>>(std::move(data));
     payload->set_address(address);
@@ -475,6 +478,7 @@ class CoreEndpoint : public sc_core::sc_module {
     if (atomic_op.has_value()) {
       auto ext = std::make_unique<simtix::AtomicExtension>();
       ext->op = *atomic_op;
+      ext->compare_value = compare_value;
       payload->set_extension(ext.get());
       atomic_exts_.push_back(std::move(ext));
     }

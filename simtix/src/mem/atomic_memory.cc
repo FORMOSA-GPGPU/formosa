@@ -36,7 +36,7 @@ void StoreU64(uint8_t *data, uint64_t value) {
 }
 
 uint32_t ApplyAtomicOp32(simtix::AtomicExtension::Op op, uint32_t old_value,
-                         uint32_t operand) {
+                         uint32_t operand, uint64_t compare_value) {
   switch (op) {
     case simtix::AtomicExtension::Op::kSwap:
       return operand;
@@ -58,12 +58,15 @@ uint32_t ApplyAtomicOp32(simtix::AtomicExtension::Op op, uint32_t old_value,
       return std::min(old_value, operand);
     case simtix::AtomicExtension::Op::kMaxU:
       return std::max(old_value, operand);
+    case simtix::AtomicExtension::Op::kCompareSwap:
+      return old_value == static_cast<uint32_t>(compare_value) ? operand
+                                                               : old_value;
   }
   return old_value;
 }
 
 uint64_t ApplyAtomicOp64(simtix::AtomicExtension::Op op, uint64_t old_value,
-                         uint64_t operand) {
+                         uint64_t operand, uint64_t compare_value) {
   switch (op) {
     case simtix::AtomicExtension::Op::kSwap:
       return operand;
@@ -85,6 +88,8 @@ uint64_t ApplyAtomicOp64(simtix::AtomicExtension::Op op, uint64_t old_value,
       return std::min(old_value, operand);
     case simtix::AtomicExtension::Op::kMaxU:
       return std::max(old_value, operand);
+    case simtix::AtomicExtension::Op::kCompareSwap:
+      return old_value == compare_value ? operand : old_value;
   }
   return old_value;
 }
@@ -151,13 +156,15 @@ bool AtomicMemory::HandleAtomicRequest(tlm::tlm_generic_payload *trans,
   if (len == sizeof(uint32_t)) {
     const uint32_t old_value = LoadU32(&mem_[addr]);
     const uint32_t operand = LoadU32(ptr);
-    const uint32_t new_value = ApplyAtomicOp32(ext->op, old_value, operand);
+    const uint32_t new_value =
+        ApplyAtomicOp32(ext->op, old_value, operand, ext->compare_value);
     StoreU32(&mem_[addr], new_value);
     StoreU32(ptr, old_value);
   } else {
     const uint64_t old_value = LoadU64(&mem_[addr]);
     const uint64_t operand = LoadU64(ptr);
-    const uint64_t new_value = ApplyAtomicOp64(ext->op, old_value, operand);
+    const uint64_t new_value =
+        ApplyAtomicOp64(ext->op, old_value, operand, ext->compare_value);
     StoreU64(&mem_[addr], new_value);
     StoreU64(ptr, old_value);
   }

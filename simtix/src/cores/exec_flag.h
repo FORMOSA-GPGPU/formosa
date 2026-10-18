@@ -41,6 +41,7 @@ enum class ExecFlag : uint32_t {
   INSTR_ADDR_MISALIGNED = 1 << 11,
   LOAD_ADDR_MISALIGNED = 1 << 12,
   STORE_ADDR_MISALIGNED = 1 << 13,
+  FENCE = 1 << 14,
   _EXCEPTION_MASK = 0b11111 << 9,
 
   // =========================================================
@@ -80,6 +81,7 @@ enum class ExecFlag : uint32_t {
   AMO_MAX = 7 << 23,
   AMO_MINU = 8 << 23,
   AMO_MAXU = 9 << 23,
+  AMO_CAS = 10 << 23,
   _AMO_MASK = 0xf << 23,
 
   // --- [Extension] M extension (Bit 27) ---
@@ -161,6 +163,8 @@ inline AtomicExtension::Op DecodeAtomicOp(ExecFlag flag) {
       return AtomicExtension::Op::kMinU;
     case ExecFlag::AMO_MAXU:
       return AtomicExtension::Op::kMaxU;
+    case ExecFlag::AMO_CAS:
+      return AtomicExtension::Op::kCompareSwap;
     default:
       return AtomicExtension::Op::kAdd;
   }

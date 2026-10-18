@@ -108,7 +108,7 @@ bool WatchdogFilterMatches(const char *module_name) {
  * @return New value to write back to the cache line.
  */
 uint32_t ApplyAtomicOp32(simtix::AtomicExtension::Op op, uint32_t old_value,
-                         uint32_t operand) {
+                         uint32_t operand, uint64_t compare_value) {
   switch (op) {
     case simtix::AtomicExtension::Op::kSwap:
       return operand;
@@ -130,6 +130,9 @@ uint32_t ApplyAtomicOp32(simtix::AtomicExtension::Op op, uint32_t old_value,
       return std::min(old_value, operand);
     case simtix::AtomicExtension::Op::kMaxU:
       return std::max(old_value, operand);
+    case simtix::AtomicExtension::Op::kCompareSwap:
+      return old_value == static_cast<uint32_t>(compare_value) ? operand
+                                                               : old_value;
   }
   return old_value;
 }
@@ -143,7 +146,7 @@ uint32_t ApplyAtomicOp32(simtix::AtomicExtension::Op op, uint32_t old_value,
  * @return New value to write back to the cache line.
  */
 uint64_t ApplyAtomicOp64(simtix::AtomicExtension::Op op, uint64_t old_value,
-                         uint64_t operand) {
+                         uint64_t operand, uint64_t compare_value) {
   switch (op) {
     case simtix::AtomicExtension::Op::kSwap:
       return operand;
@@ -165,6 +168,8 @@ uint64_t ApplyAtomicOp64(simtix::AtomicExtension::Op op, uint64_t old_value,
       return std::min(old_value, operand);
     case simtix::AtomicExtension::Op::kMaxU:
       return std::max(old_value, operand);
+    case simtix::AtomicExtension::Op::kCompareSwap:
+      return old_value == compare_value ? operand : old_value;
   }
   return old_value;
 }
@@ -598,7 +603,8 @@ bool Cache::ShouldDeferMshrMemRequestForWriteBuffer() const {
  */
 bool Cache::TryRejectInvalidAtomicRequest(Packet *packet) {
   assert(packet != nullptr);
-  assert(packet->type == PacketType::kCoreReq);
+  assert(packet->type == PacketType::kCoreReq ||
+         packet->type == PacketType::kBypassCoreReq);
   assert(packet->is_atomic);
 
   if (IsValidAtomicRequest(*packet->GetTlmGp())) {
@@ -614,6 +620,7 @@ bool Cache::TryRejectInvalidAtomicRequest(Packet *packet) {
   assert(got_packet);
   assert(dequeued_packet == packet);
   packet->GetTlmGp()->set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
+  packet->type = PacketType::kCoreReq;
   const bool put_response = core_resp_queue_.nb_put(packet);
   assert(put_response);
   MarkProgress("atomic_reject_response");
@@ -747,6 +754,15 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
     }
 
     if (packet->type == PacketType::kBypassCoreReq) {
+      // Forwarding an AMO to the next cache level must not leave a dirty or
+      // stale local copy of the same line. Reuse the atomic sequencer and the
+      // maintenance writeback path; explicitly non-cacheable regions have no
+      // local copy to reconcile.
+      if (packet->is_atomic && !IsNonCacheableRequest(*packet->GetTlmGp())) {
+        if (!TryRejectInvalidAtomicRequest(packet))
+          (void)TryStartAtomicSequencerFromCoreQueue(packet);
+        return nullptr;
+      }
       if (ShouldStallForLineEscapeHazard(packet)) {
         MarkBlockReason("escape_hazard", false);
         LogPacketEvent(cache_log::Category::kArb, "blocked", "escape_hazard",
@@ -1045,7 +1061,8 @@ void Cache::RecordAcceptedMshrMiss(MshrFile::AcceptStatus status) {
  */
 bool Cache::TryStartAtomicSequencerFromCoreQueue(Packet *packet) {
   assert(packet != nullptr);
-  assert(packet->type == PacketType::kCoreReq);
+  assert(packet->type == PacketType::kCoreReq ||
+         packet->type == PacketType::kBypassCoreReq);
   assert(packet->is_atomic);
   assert(!atomic_sequencer_.IsBusy());
 
@@ -1055,6 +1072,8 @@ bool Cache::TryStartAtomicSequencerFromCoreQueue(Packet *packet) {
   assert(dequeued_packet == packet);
 
   atomic_sequencer_.Start(packet, ToLineAddress(packet->GetAddress()));
+  if (packet->type == PacketType::kBypassCoreReq)
+    atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitBypassDrain;
   MarkProgress("atomic_start");
   return true;
 }
@@ -1179,7 +1198,27 @@ bool Cache::TryAdvanceAtomicTagStage() {
       return TryConsumeAtomicReplay();
     case AtomicSequencer::Phase::kReadOld:
     case AtomicSequencer::Phase::kWriteNewRespond:
+    case AtomicSequencer::Phase::kFlushBypassLine:
+    case AtomicSequencer::Phase::kWaitBypassResponse:
       return false;
+    case AtomicSequencer::Phase::kWaitBypassDrain:
+      if (!HasPendingDataPathWork()) {
+        atomic_sequencer_.phase = AtomicSequencer::Phase::kFlushBypassLine;
+        MarkProgress("atomic_bypass_drained");
+      }
+      return false;
+    case AtomicSequencer::Phase::kWaitBypassWriteback:
+      if (HasLineEscapeHazard(atomic_sequencer_.line_address) ||
+          !bypass_req_queue_.nb_can_put())
+        return false;
+      IncrementLineEscapeHazard(atomic_sequencer_.packet);
+      {
+        const bool queued = bypass_req_queue_.nb_put(atomic_sequencer_.packet);
+        assert(queued);
+      }
+      atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitBypassResponse;
+      MarkProgress("atomic_bypass_forwarded");
+      return true;
   }
   return false;
 }
@@ -1198,6 +1237,26 @@ bool Cache::TryAdvanceAtomicDataStage() {
   assert(packet != nullptr);
   assert(packet->is_atomic);
 
+  if (atomic_sequencer_.phase == AtomicSequencer::Phase::kFlushBypassLine) {
+    // FIFO writes become readable after the SystemC update phase. Recheck in
+    // the next tick so a last MSHR replay cannot hide between the entry being
+    // released and its packet appearing in the replay FIFO.
+    if (HasPendingDataPathWork()) {
+      atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitBypassDrain;
+      return false;
+    }
+    if (!write_buffer_mem_req_queue_.nb_can_put()) return true;
+    auto dirty = tag_array_.ProbeDirtyLine(packet->GetAddress());
+    if (dirty) {
+      const bool queued = TryIssueLineWriteback(*dirty);
+      assert(queued);
+    }
+    tag_array_.InvalidateLine(packet->GetAddress());
+    atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitBypassWriteback;
+    MarkProgress("atomic_bypass_line_invalidated");
+    return true;
+  }
+
   if (atomic_sequencer_.phase == AtomicSequencer::Phase::kReadOld) {
     atomic_sequencer_.size = packet->GetTlmGp()->get_data_length();
     const bool read_ok = data_array_.ReadBytes(
@@ -1212,13 +1271,15 @@ bool Cache::TryAdvanceAtomicDataStage() {
       const uint32_t old_value = LoadU32(atomic_sequencer_.old_value.data());
       const uint32_t operand_value = LoadU32(operand);
       StoreU32(atomic_sequencer_.new_value.data(),
-               ApplyAtomicOp32(ext->op, old_value, operand_value));
+               ApplyAtomicOp32(ext->op, old_value, operand_value,
+                               ext->compare_value));
     } else {
       assert(atomic_sequencer_.size == sizeof(uint64_t));
       const uint64_t old_value = LoadU64(atomic_sequencer_.old_value.data());
       const uint64_t operand_value = LoadU64(operand);
       StoreU64(atomic_sequencer_.new_value.data(),
-               ApplyAtomicOp64(ext->op, old_value, operand_value));
+               ApplyAtomicOp64(ext->op, old_value, operand_value,
+                               ext->compare_value));
     }
     atomic_sequencer_.phase = AtomicSequencer::Phase::kWriteNewRespond;
     MarkProgress("atomic_read_old");
@@ -1534,6 +1595,11 @@ void Cache::SendCoreResponse() {
 
   if (packet->type == PacketType::kBypassCoreResp) {
     DecrementLineEscapeHazard(packet);
+    if (packet == atomic_sequencer_.packet) {
+      assert(atomic_sequencer_.phase ==
+             AtomicSequencer::Phase::kWaitBypassResponse);
+      atomic_sequencer_.Reset();
+    }
   }
 
   // Release the packet after sending out the response

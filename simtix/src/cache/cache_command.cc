@@ -91,7 +91,14 @@ void Cache::StartCommandSequencer() {
  * @return true while existing cache work can still affect command scan safety.
  */
 bool Cache::HasPendingPipelineWork() const {
-  return core_req_queue_.used() > 0 || tag_array_resp_queue_.used() > 0 ||
+  return core_req_queue_.used() > 0 || atomic_sequencer_.IsBusy() ||
+         HasPendingDataPathWork();
+}
+
+// Exclude queued younger core requests and the sequencer waiting for this
+// drain, while retaining every admitted refill, writeback and bypass hazard.
+bool Cache::HasPendingDataPathWork() const {
+  return tag_array_resp_queue_.used() > 0 ||
          mshr_file_mem_req_queue_.used() > 0 ||
          mshr_file_refill_notify_queue_.used() > 0 ||
          mshr_file_replay_queue_.used() > 0 || mshr_file_.HasPendingWork() ||
@@ -102,9 +109,8 @@ bool Cache::HasPendingPipelineWork() const {
          victim_buffer_mem_req_out_queue_.used() > 0 ||
          victim_buffer_mem_resp_queue_.used() > 0 ||
          victim_buffer_.HasPendingWork() || bypass_req_queue_.used() > 0 ||
-         mem_resp_queue_.used() > 0 || mem_response_slots_in_use_ != 0 ||
-         !mem_inflight_packets_.empty() || atomic_sequencer_.IsBusy() ||
-         !line_escape_hazards_.empty();
+         mem_response_slots_in_use_ != 0 || mem_resp_queue_.used() > 0 ||
+         !mem_inflight_packets_.empty() || !line_escape_hazards_.empty();
 }
 
 /**
@@ -119,18 +125,18 @@ bool Cache::HasPendingCommandWritebackWork() const {
          write_buffer_.HasPendingWork() ||
          victim_buffer_mem_req_out_queue_.used() > 0 ||
          victim_buffer_mem_resp_queue_.used() > 0 ||
-         victim_buffer_.HasPendingWork() || mem_resp_queue_.used() > 0 ||
-         mem_response_slots_in_use_ != 0 || !mem_inflight_packets_.empty() ||
+         victim_buffer_.HasPendingWork() || mem_response_slots_in_use_ != 0 ||
+         mem_resp_queue_.used() > 0 || !mem_inflight_packets_.empty() ||
          !line_escape_hazards_.empty();
 }
 
 /**
- * @brief Issue one dirty cache line writeback for a flush scan step.
+ * @brief Issue one dirty cache line writeback.
  *
- * @param line Dirty tag-array line selected by the command flush scan.
+ * @param line Dirty tag-array line selected for writeback.
  * @return true when the writeback packet was queued.
  */
-bool Cache::TryIssueCommandFlushWriteback(const TagArray::DirtyLine &line) {
+bool Cache::TryIssueLineWriteback(const TagArray::DirtyLine &line) {
   if (!write_buffer_mem_req_queue_.nb_can_put()) {
     return false;
   }
@@ -148,7 +154,7 @@ bool Cache::TryIssueCommandFlushWriteback(const TagArray::DirtyLine &line) {
   IncrementLineEscapeHazard(packet);
   const bool put_writeback = write_buffer_mem_req_queue_.nb_put(packet);
   assert(put_writeback);
-  MarkProgress("command_flush_writeback_issue");
+  MarkProgress("line_writeback_issue");
   return true;
 }
 
@@ -172,7 +178,7 @@ bool Cache::TryAdvanceCommandScan() {
         return false;
       }
       auto dirty_line = tag_array_.ProbeDirtyEntry(cmd_sequencer_.scan_index);
-      if (dirty_line && !TryIssueCommandFlushWriteback(*dirty_line)) {
+      if (dirty_line && !TryIssueLineWriteback(*dirty_line)) {
         return false;
       }
     } else {
@@ -197,7 +203,7 @@ bool Cache::TryAdvanceCommandScan() {
       return false;
     }
     auto dirty_line = tag_array_.ProbeDirtyLine(address);
-    if (dirty_line && !TryIssueCommandFlushWriteback(*dirty_line)) {
+    if (dirty_line && !TryIssueLineWriteback(*dirty_line)) {
       return false;
     }
   } else {

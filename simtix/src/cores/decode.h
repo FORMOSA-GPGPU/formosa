@@ -107,8 +107,9 @@ class Decoder {
         FlagIfMember<InstrDef, InstrFlags::kLoad, InstrLoad>() |
         FlagIfMember<InstrDef, InstrFlags::kStore, InstrStore>() |
         FlagIfMember<InstrDef, InstrFlags::kAtomic, InstrAmo>() |
+        FlagIfMember<InstrDef, InstrFlags::kFence, InstrFence>() |
         FlagIfMember<InstrDef, InstrFlags::kSerializing, InstrSystem,
-                     InstrFormosa>() |
+                     InstrFormosa, InstrFence>() |
         FlagIfMember<InstrDef, InstrFlags::kCti, InstrBranch, InstrJal,
                      InstrJalr, InstrFormosa>() |
         FlagIfMember<InstrDef, InstrFlags::kBranch, InstrBranch>() |

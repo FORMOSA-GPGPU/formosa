@@ -98,6 +98,7 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
     Array committed_store_instr;
     Array committed_amo_instr;
     Array committed_system_instr;
+    Array committed_fence_instr;
     Array committed_fp_instr;
     Array committed_custom_instr;
 
@@ -114,6 +115,7 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
     Formula<Integer> total_store_instr;
     Formula<Integer> total_amo_instr;
     Formula<Integer> total_system_instr;
+    Formula<Integer> total_fence_instr;
     Formula<Integer> total_fp_instr;
     Formula<Integer> total_custom_instr;
 
@@ -129,6 +131,7 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
     Formula<Real> store_instr_ratio;
     Formula<Real> amo_instr_ratio;
     Formula<Real> system_instr_ratio;
+    Formula<Real> fence_instr_ratio;
     Formula<Real> fp_instr_ratio;
     Formula<Real> custom_instr_ratio;
 
@@ -163,6 +166,10 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
           LV_STAT(committed_system_instr,
                   "Number of committed system instructions per warp",
                   param.num_warps),
+          LV_STAT(committed_fence_instr,
+                  "Number of committed FENCE instructions per warp (subset of "
+                  "system instructions)",
+                  param.num_warps),
           LV_STAT(committed_fp_instr,
                   "Number of committed floating-point instructions per warp",
                   param.num_warps),
@@ -196,6 +203,8 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
                   "Total number of committed amo instructions"),
           LV_STAT(total_system_instr,
                   "Total number of committed system instructions"),
+          LV_STAT(total_fence_instr,
+                  "Total number of committed FENCE instructions"),
           LV_STAT(total_fp_instr,
                   "Total number of committed floating-point instructions"),
           LV_STAT(total_custom_instr,
@@ -218,6 +227,7 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
           LV_STAT(store_instr_ratio, "Ratio of committed store instructions"),
           LV_STAT(amo_instr_ratio, "Ratio of committed amo instructions"),
           LV_STAT(system_instr_ratio, "Ratio of committed system instructions"),
+          LV_STAT(fence_instr_ratio, "Ratio of committed FENCE instructions"),
           LV_STAT(fp_instr_ratio,
                   "Ratio of committed floating-point instructions"),
           LV_STAT(custom_instr_ratio, "Ratio of committed custom instructions"),
@@ -230,6 +240,7 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
       total_store_instr = committed_store_instr.sum();
       total_amo_instr = committed_amo_instr.sum();
       total_system_instr = committed_system_instr.sum();
+      total_fence_instr = committed_fence_instr.sum();
       total_fp_instr = committed_fp_instr.sum();
       total_custom_instr = committed_custom_instr.sum();
 
@@ -245,6 +256,7 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
       store_instr_ratio = total_store_instr / total_instret;
       amo_instr_ratio = total_amo_instr / total_instret;
       system_instr_ratio = total_system_instr / total_instret;
+      fence_instr_ratio = total_fence_instr / total_instret;
       fp_instr_ratio = total_fp_instr / total_instret;
       custom_instr_ratio = total_custom_instr / total_instret;
       lane_util = lane_instret.sum() / (warp_instret.sum() * param.num_lanes);

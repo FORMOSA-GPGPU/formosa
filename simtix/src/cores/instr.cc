@@ -222,6 +222,16 @@ std::string SystemType::Disasm(std::string_view name, const Instr &instr) {
                      instr.csr(), RegName(instr.rs1()));
 }
 
+void AmoCasType::Fill(Instr *instr, uint32_t iword) {
+  RType::Fill(instr, iword);
+  instr->rs3_ = instr->rd_;
+}
+
+std::string AmoCasType::Disasm(std::string_view name, const Instr &instr) {
+  return fmt::format("{} {}, {}, ({})", name, RegName(instr.rd()),
+                     RegName(instr.rs2()), RegName(instr.rs1()));
+}
+
 //////////////////
 // Formosa type //
 //////////////////

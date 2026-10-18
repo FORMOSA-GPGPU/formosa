@@ -114,7 +114,7 @@ local Config = {
     param = {
       dcache = {
         cache_size_bytes = 0x4000,
-        write_hit_policy = "WriteBack",
+        write_hit_policy = "WriteThrough",
         mshr_entries = 8,
       },
     },

@@ -66,8 +66,15 @@ function PipelinedSM.new(name, options)
 
   ---@type simtix.banked_cache.param
   local dcache_param = copy_parameters(sm_param.dcache)
+  dcache_param.write_hit_policy = dcache_param.write_hit_policy or "WriteThrough"
   dcache_param.block_size_bytes = dcache_param.block_size_bytes or config.cache_block_size
   dcache_param.non_cacheable_regions = config:effective_non_cacheable_regions()
+  if id == 0 and config.num_sm > 1 and dcache_param.write_hit_policy == "WriteBack" then
+    lv.warning(
+      "PipelinedSM: multiple SMs with WriteBack L1 D-caches can overwrite other SMs' "
+        .. "updates, including atomic results, when sharing a cache line. Use WriteThrough."
+    )
+  end
 
   local core_param = {
     num_warps = config.warps_per_core,

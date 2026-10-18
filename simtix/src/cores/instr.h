@@ -35,14 +35,16 @@ struct InstrFlags {
   static constexpr Bits kCti = 1u << 4;
   static constexpr Bits kBranch = 1u << 5;
   static constexpr Bits kJump = 1u << 6;
+  static constexpr Bits kFence = 1u << 7;
 
-  static constexpr Bits kMemory = kLoad | kStore | kAtomic;
+  static constexpr Bits kMemory = kLoad | kStore | kAtomic | kFence;
   static constexpr Bits kControl = kCti | kSerializing;
 };
 
 enum Opcode : uint8_t {
   // clang-format off
   kLoad    = 0b0000011,
+  kMiscMem = 0b0001111,
   kFLoad   = 0b0000111,
   kAmo     = 0b0101111,
   kStore   = 0b0100011,
@@ -164,6 +166,7 @@ class Instr {
   friend struct UType;
   friend struct JType;
   friend struct SystemType;
+  friend struct AmoCasType;
   friend struct FormosaType;
   friend struct FPType;
   friend struct R4Type;
@@ -228,6 +231,13 @@ struct JType {
 };
 
 struct SystemType {
+  static void Fill(Instr *instr, uint32_t iword);
+  static std::string Disasm(std::string_view name, const Instr &instr);
+};
+
+// Zacas reads the comparison value from rd before replacing it with memory.
+// Model that dependency with the existing third source operand.
+struct AmoCasType {
   static void Fill(Instr *instr, uint32_t iword);
   static std::string Disasm(std::string_view name, const Instr &instr);
 };

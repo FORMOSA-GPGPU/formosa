@@ -34,7 +34,7 @@ void SimpleLsu::SetupTrans(tlm::tlm_command command, uint32_t len) {
 
 void SimpleLsu::SetupAtomicTrans(uint32_t len, AtomicExtension::Op op) {
   SetupTrans(tlm::TLM_READ_COMMAND, len);
-  SetupAtomicExtensions(packet_->tmask, atomic_exts_, trans_, op);
+  SetupAtomicExtensions(*packet_, atomic_exts_, trans_, op);
 }
 
 void SimpleLsu::HandleProc() {

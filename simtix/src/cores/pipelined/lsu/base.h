@@ -42,8 +42,7 @@ class Lsu : public sc_module {
 
  protected:
   static void SetupAtomicExtensions(
-      const sc_bv_base &tmask,
-      std::vector<std::unique_ptr<AtomicExtension>> &exts,
+      const Packet &packet, std::vector<std::unique_ptr<AtomicExtension>> &exts,
       std::vector<tlm::tlm_generic_payload> &trans, AtomicExtension::Op op);
   static void ClearAtomicExtensions(
       std::vector<tlm::tlm_generic_payload> &trans);

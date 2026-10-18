@@ -122,6 +122,10 @@
   V(CSRRCI)                     \
   V(ECALL)
 
+#define FOREACH_INSTR_CAS(V) \
+  V(AMOCAS_W)                \
+  V(AMOCAS_D)
+
 #define FOREACH_INSTR_FORMOSA(V) \
   V(FSA_PRI_RESET)               \
   V(FSA_PRI_RAISE)               \
@@ -237,6 +241,7 @@ struct Def : M {
 #define DECL_INSTR_UTYPE(NAME) DECL_INSTR(NAME, UType)
 #define DECL_INSTR_JTYPE(NAME) DECL_INSTR(NAME, JType)
 #define DECL_INSTR_SYSTEM(NAME) DECL_INSTR(NAME, SystemType)
+#define DECL_INSTR_CAS(NAME) DECL_INSTR(NAME, AmoCasType)
 #define DECL_INSTR_FORMOSA(NAME) DECL_INSTR(NAME, FormosaType)
 #define DECL_INSTR_FPTYPE(NAME) DECL_INSTR(NAME, FPType)
 #define DECL_INSTR_R4TYPE(NAME) DECL_INSTR(NAME, R4Type)
@@ -254,6 +259,7 @@ FOREACH_INSTR_LOAD(DECL_INSTR_ITYPE)
 FOREACH_INSTR_AMO(DECL_INSTR_RTYPE)
 FOREACH_INSTR_STORE(DECL_INSTR_STYPE)
 FOREACH_INSTR_SYSTEM(DECL_INSTR_SYSTEM)
+FOREACH_INSTR_CAS(DECL_INSTR_CAS)
 FOREACH_INSTR_FORMOSA(DECL_INSTR_FORMOSA)
 FOREACH_INSTR_OPFP(DECL_INSTR_FPTYPE)
 FOREACH_INSTR_OPFUSED(DECL_INSTR_R4TYPE)
@@ -266,6 +272,7 @@ FOREACH_INSTR_OPFUSED(DECL_INSTR_R4TYPE)
 #undef DECL_INSTR_UTYPE
 #undef DECL_INSTR_JTYPE
 #undef DECL_INSTR_SYSTEM
+#undef DECL_INSTR_CAS
 #undef DECL_INSTR_FORMOSA
 #undef DECL_INSTR_FPTYPE
 #undef DECL_INSTR_R4TYPE
@@ -276,6 +283,13 @@ struct Illegal : Def<NoType, Matches<0, 0>> {
     return ExecFlag::ILLEGAL;
   }
   static std::string Mnemonic(const Instr &) { return "illegal"; }
+};
+
+struct FENCE : Def<NoType, Matches<MASK_FENCE, MATCH_FENCE>> {
+  static ExecFlag Execute(ExecContext *, const Instr &) {
+    return ExecFlag::FENCE;
+  }
+  static std::string Mnemonic(const Instr &) { return "fence"; }
 };
 
 #define ADD_TO_TUPLE(NAME) NAME,
@@ -290,7 +304,9 @@ using InstrAuipc = std::tuple<FOREACH_INSTR_AUIPC(ADD_TO_TUPLE) Illegal>;
 using InstrJal = std::tuple<FOREACH_INSTR_JAL(ADD_TO_TUPLE) Illegal>;
 using InstrJalr = std::tuple<FOREACH_INSTR_JALR(ADD_TO_TUPLE) Illegal>;
 using InstrLoad = std::tuple<FOREACH_INSTR_LOAD(ADD_TO_TUPLE) Illegal>;
-using InstrAmo = std::tuple<FOREACH_INSTR_AMO(ADD_TO_TUPLE) Illegal>;
+using InstrAmo = std::tuple<FOREACH_INSTR_AMO(ADD_TO_TUPLE)
+                                FOREACH_INSTR_CAS(ADD_TO_TUPLE) Illegal>;
+using InstrFence = std::tuple<FENCE, Illegal>;
 using InstrStore = std::tuple<FOREACH_INSTR_STORE(ADD_TO_TUPLE) Illegal>;
 using InstrSystem = std::tuple<FOREACH_INSTR_SYSTEM(ADD_TO_TUPLE) Illegal>;
 using InstrFormosa = std::tuple<FOREACH_INSTR_FORMOSA(ADD_TO_TUPLE) Illegal>;
@@ -313,4 +329,5 @@ using InstrIllegal = std::tuple<Illegal>;
 #undef FOREACH_INSTR_JALR
 #undef FOREACH_INSTR_LOAD
 #undef FOREACH_INSTR_AMO
+#undef FOREACH_INSTR_CAS
 #undef FOREACH_INSTR_STORE

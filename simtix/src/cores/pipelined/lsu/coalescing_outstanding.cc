@@ -35,7 +35,7 @@ void CoalescingOutstandingLsu::SetupAtomicTrans(InflightSlot &slot,
     slot.lsu_exts[lane]->req_id = lane;
     ++slot.total_reqs;
   }
-  SetupAtomicExtensions(slot.packet->tmask, slot.atomic_exts, slot.trans, op);
+  SetupAtomicExtensions(*slot.packet, slot.atomic_exts, slot.trans, op);
 }
 
 void CoalescingOutstandingLsu::SetupLineTrans(InflightSlot &slot,
@@ -223,6 +223,14 @@ void CoalescingOutstandingLsu::IssueMemReq() {
     }
 
     Packet *packet = lsu_req->get();
+
+    // A fence is a drain in the existing ordered memory stream. It has no
+    // transaction of its own, and no younger request is accepted until done.
+    if (HasFlag(packet->flag, ExecFlag::FENCE)) {
+      while (in_flight_count_ > 0) wait(slot_available_event_);
+      lsu_resp->put(packet);
+      continue;
+    }
 
     // tmask all 0
     if (!packet->tmask.or_reduce()) {

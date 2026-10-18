@@ -138,9 +138,15 @@ void AtomicCore::MainProc() {
     }
 
     if (HasFlag(flag, ExecFlag::ATOMIC)) {
+      if (GetAmoOp(flag) == ExecFlag::AMO_CAS) {
+        for (uint32_t i = 0; i < num_lanes_; ++i) {
+          atomic_exts_[i]->compare_value = ctx.rs3_data[i];
+        }
+      }
       ExecuteAtomicInstr(GetMemSize(flag), IsSigned(flag),
                          DecodeAtomicOp(flag));
       WriteRegfile(wid, instr.rd());
+      stats_.committed_amo_instr[wid]++;
     }
 
     if (HasFlag(flag, ExecFlag::STORE)) {
@@ -155,6 +161,11 @@ void AtomicCore::MainProc() {
       ExecuteCsrOp(wid, GetCsrOp(flag));
       WriteRegfile(wid, instr.rd());
       stats_.committed_system_instr[wid]++;
+    }
+
+    if (HasFlag(flag, ExecFlag::FENCE)) {
+      stats_.committed_system_instr[wid]++;
+      stats_.committed_fence_instr[wid]++;
     }
 
     // Accrue floating point exceptions

@@ -6,11 +6,19 @@
 
 namespace {
 
+Param MakeWriteThroughAtomicParam() {
+  auto param = MakeAtomicParam(false);
+  param.write_hit_policy = WriteHitPolicy::kWriteThrough;
+  return param;
+}
+
 class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
  public:
   explicit CacheModuleAtomicTestRunner(sc_core::sc_module_name name)
       : CacheModuleTestRunnerBase(name),
-        atomic_bypass_bench_("atomic_bypass_bench", MakeAtomicParam(false)),
+        atomic_bypass_bench_("atomic_bypass_bench",
+                             MakeWriteThroughAtomicParam()),
+        atomic_peer_bench_("atomic_peer_bench", MakeWriteThroughAtomicParam()),
         atomic_hit_bench_("atomic_hit_bench", MakeAtomicParam(true)),
         atomic_miss_bench_("atomic_miss_bench", MakeAtomicParam(true)),
         atomic_bypass_starvation_bench_("atomic_bypass_starvation_bench",
@@ -26,6 +34,7 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
  private:
   void Run() {
     atomic_bypass_bench_.clock_.write(false);
+    atomic_peer_bench_.clock_.write(false);
     atomic_hit_bench_.clock_.write(false);
     atomic_miss_bench_.clock_.write(false);
     atomic_bypass_starvation_bench_.clock_.write(false);
@@ -36,9 +45,12 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
 
     RunBench("atomic_bypass_bench", [this] {
       TestAtomicBypassesWhenLinearizationDisabled();
+      TestBypassAtomicsPreserveNeighbor();
+      TestBypassAtomicWaitsForReplay();
     });
     RunBench("atomic_hit_bench", [this] {
       TestAtomicLinearizedHitRmw();
+      TestAtomicCompareSwap();
     });
     RunBench("atomic_miss_bench", [this] {
       TestAtomicLinearizedMissRefillReplayRmw();
@@ -99,6 +111,112 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
            "bypassed atomic contributes to total requests");
   }
 
+  void CompleteInitializedAdd(CacheBench &bench, uint64_t address,
+                              std::vector<uint8_t> &memory) {
+    CacheModuleTester view(bench.cache_);
+    const auto responses = bench.core_.response_count();
+    const auto requests = bench.memory_.request_count();
+    auto *write = bench.core_.SendWrite(address, U32Bytes(1));
+    Expect(bench.WaitForCoreResponses(responses + 1),
+           "write-through initialization returns to the core");
+    Expect(bench.core_.HasResponse(write),
+           "write-through initialization response is observed");
+    Expect(bench.WaitForMemoryRequests(requests + 1),
+           "initialization reaches memory without a flush or eviction");
+    if (bench.memory_.request_count() <= requests) return;
+    const auto offset = address - 0x20;
+    ExpectWriteRequest(bench, requests, 0x20,
+                       LineWriteData(16, offset, U32Bytes(1)),
+                       "write-through forwards only the initialized word",
+                       LineWriteMask(16, offset, sizeof(uint32_t)));
+    auto line = view.CachedLine(address);
+    Expect(line.has_value(), "write-through keeps the initialized line cached");
+    if (line) {
+      Expect(!line->tag.dirty, "write-through leaves the local line clean");
+    }
+    auto *atomic = bench.core_.SendAtomic(address, U32Bytes(1),
+                                          simtix::AtomicExtension::Op::kAdd);
+    auto *store = bench.memory_.request(requests);
+    const auto store_offset = store->get_address() - 0x20;
+    for (size_t i = 0; i < store->get_data_length(); ++i) {
+      const auto *mask = store->get_byte_enable_ptr();
+      if (mask == nullptr ||
+          mask[i % store->get_byte_enable_length()] == TLM_BYTE_ENABLED) {
+        memory.at(store_offset + i) = store->get_data_ptr()[i];
+      }
+    }
+    for (size_t i = 0; i < 8; ++i) bench.AdvanceCycle();
+    Expect(bench.memory_.request_count() == requests + 1,
+           "AMO waits for the pending write-through acknowledgement");
+    bench.memory_.RespondAt(requests);
+    Expect(bench.WaitForMemoryRequests(requests + 2),
+           "AMO issues after write-through completes");
+    Expect(bench.memory_.RequestHasAtomicExtension(requests + 1),
+           "forwarded AMO retains its operation extension");
+    auto *amo = bench.memory_.request(requests + 1);
+    Expect(amo->get_address() == address && amo->get_data_length() == 4,
+           "forwarded AMO preserves its address and width");
+    Expect(amo->get_extension<simtix::AtomicExtension>()->op ==
+               simtix::AtomicExtension::Op::kAdd,
+           "forwarded AMO preserves its operation");
+    const auto word_offset = amo->get_address() - 0x20;
+    const auto old = LoadU32(memory, word_offset);
+    memory = StoreU32At(memory, word_offset, old + LoadU32(PayloadData(amo)));
+    bench.memory_.RespondAt(requests + 1, U32Bytes(old));
+    Expect(bench.WaitForCoreResponses(responses + 2),
+           "forwarded AMO returns to the core");
+    Expect(PayloadData(atomic) == U32Bytes(1),
+           "AMO observes the preceding ordinary initialization");
+    Expect(!view.CachedLine(address).has_value(),
+           "AMO invalidates the stale local cache copy");
+    auto *read = bench.core_.SendRead(address, 4);
+    Expect(bench.WaitForMemoryRequests(requests + 3),
+           "ordinary read after AMO refills the invalidated line");
+    bench.memory_.RespondAt(requests + 2, memory);
+    Expect(bench.WaitForCoreResponses(responses + 3),
+           "refilled ordinary read completes");
+    Expect(PayloadData(read) == U32Bytes(2),
+           "ordinary read observes the result of the forwarded AMO");
+  }
+
+  void TestBypassAtomicsPreserveNeighbor() {
+    auto memory = StoreU32At(StoreU32At(Sequence(16, 0x40), 0, 0), 4, 0);
+    const auto untouched = memory;
+    for (auto *bench : {&atomic_bypass_bench_, &atomic_peer_bench_}) {
+      FillLineWithRead(*bench, 0x20, memory);
+    }
+    CompleteInitializedAdd(atomic_bypass_bench_, 0x20, memory);
+    CompleteInitializedAdd(atomic_peer_bench_, 0x24, memory);
+    Expect(memory == StoreU32At(StoreU32At(untouched, 0, 2), 4, 2),
+           "both atomic objects and untouched neighbors survive write-through");
+  }
+
+  void TestBypassAtomicWaitsForReplay() {
+    auto &bench = atomic_bypass_bench_;
+    const auto requests = bench.memory_.request_count();
+    const auto responses = bench.core_.response_count();
+    auto *read = bench.core_.SendRead(0x54, 4);
+    Expect(bench.WaitForMemoryRequests(requests + 1),
+           "older read miss reaches memory");
+    auto *atomic = bench.core_.SendAtomic(0x54, U32Bytes(1),
+                                          simtix::AtomicExtension::Op::kAdd);
+    for (size_t i = 0; i < 8; ++i) bench.AdvanceCycle();
+    Expect(bench.memory_.request_count() == requests + 1,
+           "forwarded AMO waits for the older read miss");
+    bench.memory_.RespondAt(requests, StoreU32At(Sequence(16, 0x60), 4, 17));
+    Expect(bench.WaitForCoreResponses(responses + 1, 32),
+           "older refill replays before atomic invalidation");
+    Expect(PayloadData(read) == U32Bytes(17),
+           "older replay retains its refilled value");
+    Expect(bench.WaitForMemoryRequests(requests + 2, 32),
+           "forwarded AMO issues after the read replay");
+    bench.memory_.RespondAt(requests + 1, U32Bytes(17));
+    Expect(bench.WaitForCoreResponses(responses + 2),
+           "AMO following the replay completes");
+    Expect(PayloadData(atomic) == U32Bytes(17),
+           "AMO receives the shared value after the read replay");
+  }
+
   void TestAtomicLinearizedHitRmw() {
     CacheModuleTester view(atomic_hit_bench_.cache_);
     const auto block = Sequence(16, 0x10);
@@ -152,6 +270,45 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
            "line fill and atomic hit both use the cache route");
     Expect(stats.total_requests == 2,
            "line fill and atomic hit both contribute to total requests");
+  }
+
+  void TestAtomicCompareSwap() {
+    CacheModuleTester view(atomic_hit_bench_.cache_);
+    for (size_t size : {size_t{4}, size_t{8}}) {
+      const uint64_t address = size;
+      for (bool matches : {false, true}) {
+        const auto line = view.CachedLine(address);
+        Expect(line.has_value(), "compare-swap starts with a resident line");
+        if (!line.has_value()) return;
+        const auto before = line->data;
+        uint64_t old_value = 0;
+        std::memcpy(&old_value, before.data() + address, size);
+        const uint64_t desired = 0xfedcba9876543210;
+        std::vector<uint8_t> operand(size);
+        std::memcpy(operand.data(), &desired, size);
+        uint64_t compare_value = matches ? old_value : (old_value ^ 1);
+        // AMOCAS.W compares only the low word of its XLEN-sized rd input.
+        if (size == 4) compare_value |= uint64_t{0x12345678} << 32;
+        const auto responses = atomic_hit_bench_.core_.response_count();
+        auto *cas = atomic_hit_bench_.core_.SendAtomic(
+            address, operand, simtix::AtomicExtension::Op::kCompareSwap,
+            compare_value);
+        Expect(atomic_hit_bench_.WaitForCoreResponses(responses + 1),
+               "compare-swap returns to the core");
+        auto expected = before;
+        if (matches) std::memcpy(expected.data() + address, &desired, size);
+        const auto after = view.CachedLine(address);
+        Expect(after.has_value(), "compare-swap keeps the line resident");
+        if (after.has_value()) {
+          Expect(after->data == expected,
+                 "compare-swap writes only when the comparison matches");
+        }
+        std::vector<uint8_t> old_bytes(size);
+        std::memcpy(old_bytes.data(), &old_value, size);
+        Expect(PayloadData(cas) == old_bytes,
+               "successful and failed compare-swap return the old value");
+      }
+    }
   }
 
   void TestAtomicLinearizedMissRefillReplayRmw() {
@@ -430,6 +587,7 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
   }
 
   CacheBench atomic_bypass_bench_;
+  CacheBench atomic_peer_bench_;
   CacheBench atomic_hit_bench_;
   CacheBench atomic_miss_bench_;
   CacheBench atomic_bypass_starvation_bench_;

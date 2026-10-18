@@ -189,7 +189,7 @@ void Backend::Execute2() {
   }
 
   // Load, store, and atomic instructions go to LSU.
-  if (HasFlag(flag, ExecFlag::ATOMIC)) {
+  if (HasFlag(flag, ExecFlag::ATOMIC | ExecFlag::FENCE)) {
     if (!lsu_req_q_.nb_put(packet)) {
       return;
     }
@@ -625,6 +625,7 @@ void Backend::RetirePacket(Packet *packet) {
   bool is_priority = HasFlag(flag, ExecFlag::PRIORITY);
   bool is_barrier = HasFlag(flag, ExecFlag::BARRIER);
   bool is_ecall = HasFlag(flag, ExecFlag::ECALL);
+  bool is_fence = HasFlag(flag, ExecFlag::FENCE);
   bool is_custom = (is_priority || is_barrier);
   bool is_stack = packet->is_stack_access;
 
@@ -664,9 +665,11 @@ void Backend::RetirePacket(Packet *packet) {
   stats->amo_instr_time[wid] += is_amo * elapsed;
 
   // 3. System Instructions (Consolidated)
-  bool is_system = (is_csr || is_ecall);
+  bool is_system = (is_csr || is_ecall || is_fence);
   stats->committed_system_instr[wid] += is_system;
   stats->system_instr_time[wid] += is_system * elapsed;
+  stats->committed_fence_instr[wid] += is_fence;
+  stats->fence_instr_time[wid] += is_fence * elapsed;
 
   // 4. Floating Point & Custom
   stats->committed_fp_instr[wid] += is_fp;

@@ -145,6 +145,16 @@ class LsuTester : public sc_module {
     return id;
   }
 
+  uint64_t issue_fence(uint64_t id) {
+    Packet *packet = pool_.Acquire();
+    packet->wpc = id;
+    packet->tmask = std::string(num_lanes_, '1').c_str();
+    packet->flag = ExecFlag::FENCE;
+    outstanding_.push_back(packet);
+    lsu_req_.put(packet);
+    return id;
+  }
+
   bool response_available() const { return lsu_resp_.nb_can_get(); }
   uint64_t completed_id() { return lsu_resp_.peek()->wpc; }
   LuaArr<uint8_t> collect_response() {
@@ -225,6 +235,8 @@ LV_BINDING(simtix, LsuTester)
             lv::params("id", "addr", "data", "size", "is_signed", "tmask",
                        "op"),
             lv::doc("Issue an atomic operation without waiting for completion"))
+    .method("issue_fence", &LsuTester::issue_fence, lv::params("id"),
+            lv::doc("Issue a memory fence without waiting for completion"))
     .method("response_available", &LsuTester::response_available,
             lv::doc("Whether a completed packet is available"))
     .method("completed_id", &LsuTester::completed_id,

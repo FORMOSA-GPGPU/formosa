@@ -153,6 +153,10 @@ class Cache : public sc_module, public PacketLifecycleIntf {
       kWaitReplay,       ///< Wait for the atomic miss to refill and replay.
       kReadOld,          ///< Read the old value from the locked cache line.
       kWriteNewRespond,  ///< Write the new value, respond, and unlock the line.
+      kWaitBypassDrain,  ///< Drain older data-path work before a forwarded AMO.
+      kFlushBypassLine,  ///< Write back and invalidate the local cache copy.
+      kWaitBypassWriteback,  ///< Wait for writeback before forwarding the AMO.
+      kWaitBypassResponse,   ///< Keep younger traffic behind the forwarded AMO.
     };
 
     bool IsBusy() const { return phase != Phase::kIdle; }
@@ -244,9 +248,10 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   void StartCommandSequencer();
   void AdvanceCommandSequencer();
   bool HasPendingPipelineWork() const;
+  bool HasPendingDataPathWork() const;
   bool HasPendingCommandWritebackWork() const;
   bool TryAdvanceCommandScan();
-  bool TryIssueCommandFlushWriteback(const TagArray::DirtyLine &line);
+  bool TryIssueLineWriteback(const TagArray::DirtyLine &line);
   bool IsNonCacheableRequest(const tlm::tlm_generic_payload &payload) const;
   bool IsAtomicRequest(const tlm::tlm_generic_payload &payload) const;
   bool IsValidAtomicRequest(const tlm::tlm_generic_payload &payload) const;

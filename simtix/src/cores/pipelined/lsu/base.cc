@@ -12,13 +12,13 @@ Lsu::Lsu(const sc_module_name &name)
     : sc_module(name), dmem_port_("dmem_port") {}
 
 void Lsu::SetupAtomicExtensions(
-    const sc_bv_base &tmask,
-    std::vector<std::unique_ptr<AtomicExtension>> &exts,
+    const Packet &packet, std::vector<std::unique_ptr<AtomicExtension>> &exts,
     std::vector<tlm::tlm_generic_payload> &trans, AtomicExtension::Op op) {
   assert(exts.size() == trans.size());
   for (uint32_t i = 0; i < trans.size(); ++i) {
-    if (tmask[i] == 1) {
+    if (packet.tmask[i] == 1) {
       exts[i]->op = op;
+      exts[i]->compare_value = packet.rs3_data[i];
       trans[i].set_extension(exts[i].get());
     }
   }
