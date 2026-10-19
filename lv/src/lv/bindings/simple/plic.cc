@@ -11,6 +11,7 @@
 #include <liblv/common/tlm_sink.h>
 #include <liblv/log.h>
 #include <liblv/schema.h>
+#include <lv/mmio/simple/plic.h>
 #include <systemc.h>
 
 #include <cstdint>
@@ -150,14 +151,6 @@ class Plic : public sc_module {
   }
 
  private:
-  // Register strides stay fixed even when fewer sources/contexts are present.
-  static constexpr uint64_t kPendingBase = 0x1000;
-  static constexpr uint64_t kEnableBase = 0x2000;
-  static constexpr uint64_t kContextBase = 0x200000;
-  static constexpr uint64_t kBitmapBytes = 0x80;
-  static constexpr uint64_t kContextStride = 0x1000;
-  static constexpr uint64_t kWindowBytes = 0x4000000;
-  static constexpr uint32_t kClaimCompleteOffset = 4;
   static constexpr uint32_t kMaxContexts = 15872;
   static constexpr uint32_t kPriorityMask = 7;
 
@@ -268,8 +261,8 @@ class Plic : public sc_module {
    *       writes are ignored; priority and threshold writes retain low 3 bits.
    */
   bool Access(uint64_t address, bool write, uint32_t *value) {
-    if (address < kPendingBase) {
-      const uint32_t id = address / 4;
+    if (address < LV_PLIC_PENDING_BASE) {
+      const uint32_t id = address / LV_PLIC_REGISTER_BYTES;
       if (id == 0 || id > param_.num_sources) {
         if (!write) *value = 0;
       } else if (write) {
@@ -284,9 +277,10 @@ class Plic : public sc_module {
       return true;
     }
 
-    if (address < kPendingBase + kBitmapBytes) {
+    if (address < LV_PLIC_PENDING_BASE + LV_PLIC_BITMAP_BYTES) {
       if (!write) {
-        const uint32_t first = (address - kPendingBase) / 4 * 32;
+        const uint32_t first =
+            (address - LV_PLIC_PENDING_BASE) / LV_PLIC_REGISTER_BYTES * 32;
         *value = 0;
         for (uint32_t bit = 0; bit < 32; ++bit) {
           const uint32_t id = first + bit;
@@ -298,10 +292,13 @@ class Plic : public sc_module {
       return true;  // Pending is read-only; writes are ignored.
     }
 
-    if (address >= kEnableBase &&
-        address < kEnableBase + kMaxContexts * kBitmapBytes) {
-      const uint32_t context = (address - kEnableBase) / kBitmapBytes;
-      const uint32_t word = ((address - kEnableBase) % kBitmapBytes) / 4;
+    if (address >= LV_PLIC_ENABLE_BASE &&
+        address < LV_PLIC_ENABLE_BASE + kMaxContexts * LV_PLIC_ENABLE_STRIDE) {
+      const uint32_t context =
+          (address - LV_PLIC_ENABLE_BASE) / LV_PLIC_ENABLE_STRIDE;
+      const uint32_t word =
+          ((address - LV_PLIC_ENABLE_BASE) % LV_PLIC_ENABLE_STRIDE) /
+          LV_PLIC_REGISTER_BYTES;
       if (context >= param_.num_contexts) return false;
 
       if (word >= enable_words_) {
@@ -318,12 +315,14 @@ class Plic : public sc_module {
       return true;
     }
 
-    if (address >= kContextBase && address < kWindowBytes) {
-      const uint32_t context = (address - kContextBase) / kContextStride;
-      const uint32_t offset = (address - kContextBase) % kContextStride;
+    if (address >= LV_PLIC_CONTEXT_BASE && address < LV_PLIC_WINDOW_BYTES) {
+      const uint32_t context =
+          (address - LV_PLIC_CONTEXT_BASE) / LV_PLIC_CONTEXT_STRIDE;
+      const uint32_t offset =
+          (address - LV_PLIC_CONTEXT_BASE) % LV_PLIC_CONTEXT_STRIDE;
       if (context >= param_.num_contexts) return false;
 
-      if (offset == 0) {
+      if (offset == LV_PLIC_THRESHOLD_OFFSET) {
         if (write) {
           const uint32_t threshold = *value & kPriorityMask;
           if (threshold_[context] != threshold) {
@@ -335,7 +334,7 @@ class Plic : public sc_module {
         }
         return true;
       }
-      if (offset == kClaimCompleteOffset) {
+      if (offset == LV_PLIC_CLAIM_COMPLETE_OFFSET) {
         if (write) {
           Complete(context, *value);
         } else {
@@ -366,24 +365,24 @@ class Plic : public sc_module {
       trans->set_response_status(tlm::TLM_COMMAND_ERROR_RESPONSE);
       return;
     }
-    if (address % 4 != 0) {
+    if (address % LV_PLIC_REGISTER_BYTES != 0) {
       trans->set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
       return;
     }
-    if (trans->get_data_length() != 4 || data == nullptr) {
+    if (trans->get_data_length() != LV_PLIC_REGISTER_BYTES || data == nullptr) {
       trans->set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
       return;
     }
 
     // Existing CPU transactions also use zero for an unspecified stream width.
     const auto streaming_width = trans->get_streaming_width();
-    if (streaming_width != 0 && streaming_width < 4) {
+    if (streaming_width != 0 && streaming_width < LV_PLIC_REGISTER_BYTES) {
       trans->set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
       return;
     }
     if (const auto *byte_enables = trans->get_byte_enable_ptr()) {
       const auto byte_enable_length = trans->get_byte_enable_length();
-      for (uint32_t i = 0; i < 4; ++i) {
+      for (uint32_t i = 0; i < LV_PLIC_REGISTER_BYTES; ++i) {
         if (byte_enable_length == 0 ||
             byte_enables[i % byte_enable_length] != TLM_BYTE_ENABLED) {
           trans->set_response_status(tlm::TLM_BYTE_ENABLE_ERROR_RESPONSE);
@@ -395,14 +394,16 @@ class Plic : public sc_module {
     // Pack MMIO words explicitly so host endianness does not affect the model.
     uint32_t value = 0;
     if (trans->is_write()) {
-      for (uint32_t i = 0; i < 4; ++i) value |= uint32_t{data[i]} << (8 * i);
+      for (uint32_t i = 0; i < LV_PLIC_REGISTER_BYTES; ++i)
+        value |= uint32_t{data[i]} << (8 * i);
     }
     if (!Access(address, trans->is_write(), &value)) {
       trans->set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
       return;
     }
     if (trans->is_read()) {
-      for (uint32_t i = 0; i < 4; ++i) data[i] = value >> (8 * i);
+      for (uint32_t i = 0; i < LV_PLIC_REGISTER_BYTES; ++i)
+        data[i] = value >> (8 * i);
     }
 
     trans->set_dmi_allowed(false);

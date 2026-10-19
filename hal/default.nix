@@ -14,6 +14,7 @@ let
       (root + "/CMakeLists.txt")
       (root + "/FormosaConfig.cmake.in")
       (root + "/cmake")
+      (root + "/lv/device")
       (root + "/ilha/lua/addr_map.lua")
       (root + "/ilha/scripts/generate_header.lua")
       (root + "/ilha/scripts/generate_linker.lua")

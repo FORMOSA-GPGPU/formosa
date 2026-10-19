@@ -5,6 +5,7 @@
 #include <liblv/binding.h>
 #include <liblv/common/tlm_sink.h>
 #include <liblv/output.h>
+#include <lv/mmio/simple/clint.h>
 #include <sysc/kernel/sc_time.h>
 #include <systemc.h>
 #include <tlm_core/tlm_2/tlm_generic_payload/tlm_gp.h>
@@ -132,22 +133,23 @@ class Clint : public sc_module {
     auto ptr = trans->get_data_ptr();
     auto len = trans->get_data_length();
 
-    if (addr < 0x4000) {  // Access msip
+    if (addr < LV_CLINT_MTIMECMP_OFFSET) {  // Access msip
       // check alignment
-      if (addr % 4 != 0) {
+      if (addr % LV_CLINT_WORD_BYTES != 0) {
         Warning("{}: msip read not aligned to 4 bytes at address 0x{:x}",
                 name(), addr);
         trans->set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
         return 0;
       }
-      if (len != 4) {
+      if (len != LV_CLINT_WORD_BYTES) {
         Warning("{}: msip read with invalid length {} at address 0x{:x}",
                 name(), len, addr);
         trans->set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
         return 0;
       }
       // Check core ID
-      unsigned int core_id = addr / 4;
+      unsigned int core_id =
+          (addr - LV_CLINT_MSIP_OFFSET) / LV_CLINT_MSIP_STRIDE;
       if (core_id >= num_cores_) {
         Warning("{}: msip read for invalid core id {} at address 0x{:x}",
                 name(), core_id, addr);
@@ -170,16 +172,17 @@ class Clint : public sc_module {
         SC_REPORT_ERROR("TLM-2",
                         "Illegal transaction command received by CLINT");
       }
-    } else if (addr < 0xC000) {  // Access mtime or mtimecmp
+    } else if (addr < (LV_CLINT_MTIME_OFFSET +
+                       LV_CLINT_TIMER_BYTES)) {  // Access mtime or mtimecmp
       // check alignment
-      if (addr % 4 != 0) {
+      if (addr % LV_CLINT_WORD_BYTES != 0) {
         Warning(
             "{}: mtime registers read not aligned to 4 bytes at address "
             "0x{:x}\n",
             name(), addr);
         trans->set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
         return 0;
-      } else if (len != 8 && len != 4) {
+      } else if (len != LV_CLINT_TIMER_BYTES && len != LV_CLINT_WORD_BYTES) {
         Warning(
             "{}: mtime registers read with invalid length {} at address "
             "0x{:x}\n",
@@ -188,9 +191,10 @@ class Clint : public sc_module {
         return 0;
       }
 
-      if (addr >= 0xBFF8) {
+      if (addr >= LV_CLINT_MTIME_OFFSET) {
         // Access mtime with 32-bit or 64-bit alignment
-        size_t word_offset = (addr - 0xBFF8) / 4;
+        size_t word_offset =
+            (addr - LV_CLINT_MTIME_OFFSET) / LV_CLINT_WORD_BYTES;
         uint32_t *word_ptr = reinterpret_cast<uint32_t *>(&mtime_);
         if (cmd == tlm::TLM_READ_COMMAND) {
           memcpy(ptr, &word_ptr[word_offset], len);
@@ -205,7 +209,8 @@ class Clint : public sc_module {
 
       // Access mtimecmp
       // Check core ID
-      unsigned int core_id = (addr - 0x4000) / 8;
+      unsigned int core_id =
+          (addr - LV_CLINT_MTIMECMP_OFFSET) / LV_CLINT_MTIMECMP_STRIDE;
       if (core_id >= num_cores_) {
         Warning("{}: mtimecmp read for invalid core id {} at address 0x{:x}",
                 name(), core_id, addr);
@@ -213,7 +218,9 @@ class Clint : public sc_module {
         return 0;
       }
       // Access mtimecmp
-      size_t word_offset = (addr - 0x4000 - core_id * 8) / 4;
+      size_t word_offset = (addr - LV_CLINT_MTIMECMP_OFFSET -
+                            core_id * LV_CLINT_MTIMECMP_STRIDE) /
+                           LV_CLINT_WORD_BYTES;
       uint32_t *word_ptr = reinterpret_cast<uint32_t *>(&mtimecmp_[core_id]);
       if (cmd == tlm::TLM_READ_COMMAND) {
         memcpy(ptr, &word_ptr[word_offset], len);

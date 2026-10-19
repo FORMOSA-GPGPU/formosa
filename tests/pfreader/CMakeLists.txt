@@ -18,12 +18,14 @@ set(LINKER_SCRIPT ${CMAKE_CURRENT_SOURCE_DIR}/linker.ld)
 
 add_executable(${TARGET}
   main.c
-  pfreader_util.c
   start.S
 )
+
+target_link_libraries(${TARGET} PRIVATE lv::device)
 
 set_target_properties(${TARGET} PROPERTIES LINK_DEPENDS ${LINKER_SCRIPT})
 target_link_options(${TARGET} PRIVATE
   -fuse-ld=lld -static -Wl,--gc-sections -T ${LINKER_SCRIPT} -static -nostdlib)
 
 add_lv_test_script(pfreader pfreader.lua ARGS $<TARGET_FILE:${TARGET}> LABELS integration)
+set_tests_properties(pfreader PROPERTIES PASS_REGULAR_EXPRESSION "\\[CP\\] End")

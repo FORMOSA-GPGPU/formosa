@@ -4,6 +4,7 @@
 
 #include <liblv/binding.h>
 #include <liblv/common/tlm_sink.h>
+#include <lv/mmio/simple/clint.h>
 #include <systemc.h>
 #include <tlm_core/tlm_2/tlm_generic_payload/tlm_gp.h>
 
@@ -148,21 +149,21 @@ class VClint : public sc_module {
     auto ptr = trans->get_data_ptr();
     auto len = trans->get_data_length();
 
-    if (addr % 4 != 0 || addr + len > 0x10000) {
+    if (addr % LV_CLINT_WORD_BYTES != 0 || addr + len > LV_CLINT_WINDOW_BYTES) {
       trans->set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
       return 0;
     }
-    if (len != 4 && len != 8) {
+    if (len != LV_CLINT_WORD_BYTES && len != LV_CLINT_TIMER_BYTES) {
       trans->set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
       return 0;
     }
-    if (len == 8 && addr < 0x4000) {
+    if (len == LV_CLINT_TIMER_BYTES && addr < LV_CLINT_MTIMECMP_OFFSET) {
       trans->set_response_status(tlm::TLM_GENERIC_ERROR_RESPONSE);
       return 0;
     }
 
     if (cmd == tlm::TLM_READ_COMMAND) {
-      for (unsigned off = 0; off < len; off += 4) {
+      for (unsigned off = 0; off < len; off += LV_CLINT_WORD_BYTES) {
         BusResult r =
             BusOp(static_cast<std::uint16_t>(addr + off), 0, false, true);
         if (r.err) {
@@ -172,7 +173,7 @@ class VClint : public sc_module {
         std::memcpy(ptr + off, &r.rdata, 4);
       }
     } else if (cmd == tlm::TLM_WRITE_COMMAND) {
-      for (unsigned off = 0; off < len; off += 4) {
+      for (unsigned off = 0; off < len; off += LV_CLINT_WORD_BYTES) {
         std::uint32_t w = 0;
         std::memcpy(&w, ptr + off, 4);
         BusResult r =

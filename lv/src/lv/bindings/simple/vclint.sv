@@ -3,7 +3,10 @@
 // SPDX-License-Identifier: Apache-2.0
 
 module vclint #(
-    parameter int NUM_CORES = 1
+    parameter int NUM_CORES = 1,
+    // Supplied from lv/mmio/simple/clint.h by the Verilator build.
+    parameter int unsigned MTIMECMP_OFFSET,
+    parameter int unsigned MTIME_OFFSET
 ) (
     input  logic                  clk,
     input  logic                  mtime_tick,
@@ -28,16 +31,16 @@ module vclint #(
   logic        word_hi;
 
   assign op = we | re;
-  assign msip_sel = (addr < 16'h4000);
-  assign mtime_sel = (addr >= 16'h4000) && (addr < 16'hC000) && (addr >= 16'hBFF8);
-  assign cmp_sel = (addr >= 16'h4000) && (addr < 16'hC000) && (addr < 16'hBFF8);
+  assign msip_sel = (int'(addr) < MTIMECMP_OFFSET);
+  assign mtime_sel = (int'(addr) >= MTIME_OFFSET) && (int'(addr) < MTIME_OFFSET + 8);
+  assign cmp_sel = (int'(addr) >= MTIMECMP_OFFSET) && (int'(addr) < MTIME_OFFSET);
   assign range_err = op && !(msip_sel || mtime_sel || cmp_sel);
   assign core_id = msip_sel ? {18'd0, addr[15:2]}
-                                : (({16'd0, addr} - 32'h4000) >> 3);
+                                : (({16'd0, addr} - MTIMECMP_OFFSET) >> 3);
   assign core_err = op && (msip_sel || cmp_sel) && (core_id >= NUM_CORES);
   assign err_addr = range_err || core_err;
-  assign word_hi = cmp_sel ? ((({16'd0, addr} - 32'h4000 - (core_id << 3)) >> 2) == 1)
-                           : ((({16'd0, addr} - 32'hBFF8) >> 2) == 1);
+  assign word_hi = cmp_sel ? ((({16'd0, addr} - MTIMECMP_OFFSET - (core_id << 3)) >> 2) == 1)
+                           : ((({16'd0, addr} - MTIME_OFFSET) >> 2) == 1);
 
   always_comb begin
     rdata = 32'b0;

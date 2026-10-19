@@ -128,6 +128,8 @@ if("hal" IN_LIST ENABLE_PROJECTS OR "fw" IN_LIST ENABLE_PROJECTS OR
   include(cmake/IlhaPlatformData.cmake)
 endif()
 
+add_subdirectory(lv/device)
+
 lv_register_project_lua_roots(${ENABLE_PROJECTS})
 
 function(formosa_install_target TARGET)

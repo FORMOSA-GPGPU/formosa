@@ -20,26 +20,31 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -E env
   "${PLIC_TEST_LUA}" "${CMAKE_CURRENT_SOURCE_DIR}/generate.lua" "${IMAGE_DIR}"
   COMMAND_ERROR_IS_FATAL ANY)
 
-set(DRIVER_ROOT "${formosa_SOURCE_DIR}/lv/drivers")
-set(IMAGE "${IMAGE_DIR}/rv64.elf")
+# Keep the guest compiler local to this directory, as in the other CPU tests.
+enable_language(ASM)
+apple_cross_cc_shim(CMAKE_C_COMPILER "${CLANG}")
+set(CMAKE_ASM_COMPILER "${CMAKE_C_COMPILER}")
+# Host instrumentation and linker flags do not apply to this freestanding guest.
+set(CMAKE_C_FLAGS "")
+set(CMAKE_ASM_FLAGS "")
+set(CMAKE_EXE_LINKER_FLAGS "")
 
-# Explicit cross compilation keeps the driver and program on the same ISA/ABI,
-# independent of the host compiler used for the simulation executable.
-add_custom_command(OUTPUT "${IMAGE}"
-  COMMAND "${CLANG}" --target=riscv64 -march=rv64im_zicsr -mabi=lp64
-    -mcmodel=medany -O2 -g -ffreestanding -fno-builtin -fno-stack-protector
-    -ffunction-sections -fdata-sections -Wall -Wextra -Werror
-    -I "${DRIVER_ROOT}/include" -I "${IMAGE_DIR}"
-    "${CMAKE_CURRENT_SOURCE_DIR}/start.S"
-    "${CMAKE_CURRENT_SOURCE_DIR}/program.c" "${DRIVER_ROOT}/src/plic.c"
-    -fuse-ld=lld -nostdlib -static -Wl,--gc-sections
-    -T "${IMAGE_DIR}/linker.ld" -o "${IMAGE}"
-  DEPENDS start.S program.c "${DRIVER_ROOT}/src/plic.c"
-    "${DRIVER_ROOT}/include/plic.h"
-    "${IMAGE_DIR}/platform.h" "${IMAGE_DIR}/linker.ld"
-  VERBATIM)
+set(RISCV_ARCH_FLAGS --target=riscv64 -march=rv64im_zicsr -mabi=lp64
+  -mcmodel=medany)
+add_executable(plic-rv64.elf start.S program.c)
+target_link_libraries(plic-rv64.elf PRIVATE lv::device)
+target_include_directories(plic-rv64.elf PRIVATE "${IMAGE_DIR}")
+target_compile_options(plic-rv64.elf PRIVATE
+  ${RISCV_ARCH_FLAGS} -O2 -g -ffreestanding -fno-builtin -fno-stack-protector
+  -ffunction-sections -fdata-sections -Wall -Wextra -Werror)
+target_link_options(plic-rv64.elf PRIVATE
+  ${RISCV_ARCH_FLAGS} -fuse-ld=lld -nostdlib -static -Wl,--gc-sections
+  -T "${IMAGE_DIR}/linker.ld")
+set_target_properties(plic-rv64.elf PROPERTIES
+  OUTPUT_NAME rv64 SUFFIX ".elf"
+  RUNTIME_OUTPUT_DIRECTORY "${IMAGE_DIR}"
+  LINK_DEPENDS "${IMAGE_DIR}/linker.ld")
 
-add_custom_target(plic-rv64.elf ALL DEPENDS "${IMAGE}")
 add_lv_test_script(plic.cp.command_processor run.lua
   LABELS plic integration cp.command_processor)
 set_tests_properties(plic.cp.command_processor PROPERTIES TIMEOUT 30)

@@ -8,6 +8,7 @@
 
 #include <liblv/common/tlm_sink.h>
 #include <liblv/common/tlm_source.h>
+#include <lv/mmio/dma/dma.h>
 #include <tlm.h>
 #include <tlm_utils/simple_initiator_socket.h>
 #include <tlm_utils/simple_target_socket.h>
@@ -42,11 +43,11 @@ class DMA : public sc_core::sc_module {
 
  private:
   enum class Status : uint64_t {
-    kIdle = 0,
-    kBusy = 1,
-    kDone = 2,
-    kBusError = 3,
-    kInvalidDescriptor = 4,
+    kIdle = LV_DMA_STATUS_IDLE,
+    kBusy = LV_DMA_STATUS_BUSY,
+    kDone = LV_DMA_STATUS_DONE,
+    kBusError = LV_DMA_STATUS_BUS_ERROR,
+    kInvalidDescriptor = LV_DMA_STATUS_INVALID_DESCRIPTOR,
   };
 
   void mmio_proc();

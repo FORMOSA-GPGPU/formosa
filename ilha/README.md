@@ -151,7 +151,8 @@ those complete compositions require the ILHA plugin to be linked.
 
 ## Keep software and hardware consistent
 
-[`lua/addr_map.lua`](lua/addr_map.lua) is the fixed address-map ABI SSOT.
+[`lua/addr_map.lua`](lua/addr_map.lua) owns the fixed platform address map and
+platform ABI. Component register contracts live in LV's shared C headers.
 CMake invokes two xmake Lua backends, including for HAL/firmware-only builds:
 
 ```text
@@ -178,5 +179,10 @@ length is `0x40`; each field is read individually as an unsigned 64-bit
 little-endian value using generated offsets. HAL validates version and length
 on connection; there is no hardware-configuration environment dump.
 
-DMA offsets and status values currently shadow LV's component-owned contract
-until a generic MMIO header-generation workflow is available (issue #41).
+DMA offsets/status and CLINT offsets come from the headers under
+`lv/device/include/lv/mmio/`. Software driver APIs live separately under
+`lv/device/include/lv/drivers/`.
+`formosa_addr_map.h` includes these contracts and retains the `FSA_DMA_*` and
+`FSA_CLINT_*` compatibility names. The software-only CMake path stages copies
+of the maintained headers next to the generated platform data and tracks their
+changes; HAL/firmware builds need no LV executable or SystemC dependency.

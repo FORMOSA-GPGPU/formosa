@@ -76,7 +76,9 @@ cpu.timer_int(gnd)
 
 print("Start simulation")
 trace.event_instant(tb, "tb", "Start simulation")
-sc.start(8 * 1024 * period)
+-- Allow the unoptimized guest to finish its shared-driver calls. CTest also
+-- requires the final "[CP] End" line, so a truncated run cannot pass silently.
+sc.start(16 * 1024 * period)
 trace.event_instant(tb, "tb", "End sim")
 
 print("End sim")

@@ -12,6 +12,21 @@ endif()
 
 set(ILHA_GENERATED_DIR "${CMAKE_BINARY_DIR}/generated/ilha" CACHE PATH
     "Build directory for Ilha-generated software platform data")
+# Make the standalone C headers available through the platform include
+# directory even when LV and SystemC are not enabled. configure_file tracks
+# changes to the maintained headers and refreshes these build-tree copies.
+foreach(_header
+    lv/mmio/simple/clint.h
+    lv/mmio/dma/dma.h
+    lv/mmio/simple/pfreader.h
+    lv/mmio/simple/plic.h
+    lv/drivers/simple/pfreader.h
+    lv/drivers/simple/plic.h)
+  configure_file(
+    "${formosa_SOURCE_DIR}/lv/device/include/${_header}"
+    "${ILHA_GENERATED_DIR}/${_header}" COPYONLY)
+endforeach()
+
 set(ILHA_ADDR_MAP_HEADER "${ILHA_GENERATED_DIR}/formosa_addr_map.h")
 set(ILHA_MEMORY_LINKER_SCRIPT "${ILHA_GENERATED_DIR}/ilha_memory.ld")
 

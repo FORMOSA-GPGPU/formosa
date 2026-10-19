@@ -74,6 +74,7 @@ macro(add_freertos_program target_name)
       ${RISCV_ARCH_FLAGS}
       -ffreestanding
   )
+  target_link_libraries(${target_name}_freertos PUBLIC lv::device)
   target_link_libraries(${target_name} PRIVATE ${target_name}_freertos)
 endmacro()
 

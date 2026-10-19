@@ -7,6 +7,7 @@
 #include <liblv/binding.h>
 #include <liblv/mm/pool.h>
 #include <liblv/schema.h>
+#include <lv/mmio/dma/dma.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -18,11 +19,11 @@ namespace dma {
 
 namespace {
 
-constexpr uint64_t kStartOffset = 0x00;
-constexpr uint64_t kAddr0Offset = 0x08;
-constexpr uint64_t kAddr1Offset = 0x10;
-constexpr uint64_t kSizeOffset = 0x18;
-constexpr uint64_t kStatusOffset = 0x20;
+constexpr uint64_t kStartOffset = LV_DMA_OFF_START;
+constexpr uint64_t kAddr0Offset = LV_DMA_OFF_ADDR0;
+constexpr uint64_t kAddr1Offset = LV_DMA_OFF_ADDR1;
+constexpr uint64_t kSizeOffset = LV_DMA_OFF_SIZE;
+constexpr uint64_t kStatusOffset = LV_DMA_OFF_STATUS;
 
 struct Param {
   int fifo_size = 16;
@@ -50,7 +51,8 @@ void DMA::mmio_proc() {
     const auto addr = trans->get_address();
     auto *data_ptr = reinterpret_cast<uint64_t *>(trans->get_data_ptr());
 
-    if (data_ptr == nullptr || trans->get_data_length() != sizeof(uint64_t)) {
+    if (data_ptr == nullptr ||
+        trans->get_data_length() != LV_DMA_REGISTER_BYTES) {
       trans->set_response_status(tlm::TLM_BURST_ERROR_RESPONSE);
       slave_.resp_port->write(trans);
       continue;

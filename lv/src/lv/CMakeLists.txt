@@ -53,12 +53,29 @@ add_library(${TARGET_OBJ} OBJECT
 )
 
 find_package(verilator CONFIG REQUIRED)
+# The RTL consumes the same maintained C register offsets as the native model
+# and software. This local adapter only passes the two numeric RTL parameters.
+set(_clint_header "${formosa_SOURCE_DIR}/lv/device/include/lv/mmio/simple/clint.h")
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_clint_header}")
+set(_clint_rtl_args "")
+foreach(_register MTIMECMP MTIME)
+  file(STRINGS "${_clint_header}" _definition
+    REGEX "^#define LV_CLINT_${_register}_OFFSET 0x[0-9A-Fa-f]+$")
+  if(NOT _definition)
+    message(FATAL_ERROR "Missing numeric LV_CLINT_${_register}_OFFSET")
+  endif()
+  string(REGEX REPLACE ".* (0x[0-9A-Fa-f]+)$" "\\1" _offset "${_definition}")
+  list(APPEND _clint_rtl_args "-G${_register}_OFFSET=${_offset}")
+endforeach()
 verilate(${TARGET_OBJ}
   SOURCES "${formosa_SOURCE_DIR}/lv/src/lv/bindings/simple/vclint.sv"
   PREFIX Vvclint
   TOP_MODULE vclint
   OPT_GLOBAL -DVL_TIME_STAMP64
+  VERILATOR_ARGS ${_clint_rtl_args}
 )
+
+target_link_libraries(${TARGET_OBJ} PRIVATE lv::device)
 
 # C++ 17 is required
 target_compile_features(${TARGET_OBJ}

@@ -38,7 +38,7 @@
 local function make_lv_binding_component(name)
   return {
     paths = { "lv/src/lv/bindings/" .. name .. "/**" },
-    depends = { "lv.liblv", "lv.bindings.build" },
+    depends = { "lv.liblv", "lv.bindings.build", "lv.device" },
   }
 end
 
@@ -151,6 +151,9 @@ local config = {
       },
       depends = { "repo.cmake", "repo.environment" },
     },
+    ["lv.device"] = {
+      paths = { "lv/device/**" },
+    },
     ["lv.liblv"] = {
       paths = {
         "lv/include/liblv/**",
@@ -193,6 +196,7 @@ local config = {
     ["lv.tests.unit"] = {
       paths = { "lv/tests/**" },
       depends = {
+        "lv.device",
         "lv.executable",
         "lv.bindings.log",
         "lv.bindings.cp",
@@ -345,17 +349,11 @@ local config = {
       },
       depends = { "tests.cp.common", "lv.bindings.cp" },
     },
-    ["lv.drivers.plic"] = {
-      paths = {
-        "lv/drivers/include/plic.h",
-        "lv/drivers/src/plic.c",
-      },
-    },
     ["tests.plic"] = {
       paths = {
         "tests/plic/**",
       },
-      depends = { "tests.cp.command_processor", "lv.drivers.plic" },
+      depends = { "tests.cp.command_processor", "lv.device" },
     },
     ["libcomm"] = {
       paths = {
@@ -387,7 +385,7 @@ local config = {
         "fw/rom/**",
         "fw/tinyprintf/**",
       },
-      depends = { "repo.cmake", "repo.environment" },
+      depends = { "repo.cmake", "repo.environment", "lv.device" },
     },
     ["fw.tests"] = {
       paths = { "fw/tests/**" },
@@ -415,7 +413,7 @@ local config = {
     },
     ["tests.pfreader"] = {
       paths = { "tests/pfreader/**" },
-      depends = { "lv.executable", "lv.bindings.workload" },
+      depends = { "lv.executable", "lv.bindings.workload", "lv.device" },
     },
     ["formosa-llvm"] = {
       paths = { "formosa-llvm/**" },

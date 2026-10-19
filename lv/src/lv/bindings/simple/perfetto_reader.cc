@@ -6,6 +6,7 @@
 
 #include <liblv/binding.h>
 #include <liblv/output.h>
+#include <lv/mmio/simple/pfreader.h>
 
 #include <memory>
 #include <string>
@@ -39,7 +40,7 @@ void PerfettoReader::monitor_proc() {
   while (true) {
     auto *trans = slave_.req_port->read();
     auto cmd = trans->get_command();
-    auto addr = trans->get_address() / 8;
+    auto addr = trans->get_address() / LV_PFREADER_TRACK_STRIDE;
     auto *data_ptr = reinterpret_cast<int *>(trans->get_data_ptr());
 
     if (cmd == tlm::TLM_READ_COMMAND) {
@@ -56,7 +57,7 @@ void PerfettoReader::monitor_proc() {
     auto &track = tracks_[addr];
     switch (track.first.pf_type) {
       case PfTrack::PR_SLICE:
-        if (*data_ptr >= 0) {
+        if (*data_ptr > LV_PFREADER_SLICE_END) {
           if (static_cast<size_t>(*data_ptr) >=
               track.first.content_name.size()) {
             LV_FATAL(

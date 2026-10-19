@@ -1,6 +1,8 @@
 #ifndef RISCV_VIRT_H_
 #define RISCV_VIRT_H_
 
+#include <lv/mmio/simple/clint.h>
+
 #ifdef __ASSEMBLER__
 #define CONS(NUM, TYPE) NUM
 #else
@@ -10,8 +12,8 @@
 #define PRIM_HART 0
 
 #define CLINT_ADDR CONS(0x02000000, UL)
-#define CLINT_MSIP CONS(0x0000, UL)
-#define CLINT_MTIMECMP CONS(0x4000, UL)
-#define CLINT_MTIME CONS(0xbff8, UL)
+#define CLINT_MSIP LV_CLINT_MSIP_OFFSET
+#define CLINT_MTIMECMP LV_CLINT_MTIMECMP_OFFSET
+#define CLINT_MTIME LV_CLINT_MTIME_OFFSET
 
 #endif /* RISCV_VIRT_H_ */

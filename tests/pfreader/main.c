@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-#include "pfreader_util.h"
+#include <lv/drivers/simple/pfreader.h>
 
 extern uint64_t _pfreader_base;
 void serial_putchar(char c);
@@ -18,17 +18,17 @@ void print_string(char *s) {
 
 int main() {
   print_string("[CP] Start\n");
-  pr_init((int64_t *)&_pfreader_base);
-  pr_slice_begin(0, 0);
+  const uintptr_t base = (uintptr_t)&_pfreader_base;
+  pfreader_slice_begin(base, 0, 0);
   for (int i = 0; i < 10; i++) {
     if (i == 3) {
-      pr_slice_end(0);
-      pr_slice_begin(0, 1);
+      pfreader_slice_end(base, 0);
+      pfreader_slice_begin(base, 0, 1);
     }
-    pr_instant(1, i % 2);
-    pr_counter(2, i);
+    pfreader_instant(base, 1, i % 2);
+    pfreader_counter(base, 2, i);
   }
-  pr_slice_end(0);
+  pfreader_slice_end(base, 0);
   print_string("[CP] End\n");
   return 0;
 }

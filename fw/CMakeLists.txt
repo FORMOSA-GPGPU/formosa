@@ -72,6 +72,7 @@ target_include_directories(gpufw.elf PRIVATE
 )
 add_dependencies(gpufw.elf ilha-platform-data)
 target_link_libraries(gpufw.elf PRIVATE
+  lv::device
   nnlc
 )
 

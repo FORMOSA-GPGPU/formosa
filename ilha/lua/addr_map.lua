@@ -27,9 +27,6 @@ local AddressMap = {
   -- CLINT (SiFive layout inside 64 KiB window; on fab_agent)
   clint_base = 0x00050000,
   clint_size = 0x00010000,
-  clint_msip_off = 0x0,
-  clint_mtimecmp_off = 0x4000,
-  clint_mtime_off = 0xBFF8,
 
   -- Host/Agent MMIO aperture (scratch SRAM; HAL fsa_mmio_base)
   fsa_mmio_base = 0x00060000,
@@ -76,18 +73,6 @@ local AddressMap = {
   cp_off_fw_abi_version = 0x148,
   cp_off_fw_boot_generation = 0x150,
   cp_off_fw_fault_code = 0x158,
-
-  -- Temporary shadow of LV's generic DMA register contract (issue #41).
-  dma_off_start = 0x00,
-  dma_off_addr0 = 0x08,
-  dma_off_addr1 = 0x10,
-  dma_off_size = 0x18,
-  dma_off_status = 0x20,
-  dma_status_idle = 0,
-  dma_status_busy = 1,
-  dma_status_done = 2,
-  dma_status_bus_error = 3,
-  dma_status_invalid_descriptor = 4,
 
   -- SM MMIO
   sm_mmio_base = 0x00070000,

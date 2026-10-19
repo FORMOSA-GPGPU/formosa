@@ -1,7 +1,7 @@
 /* SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
  * SPDX-License-Identifier: Apache-2.0 */
 
-#include <plic.h>
+#include <lv/drivers/simple/plic.h>
 #include <stdint.h>
 
 #include "platform.h"

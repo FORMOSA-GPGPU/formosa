@@ -6,20 +6,18 @@
 
 #include "cp_trace.h"
 
-#include <stdint.h>
+#include <lv/drivers/simple/pfreader.h>
 
 void cp_trace_slice_begin(int which, int val) {
-  ((volatile int64_t *)PFREADER_BASE)[which] = val;
+  pfreader_slice_begin(PFREADER_BASE, which, val);
 }
 
-void cp_trace_slice_end(int which) {
-  ((volatile int64_t *)PFREADER_BASE)[which] = -1;
-}
+void cp_trace_slice_end(int which) { pfreader_slice_end(PFREADER_BASE, which); }
 
 void cp_trace_instant(int which, int val) {
-  ((volatile int64_t *)PFREADER_BASE)[which] = val;
+  pfreader_instant(PFREADER_BASE, which, val);
 }
 
 void cp_trace_counter(int which, int val) {
-  ((volatile int64_t *)PFREADER_BASE)[which] = val;
+  pfreader_counter(PFREADER_BASE, which, val);
 }
