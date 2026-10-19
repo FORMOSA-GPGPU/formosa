@@ -103,12 +103,6 @@ int fsa_hal_reset(uint64_t timeout_ms);
  */
 int fsa_hal_cleanup();
 
-typedef struct {
-  uint64_t mcause;
-  uint64_t mepc;
-  uint64_t mtval;
-} KernelStatus;
-
 #ifdef __cplusplus
 }
 #endif

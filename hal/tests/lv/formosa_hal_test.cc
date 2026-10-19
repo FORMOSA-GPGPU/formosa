@@ -33,10 +33,10 @@ FsaCommandSubmitStatus submit_h2d(const void *host, uint64_t dest,
                                   uint64_t size, FsaCompletionToken *token) {
   FsaMemoryCopyInfo info{};
   info.struct_size = sizeof(info);
-  info.source.domain = kMemoryDomainHost;
+  info.source.domain = kFsaMemoryDomainHost;
   info.source.range.address = reinterpret_cast<uintptr_t>(host);
   info.source.range.size = size;
-  info.destination.domain = kMemoryDomainDevice;
+  info.destination.domain = kFsaMemoryDomainDevice;
   info.destination.range.address = dest;
   info.destination.range.size = size;
   return fsa_cmd_memory_copy(&info, token);
@@ -217,9 +217,9 @@ void test_semantic_descriptor_validation() {
 
   FsaMemoryCopyInfo copy{};
   copy.struct_size = sizeof(copy) + 1;
-  copy.source.domain = kMemoryDomainHost;
+  copy.source.domain = kFsaMemoryDomainHost;
   copy.source.range.size = 4;
-  copy.destination.domain = kMemoryDomainDevice;
+  copy.destination.domain = kFsaMemoryDomainDevice;
   copy.destination.range.size = 4;
   token = 0xdead;
   if (fsa_cmd_memory_copy(&copy, &token) != kFsaCommandSubmitInvalidArgument ||
@@ -304,10 +304,10 @@ void test_fsa_generation_and_faults() {
           FSA_COMPLETION_SLOT_BYTES;
   test_return(
       fsa_real_copy_to_scratchpad(pending_address, &pending, sizeof(pending)));
-  test_return(fsa_real_mmio(FSA_CP_OFF_FW_FAULT_CODE, kFirmwareFaultDmaProtocol,
-                            nullptr));
+  test_return(fsa_real_mmio(FSA_CP_OFF_FW_FAULT_CODE,
+                            kFsaFirmwareFaultDmaProtocol, nullptr));
   test_return(
-      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFirmwareStatusFault, nullptr));
+      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFsaFirmwareStatusFault, nullptr));
 
   result = FSA_COMPLETION_RESULT_PENDING;
   status = fsa_poll_completion(fault_completion, &result);
@@ -321,9 +321,9 @@ void test_fsa_generation_and_faults() {
   }
 
   test_return(
-      fsa_real_mmio(FSA_CP_OFF_FW_FAULT_CODE, kFirmwareFaultNone, nullptr));
+      fsa_real_mmio(FSA_CP_OFF_FW_FAULT_CODE, kFsaFirmwareFaultNone, nullptr));
   test_return(
-      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFirmwareStatusReady, nullptr));
+      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFsaFirmwareStatusReady, nullptr));
   test_return(fsa_hal_reset(100));
   result = FSA_COMPLETION_RESULT_PENDING;
   status = fsa_poll_completion(fault_completion, &result);
@@ -417,7 +417,7 @@ void test_fsa_reboot_failure_is_fail_stop() {
       fsa_real_copy_to_scratchpad(pending_address, &pending, sizeof(pending)));
 
   test_return(
-      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFirmwareStatusBooting, nullptr));
+      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFsaFirmwareStatusBooting, nullptr));
   if (fsa_hal_reset(1) == 0) {
     std::cerr << "[FORMOSA HAL Test] Expected reboot timeout" << std::endl;
     exit(-1);
@@ -432,7 +432,7 @@ void test_fsa_reboot_failure_is_fail_stop() {
   }
 
   test_return(
-      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFirmwareStatusReady, nullptr));
+      fsa_real_mmio(FSA_CP_OFF_FW_STATUS, kFsaFirmwareStatusReady, nullptr));
   if (fsa_hal_reset(100) == 0 || fsa_hal_is_available()) {
     std::cerr << "[FORMOSA HAL Test] Failed reboot did not latch fail-stop"
               << std::endl;

@@ -30,11 +30,11 @@ static FsaCompletionResult to_kernel_completion_result(uint64_t deq_status) {
     case 0:
       return FSA_COMPLETION_RESULT_SUCCESS;
     case 1:
-      return kKernelCompletionException;
+      return kFsaKernelCompletionException;
     case 2:
-      return kKernelCompletionBadDimension;
+      return kFsaKernelCompletionBadDimension;
     default:
-      return kKernelCompletionUnknownError;
+      return kFsaKernelCompletionUnknownError;
   }
 }
 
@@ -166,7 +166,7 @@ void cp_retire_sm(void *args) {
 
     const FsaCompletionResult result =
         to_kernel_completion_result(sm->DEQ_STATUS);
-    KernelStatus kstatus = {
+    FsaKernelStatus kstatus = {
         .mcause = sm->DEQ_MCAUSE,
         .mepc = sm->DEQ_MEPC,
         .mtval = sm->DEQ_MTVAL,

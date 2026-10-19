@@ -117,22 +117,22 @@ static bool start_cache_operation(uint64_t address, uint64_t size,
 }
 
 static bool uses_device_source(void) {
-  return memory_copy_state.src_domain == kMemoryDomainDevice;
+  return memory_copy_state.src_domain == kFsaMemoryDomainDevice;
 }
 
 static bool uses_device_destination(void) {
-  return memory_copy_state.dst_domain == kMemoryDomainDevice;
+  return memory_copy_state.dst_domain == kFsaMemoryDomainDevice;
 }
 
-static bool valid_memory_copy_domain_pair(MemoryDomain src_domain,
-                                          MemoryDomain dst_domain) {
+static bool valid_memory_copy_domain_pair(FsaMemoryDomain src_domain,
+                                          FsaMemoryDomain dst_domain) {
   /* Runtime memory copies support H2D, D2H, and D2D.  H2H is intentionally
    * invalid because Host DMA is only the host/device transport interface. */
-  return (src_domain == kMemoryDomainHost &&
-          dst_domain == kMemoryDomainDevice) ||
-         (src_domain == kMemoryDomainDevice &&
-          (dst_domain == kMemoryDomainHost ||
-           dst_domain == kMemoryDomainDevice));
+  return (src_domain == kFsaMemoryDomainHost &&
+          dst_domain == kFsaMemoryDomainDevice) ||
+         (src_domain == kFsaMemoryDomainDevice &&
+          (dst_domain == kFsaMemoryDomainHost ||
+           dst_domain == kFsaMemoryDomainDevice));
 }
 
 static void start_device_dma(void) {
@@ -146,7 +146,8 @@ static void start_device_dma(void) {
 
 static void start_host_dma(void) {
   volatile struct dma_mmio *host_dma = host_dma_mmio();
-  const bool host_to_device = memory_copy_state.src_domain == kMemoryDomainHost;
+  const bool host_to_device =
+      memory_copy_state.src_domain == kFsaMemoryDomainHost;
   const uint64_t host_addr =
       host_to_device ? memory_copy_state.src_addr : memory_copy_state.dst_addr;
   const uint64_t device_addr =
@@ -182,32 +183,33 @@ void cp_memory_copy_submit(const MemoryCopyPacket *packet) {
 
   if (cp_memory_copy_is_active()) {
     cp_publish_completion(packet->completion_token,
-                          kMemoryCopyStatusInternalError);
+                          kFsaMemoryCopyStatusInternalError);
     return;
   }
 
   if (!cp_firmware_is_ready() ||
       fsa_completion_token_boot_generation(packet->completion_token) !=
           (uint16_t)cp_firmware_boot_generation()) {
-    cp_publish_completion(packet->completion_token, kMemoryCopyStatusNotReady);
+    cp_publish_completion(packet->completion_token,
+                          kFsaMemoryCopyStatusNotReady);
     return;
   }
 
-  const MemoryDomain src_domain = (MemoryDomain)packet->src_domain;
-  const MemoryDomain dst_domain = (MemoryDomain)packet->dst_domain;
+  const FsaMemoryDomain src_domain = (FsaMemoryDomain)packet->src_domain;
+  const FsaMemoryDomain dst_domain = (FsaMemoryDomain)packet->dst_domain;
   if (!valid_memory_copy_domain_pair(src_domain, dst_domain)) {
     cp_publish_completion(packet->completion_token,
-                          kMemoryCopyStatusInvalidDomainPair);
+                          kFsaMemoryCopyStatusInvalidDomainPair);
     return;
   }
-  const bool src_is_device = src_domain == kMemoryDomainDevice;
-  const bool dst_is_device = dst_domain == kMemoryDomainDevice;
+  const bool src_is_device = src_domain == kFsaMemoryDomainDevice;
+  const bool dst_is_device = dst_domain == kFsaMemoryDomainDevice;
 
   const bool size_is_zero = packet->size == 0;
   const bool host_address_valid =
       size_is_zero ||
-      ((src_domain == kMemoryDomainHost ? packet->src_addr
-                                        : packet->dst_addr) != 0);
+      ((src_domain == kFsaMemoryDomainHost ? packet->src_addr
+                                           : packet->dst_addr) != 0);
   const bool device_address_valid =
       size_is_zero ||
       (!src_is_device || valid_memory_range(packet->src_addr, packet->size)) &&
@@ -221,9 +223,10 @@ void cp_memory_copy_submit(const MemoryCopyPacket *packet) {
       ranges_overlap(packet->src_addr, packet->dst_addr, packet->size);
   if (!address_valid || overlap) {
     const uint64_t result =
-        !address_valid ? (!host_address_valid ? kMemoryCopyStatusInvalidAddress
-                                              : kMemoryCopyStatusInvalidRange)
-                       : kMemoryCopyStatusOverlap;
+        !address_valid
+            ? (!host_address_valid ? kFsaMemoryCopyStatusInvalidAddress
+                                   : kFsaMemoryCopyStatusInvalidRange)
+            : kFsaMemoryCopyStatusOverlap;
     cp_publish_completion(packet->completion_token, result);
     return;
   }
@@ -248,8 +251,8 @@ void cp_memory_copy_task(void *args) {
     }
 
     if (phase_timed_out()) {
-      cp_firmware_status_fault(kFirmwareFaultMemoryCopyTimeout);
-      fail_memory_copy(kMemoryCopyStatusTimeout);
+      cp_firmware_status_fault(kFsaFirmwareFaultMemoryCopyTimeout);
+      fail_memory_copy(kFsaMemoryCopyStatusTimeout);
       continue;
     }
 
@@ -328,9 +331,9 @@ void cp_memory_copy_task(void *args) {
             taskYIELD();
           }
         } else if (transfer_status == kDmaStatusBusError) {
-          complete_memory_copy(kMemoryCopyStatusDmaBusError);
+          complete_memory_copy(kFsaMemoryCopyStatusDmaBusError);
         } else if (transfer_status == kDmaStatusInvalidDescriptor) {
-          complete_memory_copy(kMemoryCopyStatusInvalidRange);
+          complete_memory_copy(kFsaMemoryCopyStatusInvalidRange);
         } else {
           taskYIELD();
         }

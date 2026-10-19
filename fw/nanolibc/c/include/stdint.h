@@ -1,3 +1,4 @@
+// Modified 2026 by CASLab, National Cheng Kung University.
 //  Copyright 2022 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,11 +20,11 @@
 
 #define INT8_C(v) ((int8_t)v)
 #define INT16_C(v) ((int16_t)v)
-#define INT32_C(v) (v##L)
+#define INT32_C(v) (v)
 #define INT64_C(v) (v##LL)
 #define UINT8_C(v) ((uint8_t)v)
 #define UINT16_C(v) ((uint16_t)v)
-#define UINT32_C(v) (v##UL)
+#define UINT32_C(v) (v##U)
 #define UINT64_C(v) (v##ULL)
 #define SIZET_C(v) ((size_t)v)
 

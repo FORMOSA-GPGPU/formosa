@@ -377,11 +377,11 @@ int ensure_rom_reset_state(uint64_t deadline_ms) {
   CHECK_ERR(fsa_real_time_ns(&start_ns));
   bool msip_sent = false;
   while (true) {
-    uint64_t status = kFirmwareStatusBooting;
+    uint64_t status = kFsaFirmwareStatusBooting;
     CHECK_ERR(real_mmio(FSA_CP_OFF_FW_STATUS, 0, &status));
-    if (status == kFirmwareStatusReset) return 0;
-    if (!msip_sent &&
-        (status == kFirmwareStatusReady || status == kFirmwareStatusFault)) {
+    if (status == kFsaFirmwareStatusReset) return 0;
+    if (!msip_sent && (status == kFsaFirmwareStatusReady ||
+                       status == kFsaFirmwareStatusFault)) {
       CHECK_ERR(real_cp_reset());
       msip_sent = true;
     }
@@ -403,13 +403,13 @@ FsaCommandSubmitStatus send_cache_operation_cmd(
   });
 }
 
-static bool valid_memory_domain(MemoryDomain domain) {
-  return domain == kMemoryDomainHost || domain == kMemoryDomainDevice;
+static bool valid_memory_domain(FsaMemoryDomain domain) {
+  return domain == kFsaMemoryDomainHost || domain == kFsaMemoryDomainDevice;
 }
 
-FsaCommandSubmitStatus send_memory_copy_cmd(MemoryDomain src_domain,
+FsaCommandSubmitStatus send_memory_copy_cmd(FsaMemoryDomain src_domain,
                                             uint64_t src_addr,
-                                            MemoryDomain dst_domain,
+                                            FsaMemoryDomain dst_domain,
                                             uint64_t dst_addr, uint64_t size,
                                             FsaCompletionToken *completion) {
   return submit_command(completion, [=](Packet &packet) {
@@ -440,10 +440,10 @@ int fsa_copy_to_dev(uintptr_t dev_addr, const void *host_ptr, size_t size) {
   FsaCompletionToken completion = 0;
   FsaMemoryCopyInfo info{};
   info.struct_size = sizeof(info);
-  info.source.domain = kMemoryDomainHost;
+  info.source.domain = kFsaMemoryDomainHost;
   info.source.range.address = reinterpret_cast<uintptr_t>(host_ptr);
   info.source.range.size = size;
-  info.destination.domain = kMemoryDomainDevice;
+  info.destination.domain = kFsaMemoryDomainDevice;
   info.destination.range.address = dev_addr;
   info.destination.range.size = size;
   if (fsa_cmd_memory_copy(&info, &completion) != kFsaCommandSubmitAccepted) {
@@ -458,10 +458,10 @@ int fsa_copy_from_dev(uintptr_t dev_addr, void *host_ptr, size_t size) {
   FsaCompletionToken completion = 0;
   FsaMemoryCopyInfo info{};
   info.struct_size = sizeof(info);
-  info.source.domain = kMemoryDomainDevice;
+  info.source.domain = kFsaMemoryDomainDevice;
   info.source.range.address = dev_addr;
   info.source.range.size = size;
-  info.destination.domain = kMemoryDomainHost;
+  info.destination.domain = kFsaMemoryDomainHost;
   info.destination.range.address = reinterpret_cast<uintptr_t>(host_ptr);
   info.destination.range.size = size;
   if (fsa_cmd_memory_copy(&info, &completion) != kFsaCommandSubmitAccepted) {
@@ -490,11 +490,11 @@ static int upload_firmware(const void *fw_ptr, size_t fw_size) {
     uint64_t remaining = 1;
     CHECK_ERR(real_mmio(FSA_CP_OFF_FW_SIZE, 0, &remaining));
     if (remaining == 0) break;
-    uint64_t status = kFirmwareStatusReset;
-    uint64_t fault = kFirmwareFaultNone;
+    uint64_t status = kFsaFirmwareStatusReset;
+    uint64_t fault = kFsaFirmwareFaultNone;
     CHECK_ERR(real_mmio(FSA_CP_OFF_FW_STATUS, 0, &status));
     CHECK_ERR(real_mmio(FSA_CP_OFF_FW_FAULT_CODE, 0, &fault));
-    if (status == kFirmwareStatusFault) return -1;
+    if (status == kFsaFirmwareStatusFault) return -1;
     uint64_t now_ns;
     CHECK_ERR(fsa_real_poll_backoff(&now_ns));
     if ((now_ns - start_ns) / 1000000 >= 5000) return -1;
@@ -782,10 +782,10 @@ static FirmwareReadyResult wait_for_firmware_ready(
   if (!reset_start_ns && fsa_real_time_ns(&start_ns) != 0)
     return kFirmwareReadyResultTransportError;
   while (true) {
-    uint64_t status = kFirmwareStatusReset;
+    uint64_t status = kFsaFirmwareStatusReset;
     uint64_t abi = 0;
     uint64_t generation = 0;
-    uint64_t fault = kFirmwareFaultNone;
+    uint64_t fault = kFsaFirmwareFaultNone;
     if (real_mmio(FSA_CP_OFF_FW_STATUS, 0, &status) != 0 ||
         real_mmio(FSA_CP_OFF_FW_ABI_VERSION, 0, &abi) != 0 ||
         real_mmio(FSA_CP_OFF_FW_BOOT_GENERATION, 0, &generation) != 0 ||
@@ -793,9 +793,9 @@ static FirmwareReadyResult wait_for_firmware_ready(
       return kFirmwareReadyResultTransportError;
     if (transport_failed.load(std::memory_order_acquire))
       return kFirmwareReadyResultTransportError;
-    if (status == kFirmwareStatusFault) return kFirmwareReadyResultFault;
-    if (status == kFirmwareStatusReady) {
-      if (abi != FSA_COMMAND_ABI_VERSION_V3 || fault != kFirmwareFaultNone)
+    if (status == kFsaFirmwareStatusFault) return kFirmwareReadyResultFault;
+    if (status == kFsaFirmwareStatusReady) {
+      if (abi != FSA_COMMAND_ABI_VERSION_V3 || fault != kFsaFirmwareFaultNone)
         return kFirmwareReadyResultFault;
       /* Ignore the previous READY handshake while reset is in progress. */
       if (generation != 0 && generation != boot_generation_before_reset) {

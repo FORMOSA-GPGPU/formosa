@@ -40,7 +40,7 @@ static int wait_for_stack_remap_slot(volatile struct sm_mmio *sm,
 
 static void signal_kernel_failure(KernelDispatchPacket *packet,
                                   FsaCompletionResult result) {
-  KernelStatus status = {
+  FsaKernelStatus status = {
       .mcause = 0,
       .mepc = 0,
       .mtval = 0,
@@ -125,7 +125,7 @@ static bool sm_alloc(uint64_t local_mem_size, volatile struct sm_mmio **smp,
 
 void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
   if (!valid_kernel_dispatch_packet(packet)) {
-    signal_kernel_failure(packet, kKernelCompletionBadDimension);
+    signal_kernel_failure(packet, kFsaKernelCompletionBadDimension);
     return;
   }
 
@@ -146,7 +146,7 @@ void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
   kernel_state_buf[kid].wg_left = num_x * num_y * num_z;
 
   if (kernel_state_buf[kid].wg_left == 0) {
-    signal_kernel_failure(packet, kKernelCompletionBadDimension);
+    signal_kernel_failure(packet, kFsaKernelCompletionBadDimension);
     cp_kernel_state_buf_free(kid);
     return;
   }
@@ -170,7 +170,7 @@ void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
                        (uint32_t)packet->local_size_z;
   wginfo.trampoline = packet->kernel_trampoline;
   if ((packet->dim_reserved0 & FSA_KERNEL_DISPATCH_HAS_PRINTF_META) != 0) {
-    PoclPrintfLaunchMeta printf_meta;
+    FsaKernelDispatchPrintfMeta printf_meta;
     memcpy(&printf_meta, (const void *)packet->kernarg_address,
            sizeof(printf_meta));
     wginfo.printf_buffer = printf_meta.printf_buffer;

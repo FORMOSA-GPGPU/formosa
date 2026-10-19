@@ -104,11 +104,11 @@ void initialize_mmio_registers() {
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_BASE] =
       0x20000010;  // misaligned base address
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_STATUS] =
-      kFirmwareStatusReset;
+      kFsaFirmwareStatusReset;
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_ABI_VERSION] = 0;
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_BOOT_GENERATION] = 0;
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_FAULT_CODE] =
-      kFirmwareFaultNone;
+      kFsaFirmwareFaultNone;
 }
 
 void store_put_data(uint64_t addr, const uint8_t *data, size_t size) {
@@ -235,7 +235,7 @@ void handle_mmio_message(libcomm::Transceiver *self, const libcomm::Msg &msg) {
       /* Cooperative Firmware Reboot: runtime drains then returns to ROM.
        * HAL waits for Reset before publishing a new Boot Descriptor. */
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_STATUS] =
-          kFirmwareStatusReset;
+          kFsaFirmwareStatusReset;
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_HOST_ADDR] = 0;
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_SIZE] = 0;
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_RD_PTR] = 0;
@@ -254,11 +254,11 @@ void handle_mmio_message(libcomm::Transceiver *self, const libcomm::Msg &msg) {
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_BOOT_GENERATION] =
           next_generation;
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_STATUS] =
-          kFirmwareStatusReady;
+          kFsaFirmwareStatusReady;
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_ABI_VERSION] =
           FSA_COMMAND_ABI_VERSION_V3;
       mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_FW_FAULT_CODE] =
-          kFirmwareFaultNone;
+          kFsaFirmwareFaultNone;
     }
 
     libcomm::Msg resp = libcomm::Msg::Respond(msg);

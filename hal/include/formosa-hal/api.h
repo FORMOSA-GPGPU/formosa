@@ -132,45 +132,45 @@ static inline uint32_t fsa_completion_next_alloc_generation(
 }
 
 typedef enum {
-  kMemoryDomainHost = 1,
-  kMemoryDomainDevice = 2,
-} MemoryDomain;
+  kFsaMemoryDomainHost = 1,
+  kFsaMemoryDomainDevice = 2,
+} FsaMemoryDomain;
 
 /* Memory-copy command failures occupy the shared 16-bit outcome space.  The
  * common Pending, Success, and FirmwareReboot values are named only through
  * FsaCompletionResult. */
 typedef enum {
-  kMemoryCopyStatusInvalidDomainPair = 2,
-  kMemoryCopyStatusInvalidAddress = 3,
-  kMemoryCopyStatusInvalidRange = 4,
-  kMemoryCopyStatusOverlap = 5,
-  kMemoryCopyStatusDmaBusError = 6,
-  kMemoryCopyStatusInternalError = 7,
-  kMemoryCopyStatusNotReady = 8,
-  kMemoryCopyStatusTimeout = 9,
-} MemoryCopyStatus;
+  kFsaMemoryCopyStatusInvalidDomainPair = 2,
+  kFsaMemoryCopyStatusInvalidAddress = 3,
+  kFsaMemoryCopyStatusInvalidRange = 4,
+  kFsaMemoryCopyStatusOverlap = 5,
+  kFsaMemoryCopyStatusDmaBusError = 6,
+  kFsaMemoryCopyStatusInternalError = 7,
+  kFsaMemoryCopyStatusNotReady = 8,
+  kFsaMemoryCopyStatusTimeout = 9,
+} FsaMemoryCopyStatus;
 
 typedef enum {
-  kKernelCompletionBadDimension = 2,
-  kKernelCompletionException = 3,
-  kKernelCompletionUnknownError = 4,
-} KernelCompletionStatus;
+  kFsaKernelCompletionBadDimension = 2,
+  kFsaKernelCompletionException = 3,
+  kFsaKernelCompletionUnknownError = 4,
+} FsaKernelCompletionStatus;
 
 typedef enum {
-  kFirmwareFaultNone = FSA_FIRMWARE_FAULT_NONE,
-  kFirmwareFaultMemoryCopyTimeout = FSA_FIRMWARE_FAULT_MEMORY_COPY_TIMEOUT,
-  kFirmwareFaultDmaProtocol = FSA_FIRMWARE_FAULT_DMA_PROTOCOL,
-  kFirmwareFaultCacheTimeout = FSA_FIRMWARE_FAULT_CACHE_TIMEOUT,
-  kFirmwareFaultBootDescriptor = FSA_FIRMWARE_FAULT_BOOT_DESCRIPTOR,
-  kFirmwareFaultBootDma = FSA_FIRMWARE_FAULT_BOOT_DMA,
-} FirmwareFault;
+  kFsaFirmwareFaultNone = FSA_FIRMWARE_FAULT_NONE,
+  kFsaFirmwareFaultMemoryCopyTimeout = FSA_FIRMWARE_FAULT_MEMORY_COPY_TIMEOUT,
+  kFsaFirmwareFaultDmaProtocol = FSA_FIRMWARE_FAULT_DMA_PROTOCOL,
+  kFsaFirmwareFaultCacheTimeout = FSA_FIRMWARE_FAULT_CACHE_TIMEOUT,
+  kFsaFirmwareFaultBootDescriptor = FSA_FIRMWARE_FAULT_BOOT_DESCRIPTOR,
+  kFsaFirmwareFaultBootDma = FSA_FIRMWARE_FAULT_BOOT_DMA,
+} FsaFirmwareFault;
 
 typedef enum {
-  kFirmwareStatusReset = FSA_FIRMWARE_STATUS_RESET,
-  kFirmwareStatusBooting = FSA_FIRMWARE_STATUS_BOOTING,
-  kFirmwareStatusReady = FSA_FIRMWARE_STATUS_READY,
-  kFirmwareStatusFault = FSA_FIRMWARE_STATUS_FAULT,
-} FirmwareStatus;
+  kFsaFirmwareStatusReset = FSA_FIRMWARE_STATUS_RESET,
+  kFsaFirmwareStatusBooting = FSA_FIRMWARE_STATUS_BOOTING,
+  kFsaFirmwareStatusReady = FSA_FIRMWARE_STATUS_READY,
+  kFsaFirmwareStatusFault = FSA_FIRMWARE_STATUS_FAULT,
+} FsaFirmwareStatus;
 
 typedef enum {
   kFsaCommandSubmitAccepted = 0,
@@ -206,9 +206,26 @@ typedef struct {
 } FsaMemoryRange;
 
 typedef struct {
-  MemoryDomain domain;
+  FsaMemoryDomain domain;
   FsaMemoryRange range;
 } FsaMemoryRegion;
+
+/** What the device writes at a launch's kernel_status when the kernel traps;
+ *  mcause is 0 otherwise. */
+typedef struct {
+  uint64_t mcause;
+  uint64_t mepc;
+  uint64_t mtval;
+} FsaKernelStatus;
+
+/** What the argument buffer at a launch's kernarg_address starts with when
+ *  has_printf_meta is set; the kernel's arguments follow it. */
+typedef struct {
+  uint64_t printf_buffer;
+  uint64_t printf_buffer_position;
+  uint32_t printf_buffer_capacity;
+  uint32_t reserved;
+} FsaKernelDispatchPrintfMeta;
 
 typedef struct {
   uint32_t struct_size;

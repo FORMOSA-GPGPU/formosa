@@ -20,8 +20,8 @@ constexpr size_t kCopySize = 37;
 constexpr uintptr_t kOnchipAddress = FSA_ONCHIP_GMEM_BASE + 0x100;
 constexpr uintptr_t kDdrAddress = FSA_GLOBAL_MEM_BASE + 0x02000100;
 
-FsaMemoryCopyInfo make_copy(MemoryDomain src_domain, uint64_t src_addr,
-                            MemoryDomain dst_domain, uint64_t dst_addr,
+FsaMemoryCopyInfo make_copy(FsaMemoryDomain src_domain, uint64_t src_addr,
+                            FsaMemoryDomain dst_domain, uint64_t dst_addr,
                             uint64_t size) {
   FsaMemoryCopyInfo info{};
   info.struct_size = sizeof(info);
@@ -34,17 +34,18 @@ FsaMemoryCopyInfo make_copy(MemoryDomain src_domain, uint64_t src_addr,
   return info;
 }
 
-FsaCommandSubmitStatus submit_copy(MemoryDomain src_domain, uint64_t src_addr,
-                                   MemoryDomain dst_domain, uint64_t dst_addr,
-                                   uint64_t size,
+FsaCommandSubmitStatus submit_copy(FsaMemoryDomain src_domain,
+                                   uint64_t src_addr,
+                                   FsaMemoryDomain dst_domain,
+                                   uint64_t dst_addr, uint64_t size,
                                    FsaCompletionToken *completion) {
   FsaMemoryCopyInfo info =
       make_copy(src_domain, src_addr, dst_domain, dst_addr, size);
   return fsa_cmd_memory_copy(&info, completion);
 }
 
-bool submit_memory_copy(MemoryDomain src_domain, uintptr_t src_addr,
-                        MemoryDomain dst_domain, uintptr_t dst_addr,
+bool submit_memory_copy(FsaMemoryDomain src_domain, uintptr_t src_addr,
+                        FsaMemoryDomain dst_domain, uintptr_t dst_addr,
                         size_t size, FsaCompletionResult expected) {
   FsaCompletionToken completion = 0;
   const FsaCommandSubmitStatus submit_status = submit_copy(
@@ -66,15 +67,16 @@ bool submit_memory_copy(MemoryDomain src_domain, uintptr_t src_addr,
 
 bool run_host_to_device_copy(uintptr_t destination,
                              const std::array<uint8_t, kCopySize> &input) {
-  return submit_memory_copy(kMemoryDomainHost,
+  return submit_memory_copy(kFsaMemoryDomainHost,
                             reinterpret_cast<uintptr_t>(input.data()),
-                            kMemoryDomainDevice, destination, input.size(),
+                            kFsaMemoryDomainDevice, destination, input.size(),
                             FSA_COMPLETION_RESULT_SUCCESS);
 }
 
 bool run_device_to_host_copy(uintptr_t source,
                              std::array<uint8_t, kCopySize> *output) {
-  return submit_memory_copy(kMemoryDomainDevice, source, kMemoryDomainHost,
+  return submit_memory_copy(kFsaMemoryDomainDevice, source,
+                            kFsaMemoryDomainHost,
                             reinterpret_cast<uintptr_t>(output->data()),
                             output->size(), FSA_COMPLETION_RESULT_SUCCESS);
 }
@@ -88,8 +90,8 @@ bool run_copy(uintptr_t source, uintptr_t destination,
     return false;
   }
 
-  if (!submit_memory_copy(kMemoryDomainDevice, source, kMemoryDomainDevice,
-                          destination, input.size(),
+  if (!submit_memory_copy(kFsaMemoryDomainDevice, source,
+                          kFsaMemoryDomainDevice, destination, input.size(),
                           FSA_COMPLETION_RESULT_SUCCESS)) {
     std::cerr << "run_copy D2D failed src=0x" << std::hex << source << " dst=0x"
               << destination << std::dec << "\n";
@@ -182,8 +184,8 @@ int main() {
     // its latency is independent of the DRAM model.  DDR is covered by the
     // round-trip and cross-aperture checks above.
     if (submit_copy(
-            kMemoryDomainHost, reinterpret_cast<uintptr_t>(input.data()),
-            kMemoryDomainDevice, kOnchipAddress + 0x1000 + i * 0x40,
+            kFsaMemoryDomainHost, reinterpret_cast<uintptr_t>(input.data()),
+            kFsaMemoryDomainDevice, kOnchipAddress + 0x1000 + i * 0x40,
             input.size(), &outstanding[i]) != kFsaCommandSubmitAccepted) {
       std::cerr << "outstanding memory-copy submission failed\n";
       return 1;
@@ -211,10 +213,10 @@ int main() {
   for (size_t i = 0; i < 4; ++i) {
     submitters.emplace_back([&, i] {
       FsaCompletionToken completion = 0;
-      if (submit_copy(kMemoryDomainHost,
-                      reinterpret_cast<uintptr_t>(input.data()),
-                      kMemoryDomainDevice, kOnchipAddress + 0x1800 + i * 0x40,
-                      input.size(), &completion) == kFsaCommandSubmitAccepted) {
+      if (submit_copy(
+              kFsaMemoryDomainHost, reinterpret_cast<uintptr_t>(input.data()),
+              kFsaMemoryDomainDevice, kOnchipAddress + 0x1800 + i * 0x40,
+              input.size(), &completion) == kFsaCommandSubmitAccepted) {
         std::lock_guard<std::mutex> lock(completion_mutex);
         concurrent.push_back(completion);
       }
@@ -238,8 +240,9 @@ int main() {
   // Poll leaves terminal ownership with the caller; release then invalidates
   // the token so a later poll cannot observe a recycled slot.
   FsaCompletionToken polled = 0;
-  if (submit_copy(kMemoryDomainHost, reinterpret_cast<uintptr_t>(input.data()),
-                  kMemoryDomainDevice, kOnchipAddress + 0x1c00, input.size(),
+  if (submit_copy(kFsaMemoryDomainHost,
+                  reinterpret_cast<uintptr_t>(input.data()),
+                  kFsaMemoryDomainDevice, kOnchipAddress + 0x1c00, input.size(),
                   &polled) != kFsaCommandSubmitAccepted) {
     std::cerr << "polled memory-copy submission failed\n";
     return 1;
@@ -266,9 +269,10 @@ int main() {
        pool_token_count < pool_tokens.size() && attempts < 60000; ++attempts) {
     FsaCompletionToken token = 0;
     const FsaCommandSubmitStatus submit_status = submit_copy(
-        kMemoryDomainHost, reinterpret_cast<uintptr_t>(input.data()),
-        kMemoryDomainDevice, kOnchipAddress + 0x3000 + pool_token_count * 0x40,
-        input.size(), &token);
+        kFsaMemoryDomainHost, reinterpret_cast<uintptr_t>(input.data()),
+        kFsaMemoryDomainDevice,
+        kOnchipAddress + 0x3000 + pool_token_count * 0x40, input.size(),
+        &token);
     if (submit_status == kFsaCommandSubmitAccepted) {
       pool_tokens[pool_token_count++] = token;
     } else if (submit_status != kFsaCommandSubmitWouldBlock) {
@@ -294,8 +298,9 @@ int main() {
     }
   }
   FsaCompletionToken rejected = 0;
-  if (submit_copy(kMemoryDomainHost, reinterpret_cast<uintptr_t>(input.data()),
-                  kMemoryDomainDevice, kOnchipAddress + 0x5000, input.size(),
+  if (submit_copy(kFsaMemoryDomainHost,
+                  reinterpret_cast<uintptr_t>(input.data()),
+                  kFsaMemoryDomainDevice, kOnchipAddress + 0x5000, input.size(),
                   &rejected) != kFsaCommandSubmitWouldBlock) {
     std::cerr << "completion-pool exhaustion was not retryable\n";
     return 1;
@@ -313,10 +318,10 @@ int main() {
     FsaCompletionToken pred_cache = 0;
     FsaCompletionToken barrier = 0;
     const FsaMemoryRange cache_range = {kOnchipAddress + 0x6000, input.size()};
-    if (submit_copy(kMemoryDomainHost,
+    if (submit_copy(kFsaMemoryDomainHost,
                     reinterpret_cast<uintptr_t>(input.data()),
-                    kMemoryDomainDevice, kOnchipAddress + 0x6000, input.size(),
-                    &pred_copy) != kFsaCommandSubmitAccepted ||
+                    kFsaMemoryDomainDevice, kOnchipAddress + 0x6000,
+                    input.size(), &pred_copy) != kFsaCommandSubmitAccepted ||
         fsa_cmd_cache_flush(&cache_range, &pred_cache) !=
             kFsaCommandSubmitAccepted ||
         fsa_cmd_barrier(&barrier) != kFsaCommandSubmitAccepted) {
@@ -374,57 +379,57 @@ int main() {
     }
   }
 
-  if (!submit_memory_copy(kMemoryDomainDevice, 0, kMemoryDomainDevice,
-                          kDdrAddress, 8, kMemoryCopyStatusInvalidRange)) {
+  if (!submit_memory_copy(kFsaMemoryDomainDevice, 0, kFsaMemoryDomainDevice,
+                          kDdrAddress, 8, kFsaMemoryCopyStatusInvalidRange)) {
     std::cerr << "invalid range was not propagated\n";
     return 1;
   }
   // WGI, the firmware stack pool, and MMIO/SM apertures are not device-memory
   // payload apertures.  They must be rejected before either physical engine
   // is started.
-  if (!submit_memory_copy(kMemoryDomainDevice, FSA_GLOBAL_MEM_BASE,
-                          kMemoryDomainDevice, kDdrAddress, 8,
-                          kMemoryCopyStatusInvalidRange) ||
-      !submit_memory_copy(kMemoryDomainDevice, FSA_MMIO_BASE,
-                          kMemoryDomainDevice, kDdrAddress, 8,
-                          kMemoryCopyStatusInvalidRange) ||
-      !submit_memory_copy(kMemoryDomainDevice, FSA_SM_MMIO_BASE,
-                          kMemoryDomainDevice, kDdrAddress, 8,
-                          kMemoryCopyStatusInvalidRange)) {
+  if (!submit_memory_copy(kFsaMemoryDomainDevice, FSA_GLOBAL_MEM_BASE,
+                          kFsaMemoryDomainDevice, kDdrAddress, 8,
+                          kFsaMemoryCopyStatusInvalidRange) ||
+      !submit_memory_copy(kFsaMemoryDomainDevice, FSA_MMIO_BASE,
+                          kFsaMemoryDomainDevice, kDdrAddress, 8,
+                          kFsaMemoryCopyStatusInvalidRange) ||
+      !submit_memory_copy(kFsaMemoryDomainDevice, FSA_SM_MMIO_BASE,
+                          kFsaMemoryDomainDevice, kDdrAddress, 8,
+                          kFsaMemoryCopyStatusInvalidRange)) {
     std::cerr << "control aperture was not rejected\n";
     return 1;
   }
-  if (!submit_memory_copy(kMemoryDomainDevice,
+  if (!submit_memory_copy(kFsaMemoryDomainDevice,
                           FSA_NONCACHE_ALLOC_BASE + FSA_NONCACHE_ALLOC_SIZE - 4,
-                          kMemoryDomainDevice, kDdrAddress, 8,
-                          kMemoryCopyStatusInvalidRange) ||
-      !submit_memory_copy(kMemoryDomainDevice, FSA_STACK_BASE,
-                          kMemoryDomainDevice, kDdrAddress, 8,
-                          kMemoryCopyStatusInvalidRange)) {
+                          kFsaMemoryDomainDevice, kDdrAddress, 8,
+                          kFsaMemoryCopyStatusInvalidRange) ||
+      !submit_memory_copy(kFsaMemoryDomainDevice, FSA_STACK_BASE,
+                          kFsaMemoryDomainDevice, kDdrAddress, 8,
+                          kFsaMemoryCopyStatusInvalidRange)) {
     std::cerr << "reserved DDR aperture was not rejected\n";
     return 1;
   }
-  if (!submit_memory_copy(kMemoryDomainDevice,
+  if (!submit_memory_copy(kFsaMemoryDomainDevice,
                           FSA_GLOBAL_ALLOC_BASE + FSA_GLOBAL_ALLOC_SIZE - 4,
-                          kMemoryDomainDevice, kDdrAddress, 8,
-                          kMemoryCopyStatusInvalidRange)) {
+                          kFsaMemoryDomainDevice, kDdrAddress, 8,
+                          kFsaMemoryCopyStatusInvalidRange)) {
     std::cerr << "aperture-crossing range was not rejected\n";
     return 1;
   }
-  if (!submit_memory_copy(kMemoryDomainHost, 1, kMemoryDomainHost, 2, 8,
-                          kMemoryCopyStatusInvalidDomainPair)) {
+  if (!submit_memory_copy(kFsaMemoryDomainHost, 1, kFsaMemoryDomainHost, 2, 8,
+                          kFsaMemoryCopyStatusInvalidDomainPair)) {
     std::cerr << "Host-to-Host domain pair was not rejected\n";
     return 1;
   }
-  if (!submit_memory_copy(kMemoryDomainDevice, kOnchipAddress,
-                          kMemoryDomainDevice, kOnchipAddress + 1, 8,
-                          kMemoryCopyStatusOverlap)) {
+  if (!submit_memory_copy(kFsaMemoryDomainDevice, kOnchipAddress,
+                          kFsaMemoryDomainDevice, kOnchipAddress + 1, 8,
+                          kFsaMemoryCopyStatusOverlap)) {
     std::cerr << "overlapping D2D range was not rejected\n";
     return 1;
   }
-  if (!submit_memory_copy(kMemoryDomainDevice, UINT64_MAX - 1,
-                          kMemoryDomainDevice, kDdrAddress, 8,
-                          kMemoryCopyStatusInvalidRange)) {
+  if (!submit_memory_copy(kFsaMemoryDomainDevice, UINT64_MAX - 1,
+                          kFsaMemoryDomainDevice, kDdrAddress, 8,
+                          kFsaMemoryCopyStatusInvalidRange)) {
     std::cerr << "overflowing device range was not rejected\n";
     return 1;
   }

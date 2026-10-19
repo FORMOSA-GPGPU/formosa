@@ -1,3 +1,4 @@
+// Modified 2026 by CASLab, National Cheng Kung University.
 //  Copyright 2022 Google LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,7 +30,7 @@
 #define ULLONG_MAX 18446744073709551615ULL
 
 #define INT_MAX 0x7fffffff
-#define INT_MIN 0x80000000
+#define INT_MIN (-INT_MAX - 1)
 #define UINT_MAX 0xffffffff
 
 #define CHAR_BIT 8

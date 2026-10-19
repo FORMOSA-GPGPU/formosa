@@ -41,8 +41,8 @@ enum cp_memory_copy_phase {
 struct cp_memory_copy_state {
   volatile uint32_t active;
   enum cp_memory_copy_phase phase;
-  MemoryDomain src_domain;
-  MemoryDomain dst_domain;
+  FsaMemoryDomain src_domain;
+  FsaMemoryDomain dst_domain;
   uint64_t src_addr;
   uint64_t dst_addr;
   uint64_t size;

@@ -19,10 +19,10 @@ bool host_to_device(const std::array<uint8_t, kCopySize> &input,
                     FsaCompletionToken *completion) {
   FsaMemoryCopyInfo info{};
   info.struct_size = sizeof(info);
-  info.source.domain = kMemoryDomainHost;
+  info.source.domain = kFsaMemoryDomainHost;
   info.source.range.address = reinterpret_cast<uintptr_t>(input.data());
   info.source.range.size = input.size();
-  info.destination.domain = kMemoryDomainDevice;
+  info.destination.domain = kFsaMemoryDomainDevice;
   info.destination.range.address = kDeviceAddr;
   info.destination.range.size = input.size();
   const FsaCommandSubmitStatus submit = fsa_cmd_memory_copy(&info, completion);
@@ -73,10 +73,10 @@ int main() {
   FsaCompletionToken pending = 0;
   FsaMemoryCopyInfo pending_info{};
   pending_info.struct_size = sizeof(pending_info);
-  pending_info.source.domain = kMemoryDomainHost;
+  pending_info.source.domain = kFsaMemoryDomainHost;
   pending_info.source.range.address = reinterpret_cast<uintptr_t>(input.data());
   pending_info.source.range.size = input.size();
-  pending_info.destination.domain = kMemoryDomainDevice;
+  pending_info.destination.domain = kFsaMemoryDomainDevice;
   pending_info.destination.range.address = kDeviceAddr + 0x40;
   pending_info.destination.range.size = input.size();
   if (fsa_cmd_memory_copy(&pending_info, &pending) !=

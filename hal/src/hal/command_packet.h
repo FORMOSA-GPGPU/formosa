@@ -173,22 +173,22 @@ union Packet {
   HeaderOnlyPacket header_only_packet;
 };
 
-FSA_STATIC_ASSERT((FsaCompletionResult)kMemoryCopyStatusInvalidDomainPair >=
+FSA_STATIC_ASSERT((FsaCompletionResult)kFsaMemoryCopyStatusInvalidDomainPair >=
                       FSA_COMPLETION_RESULT_COMMAND_FAILURE_MIN,
                   "memory-copy failure below command-failure range");
-FSA_STATIC_ASSERT((FsaCompletionResult)kMemoryCopyStatusTimeout <=
+FSA_STATIC_ASSERT((FsaCompletionResult)kFsaMemoryCopyStatusTimeout <=
                       FSA_COMPLETION_RESULT_COMMAND_FAILURE_MAX,
                   "memory-copy failure above command-failure range");
-FSA_STATIC_ASSERT((FsaCompletionResult)kMemoryCopyStatusTimeout !=
+FSA_STATIC_ASSERT((FsaCompletionResult)kFsaMemoryCopyStatusTimeout !=
                       FSA_COMPLETION_RESULT_FIRMWARE_REBOOT,
                   "memory-copy timeout collides with FirmwareReboot");
-FSA_STATIC_ASSERT((FsaCompletionResult)kKernelCompletionBadDimension >=
+FSA_STATIC_ASSERT((FsaCompletionResult)kFsaKernelCompletionBadDimension >=
                       FSA_COMPLETION_RESULT_COMMAND_FAILURE_MIN,
                   "kernel failure below command-failure range");
-FSA_STATIC_ASSERT((FsaCompletionResult)kKernelCompletionUnknownError <=
+FSA_STATIC_ASSERT((FsaCompletionResult)kFsaKernelCompletionUnknownError <=
                       FSA_COMPLETION_RESULT_COMMAND_FAILURE_MAX,
                   "kernel failure above command-failure range");
-FSA_STATIC_ASSERT((FsaCompletionResult)kKernelCompletionUnknownError !=
+FSA_STATIC_ASSERT((FsaCompletionResult)kFsaKernelCompletionUnknownError !=
                       FSA_COMPLETION_RESULT_FIRMWARE_REBOOT,
                   "kernel unknown error collides with FirmwareReboot");
 FSA_STATIC_ASSERT(sizeof(FsaCompletionToken) == FSA_COMPLETION_TOKEN_BYTES,
@@ -211,6 +211,8 @@ FSA_STATIC_ASSERT(sizeof(union Packet) == FSA_COMMAND_PACKET_BYTES,
 FSA_STATIC_ASSERT(offsetof(KernelDispatchPacket, completion_token) ==
                       FSA_COMPLETION_TOKEN_OFFSET,
                   "kernel completion field ABI offset mismatch");
+FSA_STATIC_ASSERT(sizeof(FsaKernelDispatchPrintfMeta) == 24u,
+                  "kernel printf metadata ABI size mismatch");
 FSA_STATIC_ASSERT(offsetof(CacheOperationPacket, completion_token) ==
                       FSA_COMPLETION_TOKEN_OFFSET,
                   "cache completion field ABI offset mismatch");

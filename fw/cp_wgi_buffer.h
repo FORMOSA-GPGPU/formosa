@@ -11,13 +11,6 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef struct {
-  uint64_t printf_buffer;
-  uint64_t printf_buffer_position;
-  uint32_t printf_buffer_capacity;
-  uint32_t reserved;
-} PoclPrintfLaunchMeta;
-
 typedef struct WGInfo {
   uint32_t dim;
   uint32_t wg_id[3];
