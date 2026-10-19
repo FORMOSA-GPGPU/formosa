@@ -21,16 +21,16 @@
     "formosa-llvm-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1792307651,
-        "narHash": "sha256-HqmM9UHgIG/CPDdmlL6fSH5RuXJuyZmfJnRwikMRAJE=",
+        "lastModified": 1792395512,
+        "narHash": "sha256-d2QkRVnGiLcH4LM1A2nDCLUZPutghuiL9Pw6q5RUPt4=",
         "ref": "refs/heads/formosa/main",
-        "rev": "86f30e74293a50ba57c1dc7a745b2465e42bdcff",
+        "rev": "b1342ddf401e6967aaeb676ab4e262e7c0988575",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-llvm.git"
       },
       "original": {
-        "rev": "86f30e74293a50ba57c1dc7a745b2465e42bdcff",
+        "rev": "b1342ddf401e6967aaeb676ab4e262e7c0988575",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-llvm.git"

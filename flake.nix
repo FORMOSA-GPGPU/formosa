@@ -15,7 +15,7 @@
     # hash, so the source identity does not depend on a mutable timestamp.
     formosa-llvm-src = {
       url =
-        "git+https://github.com/FORMOSA-GPGPU/formosa-llvm.git?rev=86f30e74293a50ba57c1dc7a745b2465e42bdcff&shallow=1";
+        "git+https://github.com/FORMOSA-GPGPU/formosa-llvm.git?rev=b1342ddf401e6967aaeb676ab4e262e7c0988575&shallow=1";
       flake = false;
     };
     formosa-pocl-src = {
