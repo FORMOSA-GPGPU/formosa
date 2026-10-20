@@ -29,6 +29,7 @@ class Scoreboard {
   Scoreboard(uint32_t num_warps_per_subcores, uint32_t num_subcores)
       : num_subcores_(num_subcores),
         pc_busy_(num_warps_per_subcores, false),
+        inflight_loads_(num_warps_per_subcores, 0),
         mem_busy_(num_warps_per_subcores, false),
         rd_busy_(num_warps_per_subcores * 32, false),
         rs_busy_(num_warps_per_subcores * num_read_bins_, 0) {}
@@ -88,6 +89,7 @@ class Scoreboard {
 
   uint32_t get_num_read_bins() const { return num_read_bins_; }
   uint32_t get_max_bin_count() const { return max_bin_count_; }
+  uint32_t get_max_inflight_load() const { return max_inflight_load_; }
 
  private:
   inline uint32_t get_local_wid(uint32_t wid) const {
@@ -122,7 +124,11 @@ class Scoreboard {
   }
 
   inline bool is_mem_busy(uint32_t local_wid, const Packet *packet) const {
-    return packet->instr.is_mem() && mem_busy_[local_wid];
+    if (!packet->instr.is_mem()) return false;
+    return mem_busy_[local_wid] ||
+           (packet->instr.is_load()
+                ? inflight_loads_[local_wid] >= max_inflight_load_
+                : inflight_loads_[local_wid] > 0);
   }
 
   void update_bloomboard(const Packet *packet, bool allocate) {
@@ -176,17 +182,25 @@ class Scoreboard {
       pc_busy_[local_wid] = flag;
     }
 
-    if (packet->instr.is_mem()) {
+    if (packet->instr.is_load()) {
+      if (flag) {
+        inflight_loads_[local_wid]++;
+      } else {
+        inflight_loads_[local_wid]--;
+      }
+    } else if (packet->instr.is_atomic() || packet->instr.is_store()) {
       mem_busy_[local_wid] = flag;
     }
   }
 
   const uint32_t num_subcores_;
+  const uint32_t max_inflight_load_ = 8;
   const uint32_t num_read_bins_ = 8;
   const uint32_t bin_bits_ = 2;
   uint32_t max_bin_count_ = (1 << bin_bits_) - 1;
 
   std::vector<bool> pc_busy_;
+  std::vector<uint32_t> inflight_loads_;
   std::vector<bool> mem_busy_;
   std::vector<bool> rd_busy_;
   std::vector<uint32_t> rs_busy_;

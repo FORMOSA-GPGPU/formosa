@@ -55,7 +55,8 @@ end
 
 -- Helper to construct LW instruction word
 local function make_lw(rd, rs1, imm)
-  local iword = bit.bor(bit.lshift(imm, 20), bit.lshift(rs1, 15), bit.lshift(rd, 7), 0x03)
+  local iword =
+    bit.bor(bit.lshift(imm, 20), bit.lshift(rs1, 15), bit.lshift(2, 12), bit.lshift(rd, 7), 0x03)
   return iword
 end
 
@@ -103,6 +104,7 @@ end
 -- Check if register d is busy for instruction second
 local NUM_BINS = tester.num_read_bins
 local MAX_BIN_COUNT = tester.max_bin_count
+local MAX_INFLIGHT_LOAD = tester.max_inflight_load
 
 local function get_bin(rid) return rid % NUM_BINS end
 
@@ -111,7 +113,13 @@ local function is_valid(rid) return rid ~= kNullReg and rid ~= 0 end
 local function check_hw_can_issue(instr1, memory_kind1, instr2, memory_kind2)
   if instr1.is_cti then return false, "instr1 is CTI", 3 end
 
-  if memory_kind1 ~= "none" and memory_kind2 ~= "none" then return false, "memory hazard", 4 end
+  if
+    memory_kind1 ~= "none"
+    and memory_kind2 ~= "none"
+    and (memory_kind1 ~= "load" or memory_kind2 ~= "load" or MAX_INFLIGHT_LOAD == 1)
+  then
+    return false, "memory hazard", 4
+  end
 
   local rd_busy = {}
   local rs_busy = {}
@@ -254,29 +262,52 @@ while true do
   if finished then break end
 end
 
--- Memory instructions from the same warp must issue serially.
+-- Load -> store -> atomic must wait for the preceding memory instruction.
 do
   local wid = 0
   local load1 = simtix.decode(make_lw(1, 2, 0))
-  local load2 = simtix.decode(make_lw(3, 4, 4))
-  local store = simtix.decode(make_sw(5, 6, 8))
+  local store1 = simtix.decode(make_sw(5, 6, 8))
+  local atomic1 =
+    simtix.decode(bit.bor(bit.lshift(6, 20), bit.lshift(5, 15), bit.lshift(3, 7), 0x202f)) -- amoadd.w x3, x6, (x5)
 
-  if not tester:can_issue(wid, load1) then error("First load should be issuable") end
+  assert(tester:can_issue(wid, load1), "Load 1 should issue")
   tester:issue(wid, load1)
-  if tester:can_issue(wid, load2) then error("Second load must wait for the first load") end
-
   tester:reg_read_done(wid, load1)
+  assert(not tester:can_issue(wid, store1), "Store 1 must wait for load 1")
+  assert(not tester:can_issue(wid, atomic1), "Atomic 1 must wait for load 1")
   tester:commit(wid, load1)
-  if not tester:can_issue(wid, load2) then
-    error("Second load should issue after the first load commits")
-  end
-  tester:issue(wid, load2)
-  if tester:can_issue(wid, store) then error("Store must wait for the outstanding load") end
 
-  tester:reg_read_done(wid, load2)
-  tester:commit(wid, load2)
-  if not tester:can_issue(wid, store) then
-    error("Store should issue after the outstanding load commits")
+  assert(tester:can_issue(wid, store1), "Store 1 should issue after load 1 commits")
+  tester:issue(wid, store1)
+  tester:reg_read_done(wid, store1)
+  assert(not tester:can_issue(wid, atomic1), "Atomic 1 must wait for store 1")
+  tester:commit(wid, store1)
+
+  assert(tester:can_issue(wid, atomic1), "Atomic 1 should issue after store 1 commits")
+  tester:issue(wid, atomic1)
+  tester:reg_read_done(wid, atomic1)
+  tester:commit(wid, atomic1)
+end
+
+-- Issue max_inflight_load independent loads; the next load must be blocked.
+do
+  local wid = 0
+  local loads = {}
+  for i = 0, MAX_INFLIGHT_LOAD do
+    local rd = i + 1 -- Distinct nonzero destination for every load attempt.
+    assert(rd < 32, "Load destination register must be less than 32")
+    local load = simtix.decode(make_lw(rd, 31, 0))
+    if i < MAX_INFLIGHT_LOAD then
+      assert(tester:can_issue(wid, load), "Loads below the limit should issue")
+      tester:issue(wid, load)
+      tester:reg_read_done(wid, load)
+      loads[#loads + 1] = load
+    else
+      assert(not tester:can_issue(wid, load), "The load beyond max_inflight_load must wait")
+    end
+  end
+  for _, load in ipairs(loads) do
+    tester:commit(wid, load)
   end
 end
 

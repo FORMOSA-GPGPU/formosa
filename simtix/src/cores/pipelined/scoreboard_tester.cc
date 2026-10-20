@@ -61,6 +61,10 @@ class ScoreboardTester {
     return scoreboards_.empty() ? 0 : scoreboards_[0].get_max_bin_count();
   }
 
+  uint32_t get_max_inflight_load() const {
+    return scoreboards_.empty() ? 0 : scoreboards_[0].get_max_inflight_load();
+  }
+
  private:
   uint32_t get_subcore_id(uint32_t wid) const { return wid % num_subcores_; }
 
@@ -89,6 +93,8 @@ LV_BINDING(simtix, ScoreboardTester)
     .property("num_read_bins", &ScoreboardTester::get_num_read_bins,
               lv::doc("Number of read dependency bins"))
     .property("max_bin_count", &ScoreboardTester::get_max_bin_count,
-              lv::doc("Maximum scoreboard bin occupancy"));
+              lv::doc("Maximum scoreboard bin occupancy"))
+    .property("max_inflight_load", &ScoreboardTester::get_max_inflight_load,
+              lv::doc("Maximum number of in-flight loads per warp"));
 
 }  // namespace simtix::pipelined
