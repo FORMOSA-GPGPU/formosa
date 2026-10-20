@@ -235,6 +235,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
 
   void Tick();
   void AcceptCoreRequest();
+  unsigned int AcceptCoreRequestDbg(tlm::tlm_generic_payload &trans);
   void AcceptCommand();
   void AcceptMemResponse();
   void ValidateMemoryResponseOrFatal(

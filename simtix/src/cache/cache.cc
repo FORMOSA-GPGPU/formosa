@@ -182,7 +182,10 @@ Cache::Cache(const sc_module_name &name, const Param &p)
     : sc_module(name),
       config_(p),
       non_cacheable_regions_(p.non_cacheable_regions),
-      sink_("sink"),
+      sink_("sink",
+            [this](tlm::tlm_generic_payload &trans) {
+              return AcceptCoreRequestDbg(trans);
+            }),
       source_("source"),
       stats_(name),
       packet_pool_(),
@@ -344,6 +347,17 @@ Packet *Cache::AllocateCoreRequestPacket(tlm::tlm_generic_payload *payload) {
                      ? PacketType::kBypassCoreReq
                      : PacketType::kCoreReq;
   return packet;
+}
+
+/**
+ * @brief Forward a core-side debug transaction to the memory side.
+ *
+ * @param trans Core-side TLM payload received through the sink debug
+ * transport.
+ * @return Number of bytes transferred by the memory-side debug transport.
+ */
+unsigned int Cache::AcceptCoreRequestDbg(tlm::tlm_generic_payload &trans) {
+  return source_.PutRequestDbg(trans);
 }
 
 void Cache::AcceptCoreRequest() {

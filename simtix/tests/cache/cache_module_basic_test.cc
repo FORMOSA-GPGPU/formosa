@@ -48,7 +48,8 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
         pending_bypass_reverse_bench_("pending_bypass_reverse_bench",
                                       MakeNonCacheableParam()),
         arbitration_bench_("arbitration_bench",
-                           MakeParam(WriteMissPolicy::kWriteNoAllocate)) {
+                           MakeParam(WriteMissPolicy::kWriteNoAllocate)),
+        debug_bench_("debug_bench", MakeParam()) {
     SC_THREAD(Run);
   }
 
@@ -68,6 +69,7 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
     pending_bypass_bench_.clock_.write(false);
     pending_bypass_reverse_bench_.clock_.write(false);
     arbitration_bench_.clock_.write(false);
+    debug_bench_.clock_.write(false);
     wait(sc_core::SC_ZERO_TIME);
 
     RunBench("read_bench", [this] {
@@ -112,6 +114,9 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
     });
     RunBench("arbitration_bench", [this] {
       TestMemoryRequestPriority();
+    });
+    RunBench("debug_bench", [this] {
+      TestDebugTransportReachesMemory();
     });
 
     sc_core::sc_stop();
@@ -766,6 +771,13 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
            "only cacheable reads install cache lines");
   }
 
+  void TestDebugTransportReachesMemory() {
+    std::vector<uint8_t> data(4, 0);
+    Expect(debug_bench_.core_.SendDebug(0x08, tlm::TLM_READ_COMMAND, data) ==
+               data.size(),
+           "debug transport passes through the cache to memory");
+  }
+
   CacheBench read_bench_;
   CacheBench read_hit_bench_;
   CacheBench merge_bench_;
@@ -780,6 +792,7 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
   CacheBench pending_bypass_bench_;
   CacheBench pending_bypass_reverse_bench_;
   CacheBench arbitration_bench_;
+  CacheBench debug_bench_;
 };
 
 }  // namespace

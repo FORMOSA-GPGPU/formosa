@@ -446,6 +446,17 @@ class CoreEndpoint : public sc_core::sc_module {
                 compare_value);
   }
 
+  unsigned int SendDebug(uint64_t address, tlm::tlm_command command,
+                         std::vector<uint8_t> &data) {
+    tlm::tlm_generic_payload payload;
+    payload.set_address(address);
+    payload.set_command(command);
+    payload.set_data_ptr(data.data());
+    payload.set_data_length(data.size());
+    payload.set_streaming_width(data.size());
+    return socket->transport_dbg(payload);
+  }
+
   size_t response_count() const { return responses_.size(); }
 
   tlm::tlm_generic_payload *response(size_t index) const {
@@ -537,6 +548,7 @@ class MemoryEndpoint : public sc_core::sc_module {
   explicit MemoryEndpoint(sc_core::sc_module_name name)
       : sc_core::sc_module(name), socket("socket") {
     socket.register_nb_transport_fw(this, &MemoryEndpoint::NbTransportFw);
+    socket.register_transport_dbg(this, &MemoryEndpoint::TransportDbg);
 
     SC_METHOD(SendEndReq);
     sensitive << end_req_event_;
@@ -603,6 +615,10 @@ class MemoryEndpoint : public sc_core::sc_module {
 
     SC_REPORT_ERROR("CacheModuleTest", "memory received an unexpected phase");
     return tlm::TLM_COMPLETED;
+  }
+
+  unsigned int TransportDbg(tlm::tlm_generic_payload &trans) {
+    return trans.get_data_length();
   }
 
   void SendEndReq() {
