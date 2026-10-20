@@ -1,49 +1,25 @@
 -- SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+--
 -- SPDX-License-Identifier: Apache-2.0
 
-local platform = require("plic.platform")
+-- CMake's Lua CLI uses the same templates as native Xmake configfiles.
 local directory = assert(arg[1], "expected output directory")
-
-local header = assert(io.open(directory .. "/platform.h", "w"))
-header:write("/* Generated from plic.platform. */\n#pragma once\n\n")
-
-local keys = {}
-for key in pairs(platform) do
-  keys[#keys + 1] = key
+local here = arg[0]:match("^(.*)/") or "."
+local platform = require("plic.platform")
+local variables = {}
+for key, value in pairs(platform) do
+  variables["PLIC_TEST_" .. key:upper()] = string.format("0x%x", value)
 end
--- Keep generated headers stable despite Lua's unspecified table iteration order.
-table.sort(keys)
-for _, key in ipairs(keys) do
-  header:write(string.format("#define PLIC_TEST_%s 0x%x\n", key:upper(), platform[key]))
+variables.PLIC_TEST_RAM_END = string.format("0x%x", platform.ram_base + platform.ram_size)
+for _, name in ipairs({ "platform.h", "linker.ld" }) do
+  local template = assert(io.open(here .. "/" .. name .. ".in", "r"))
+  local contents = template:read("*a")
+  template:close()
+  contents = contents:gsub(
+    "@([%w_]+)@",
+    function(key) return assert(variables[key], "missing PLIC platform field: " .. key) end
+  )
+  local file = assert(io.open(directory .. "/" .. name, "w"))
+  assert(file:write(contents))
+  assert(file:close())
 end
-header:close()
-
-local linker = assert(io.open(directory .. "/linker.ld", "w"))
-linker:write(string.format(
-  [[
-/* Generated from plic.platform. */
-OUTPUT_ARCH(riscv)
-ENTRY(start)
-
-SECTIONS {
-  . = 0x%x;
-  .text : { KEEP(*(.text.start)) *(.text .text.*) }
-  .rodata : { *(.rodata .rodata.* .srodata .srodata.*) }
-  .data : { *(.data .data.* .sdata .sdata.*) }
-  PROVIDE(__global_pointer$ = . + 0x800);
-
-  /* start.S clears this range before calling C code. */
-  .bss ALIGN(8) : {
-    __bss_start = .;
-    *(.bss .bss.* .sbss .sbss.*) *(COMMON)
-    . = ALIGN(8);
-    __bss_end = .;
-  }
-
-  ASSERT(. <= 0x%x, "PLIC test exceeds RAM")
-}
-]],
-  platform.text_base,
-  platform.ram_base + platform.ram_size
-))
-linker:close()

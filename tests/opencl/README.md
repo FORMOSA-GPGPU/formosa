@@ -17,7 +17,35 @@ SPDX-License-Identifier: Apache-2.0
 
 ## Build and run
 
-From the repository root:
+From the repository root in the development environment:
+
+```sh
+xmake f -m release --workflow=opencl
+xmake test -g 'opencl/**'
+xmake test -g 'opencl/rodinia'
+```
+
+Native groups classify targets by their source family: `opencl/formosa`,
+`opencl/smoke`, `opencl/rodinia`, `opencl/parboil`, and `opencl/shoc`.
+Groups are a convenience for interactive selection with `-g`; workflow suites
+continue to select full case names through `workflows.lua`, independently of groups.
+When a workflow is configured, `-g` further filters its enabled cases.
+
+Full native names combine the host target, optional case and full SM module
+name. A quoted case glob such as `xmake test 'opencl-vecadd/**'` selects cases
+without changing suite membership. The original BFS, Gaussian, Kmeans and NN
+targets use `opencl-bfs`, `opencl-gaussian`, `opencl-kmeans` and `opencl-nn`.
+
+Run an already built host directly through the Lua launcher:
+
+```sh
+./build/bin/run_opencl.lua --sm simtix.pipelined_sm ./build/bin/opencl-vecadd
+```
+
+The directory/CTest labels above describe the retained CMake fallback; native
+suite membership belongs to the central `workflows.lua` definition.
+
+For the retained CMake build:
 
 ```sh
 direnv exec . cmake --preset perf.release

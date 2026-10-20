@@ -47,7 +47,7 @@ macro(add_baremetal_program target_name)
   )
 
   target_link_libraries(${target_name} PRIVATE
-    common_objs printf
+    common_objs
     c # for baremetal programs, link with libc
   )
 
@@ -79,7 +79,6 @@ macro(add_freertos_program target_name)
 endmacro()
 
 # define third-party dependencies
-baremetal_add_third_party(printf)
 baremetal_add_third_party(FreeRTOS-Kernel)
 
 # define programs

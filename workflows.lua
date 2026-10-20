@@ -73,6 +73,11 @@ local function make_simtix_sm_test_suite(test_system, sm_model)
   return {
     depends = depends,
     adapters = {
+      xmake = {
+        build_options = {},
+        selectors = test_system == "kernel-sim" and { "kernel-sim-*/simtix." .. sm_model }
+          or { "opencl-*/**simtix." .. sm_model },
+      },
       cmake = {
         build_options = {
           ENABLE_PROJECTS = system.enabled_projects,
@@ -119,10 +124,12 @@ local config = {
     ["ilha.platform"] = {
       paths = {
         "ilha/CMakeLists.txt",
+        "ilha/xmake.lua",
         "ilha/daemon.lua",
         "ilha/configs/**",
         "ilha/include/**",
         "ilha/lua/**",
+        "ilha/platform-data/**",
         "ilha/scripts/**",
         "ilha/src/**",
         "ilha/tests/**",
@@ -142,12 +149,22 @@ local config = {
       paths = {
         "flake.nix",
         "flake.lock",
+        "lv/shell.nix",
       },
     },
     ["lv.build"] = {
       paths = {
         "lv/CMakeLists.txt",
         "lv/cmake/**",
+        "xmake.lua",
+        "lv/xmake.lua",
+        "third-party/xmake.lua",
+        "xmake/rules/lv/**",
+        "xmake/modules/lv/**",
+        "xmake/modules/testing.lua",
+        "xmake/rules/workflow/**",
+        "xmake/rules/riscv/**",
+        "tests/xmake.lua",
       },
       depends = { "repo.cmake", "repo.environment" },
     },
@@ -213,6 +230,7 @@ local config = {
     ["simtix.common"] = {
       paths = {
         "simtix/CMakeLists.txt",
+        "simtix/xmake.lua",
         "simtix/library/simtix.lua",
         "simtix/src/konata/**",
         "simtix/src/tlm_extensions/**",
@@ -289,7 +307,7 @@ local config = {
       },
     },
     ["simtix.tests.build"] = {
-      paths = { "simtix/tests/CMakeLists.txt" },
+      paths = { "simtix/tests/CMakeLists.txt", "simtix/tests/xmake.lua" },
     },
     ["simtix.tests.pipelined_core"] = {
       paths = { "simtix/tests/pipelined_core/**" },
@@ -435,18 +453,21 @@ local config = {
   },
   build_profiles = {
     debug = {
+      xmake = { mode = "debug" },
       cmake = {
         CMAKE_BUILD_TYPE = "Debug",
         ENABLE_COVERAGE = false,
       },
     },
     coverage = {
+      xmake = { mode = "coverage" },
       cmake = {
         CMAKE_BUILD_TYPE = "Debug",
         ENABLE_COVERAGE = true,
       },
     },
     release = {
+      xmake = { mode = "release" },
       cmake = {
         CMAKE_BUILD_TYPE = "Release",
         ENABLE_COVERAGE = false,
@@ -457,6 +478,7 @@ local config = {
     ["opencl.validation"] = {
       depends = { "tests.opencl" },
       adapters = {
+        xmake = { selectors = { "opencl-*-validation/validation" } },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "fw", "simtix", "tests" },
@@ -477,6 +499,7 @@ local config = {
         "lv.bindings.systemc",
       },
       adapters = {
+        xmake = { selectors = { "lv/simtix/sm/**" } },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "simtix" },
@@ -504,6 +527,10 @@ local config = {
         "lv.bindings.systemc",
       },
       adapters = {
+        xmake = {
+          build_options = {},
+          selectors = { "lv/simtix/pipelined_core/**" },
+        },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "simtix" },
@@ -533,6 +560,7 @@ local config = {
         "ilha.platform",
       },
       adapters = {
+        xmake = { build_options = {}, selectors = { "lv/simtix/cache/**", "simtix-cache-*/*" } },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "simtix" },
@@ -550,6 +578,7 @@ local config = {
         "lv.bindings.systemc",
       },
       adapters = {
+        xmake = { build_options = {}, selectors = { "lv/simtix/utils/**" } },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "simtix" },
@@ -569,6 +598,14 @@ local config = {
         "lv.bindings.workload",
       },
       adapters = {
+        xmake = {
+          build_options = {},
+          selectors = {
+            "scalar-riscv-test*/simtix.scalar_core",
+            "cp-*/simtix.scalar_core",
+            "lv/cp/**",
+          },
+        },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "simtix", "tests" },
@@ -588,6 +625,10 @@ local config = {
     ["fw.unit"] = {
       depends = { "fw", "fw.tests" },
       adapters = {
+        xmake = {
+          build_options = {},
+          selectors = { "fw-*-test/test" },
+        },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "fw" },
@@ -600,6 +641,10 @@ local config = {
     ["hal.unit"] = {
       depends = { "hal", "hal.tests" },
       adapters = {
+        xmake = {
+          build_options = { ["install-targets"] = { "formosa-sdk" } },
+          selectors = { "hal-lv-tests/*" },
+        },
         cmake = {
           build_options = {
             CMAKE_INSTALL_PREFIX = "outputs/out",
@@ -613,6 +658,10 @@ local config = {
     ["libcomm.unit"] = {
       depends = { "libcomm", "libcomm.tests" },
       adapters = {
+        xmake = {
+          build_options = {},
+          selectors = { "libcomm-unit-test/*", "libcomm-install-test/*" },
+        },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "libcomm" },
@@ -625,6 +674,18 @@ local config = {
     ["lv.unit"] = {
       depends = { "lv.tests.unit" },
       adapters = {
+        xmake = {
+          build_options = { ["lv-enable-docgen"] = true, ["lv-enable-perfetto"] = true },
+          selectors = {
+            "lv/unit/**",
+            "lv/docgen",
+            "lv-log-test/*",
+            "lv-statistics-test/*",
+            "lv-address-router-test/*",
+            "lv-axi-test/**",
+            "lv-axi-rejection-test/**",
+          },
+        },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "lv" },
@@ -632,13 +693,17 @@ local config = {
             LV_ENABLE_PERFETTO = true,
             LV_ENABLE_TESTING = true,
           },
-          selectors = { "lv\\.unit\\..*" },
+          selectors = { ".*/.*\\.lua", "^statistics\\.lua$", "lv\\.unit\\..*" },
         },
       },
     },
     ["ilha.unit"] = {
       depends = { "ilha.platform" },
       adapters = {
+        xmake = {
+          build_options = {},
+          selectors = { "lv/ilha/**", "ilha-platform-data-test/*" },
+        },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "ilha" },
@@ -664,6 +729,7 @@ local config = {
         "lv.bindings.workload",
       },
       adapters = {
+        xmake = { selectors = { "lv/ilha/integration/**", "ilha-system-test/*" } },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "ilha", "simtix" },
@@ -685,6 +751,24 @@ local config = {
         "tests.pfreader",
       },
       adapters = {
+        xmake = {
+          build_options = { ["lv-enable-perfetto"] = true },
+          selectors = {
+            "lv/unit/**",
+            "lv/docgen",
+            "lv-log-test/*",
+            "lv-statistics-test/*",
+            "lv-address-router-test/*",
+            "lv-axi-test/**",
+            "lv-axi-rejection-test/**",
+            "lv/cp/**",
+            "scalar-riscv-test*/cp.command_processor",
+            "cp-*/cp.command_processor",
+            "pfreader-test/*",
+            "ipc-test/*",
+            "ipc-synchronous-test/*",
+          },
+        },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "lv", "tests" },
@@ -695,7 +779,8 @@ local config = {
           },
           selectors = {
             ".*/.*\\.lua",
-            "lv.unit.log",
+            "^statistics\\.lua$",
+            "lv\\.unit\\..*",
             "^cp\\.riscv-test\\.cp\\.command_processor$",
             "^cp\\.interrupt\\.cp\\.command_processor$",
             "^cp\\.prog0\\.cp\\.command_processor$",
@@ -705,13 +790,31 @@ local config = {
             "^cp\\.(harness|riscv-test\\.check|benchmark\\.check)$",
             "pfreader",
             "ipc_test",
+            "ipc\\.synchronous\\..*",
           },
+        },
+      },
+    },
+    ["hal.daemon"] = {
+      depends = { "hal", "hal.tests", "tests.hal" },
+      adapters = {
+        xmake = {
+          build_options = {},
+          selectors = { "hal-daemon-tests/*" },
+        },
+        cmake = {
+          build_options = {
+            ENABLE_PROJECTS = { "hal", "fw", "lv", "simtix", "tests" },
+            TESTS_ENABLE_TESTS = { "hal" },
+          },
+          selectors = { "^hal\\.(memory_copy|large_sm_capabilities|reboot)$" },
         },
       },
     },
     ["hal.integration"] = {
       depends = { "hal", "hal.tests", "tests.hal" },
       adapters = {
+        xmake = { selectors = { "hal-*/*" } },
         cmake = {
           build_options = {
             ENABLE_PROJECTS = { "hal", "lv", "simtix", "tests" },
@@ -724,6 +827,14 @@ local config = {
     },
   },
   workflows = {
+    hal = {
+      description = "Validate firmware, HAL, libcomm, and HAL daemon behavior.",
+      test_suites = { "fw.unit", "hal.unit", "libcomm.unit", "hal.daemon" },
+    },
+    lv = {
+      description = "Validate the complete Lunaverse runtime and bindings.",
+      test_suites = { "lv.unit" },
+    },
     ["simtix.pipelined_sm"] = make_simtix_sm_workflow(
       "pipelined_sm",
       { "simtix.pipelined_core.unit", "ilha.integration", "simtix.sm.integration" }

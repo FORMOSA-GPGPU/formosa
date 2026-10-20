@@ -6,16 +6,13 @@ kernel_ret_addr:
 .section .text
 .global kernel
 
-#define TEST(n) \
-  .global n; \
-  jal zero, n; \
-  .global n##_ret; \
-  n##_ret:
-
 kernel:
     la t0, kernel_ret_addr
     sd ra, 0(t0)
-@RISCV_TEST_CALLS@
+    .global TEST_FUNC_NAME
+    jal zero, TEST_FUNC_NAME
+    .global TEST_FUNC_RET
+TEST_FUNC_RET:
     la t0, kernel_ret_addr
     ld ra, 0(t0)
     ret

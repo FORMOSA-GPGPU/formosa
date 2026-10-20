@@ -138,6 +138,12 @@ add_parboil(sad opencl_base cpu
   REFERENCE_SOURCES main.c image.c file.c sad_cpu.c
   ARGS -i "${INPUT_DIR}/sad-reference.bin,${INPUT_DIR}/sad-current.bin")
 
+# Leave headroom for coverage with concurrent simulator workloads.
+foreach(SM IN LISTS OPENCL_SMS)
+  set_tests_properties(opencl.parboil.histo.${SM} opencl.parboil.sad.${SM}
+    PROPERTIES TIMEOUT 1200)
+endforeach()
+
 add_parboil(tpacf opencl_base base
   CONFIG large_sm
   SOURCES main.cc args.cc model.cc

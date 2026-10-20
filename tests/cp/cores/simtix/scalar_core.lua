@@ -6,6 +6,13 @@
 ---@field private _sc_module sc.Module
 ---@overload fun(name: string): simtix.scalar_core
 local ScalarCore = { isa = "rv64im", num_mem_ports = 2, has_ext_int = false, has_reset = false }
+
+-- Build tools inspect the same cp.core fields without loading runtime methods.
+if xmake then
+  function main() return ScalarCore end
+  return
+end
+
 ScalarCore.__index = ScalarCore
 
 ---@param _ string Module name, consumed by lv.sc_module.wrap.

@@ -9,13 +9,14 @@ let
   # the top-level flake's ciPackages.
   packages = with pkgs; [ gdb ];
 
-  nativeBuildInputs = with pkgs; [ git cmake ninja ];
+  nativeBuildInputs = with pkgs; [ git xmake cmake ninja ];
 
   buildInputs = with pkgs; [
     luajit
     luajitPackages.argparse
     luajitPackages.luaposix
     zlib
+    sqlite
   ];
 in pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } {
   name = "lv";

@@ -81,9 +81,10 @@ class FetchEntry {
  private:
   bool ready_;
   std::vector<Packet *> packets_;
-  tlm::tlm_generic_payload payload_;
   std::vector<uint8_t> bytes_;
   FetchEntryExtension ext_;
+  // The payload releases its borrowed extension during destruction.
+  tlm::tlm_generic_payload payload_;
 };
 
 }  // namespace simtix::pipelined

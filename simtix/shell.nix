@@ -5,7 +5,7 @@
 { pkgs ? import <nixpkgs> { } }:
 
 let
-  nativeBuildInputs = with pkgs; [ git bear cmake ninja ];
+  nativeBuildInputs = with pkgs; [ git bear xmake cmake ninja ];
 
   buildInputs = with pkgs; [ zlib ];
 

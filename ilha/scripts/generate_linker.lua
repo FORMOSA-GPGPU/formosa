@@ -9,7 +9,7 @@ function main(output_file, source_dir, module_name)
   assert(output_file and source_dir, "usage: generate_linker.lua <output-file> <source-dir>")
   ---@diagnostic disable-next-line: undefined-global -- provided by xmake lua.
   local address_map_module = import("ilha.lua.addr_map", { rootdir = source_dir })
-  local address_map = address_map_module.xmake_address_map()
+  local address_map = table.clone(address_map_module.xmake_address_map())
   if module_name then
     ---@diagnostic disable-next-line: undefined-global -- provided by xmake lua.
     local overrides = import(module_name, { rootdir = source_dir }).xmake_address_map()

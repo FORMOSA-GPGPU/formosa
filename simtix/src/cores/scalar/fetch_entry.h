@@ -104,8 +104,9 @@ class FetchEntry {
   bool ready_ = false;
   bool inflight_ = false;
   bool discard_ = false;
-  tlm::tlm_generic_payload payload_;
   FetchEntryExtension ext_;
+  // The payload releases its borrowed extension during destruction.
+  tlm::tlm_generic_payload payload_;
 };
 
 }  // namespace simtix::scalar

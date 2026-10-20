@@ -2,8 +2,7 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
-__RUNFILE_PATH__ = assert(arg[1]) .. "/"
-local source_dir = assert(arg[2])
+local source_dir = assert(...)
 
 ---@type ilha.config
 local Config = require("ilha.config")

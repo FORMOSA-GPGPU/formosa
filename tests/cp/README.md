@@ -5,31 +5,42 @@ SPDX-License-Identifier: Apache-2.0
 
 # CPU test harness
 
-Build and run every available adapter from the repository root:
+Build and run every available adapter from the repository root, inside the
+development shell:
 
 ```sh
-direnv exec . cmake -S . -B build-cp -G Ninja -DCMAKE_BUILD_TYPE=Release \
+xmake f -m release
+xmake test -j8 'cp-*/**' 'scalar-riscv-test*/**' 'lv/cp/**'
+```
+
+For the temporary CMake fallback, use an independent output directory:
+
+```sh
+cmake -S . -B build-cp -G Ninja -DCMAKE_BUILD_TYPE=Release \
   '-DENABLE_PROJECTS=simtix;tests' -DTESTS_ENABLE_TESTS=cp -DCP_TEST_CORES=all
-direnv exec . cmake --build build-cp -j 8
-direnv exec . ctest --test-dir build-cp -L cp --output-on-failure
+cmake --build build-cp -j8
+ctest --test-dir build-cp -L cp --output-on-failure
 ```
 
 Run individual programs using the LV executable from the same build:
 
 ```sh
-direnv exec . build-cp/bin/lv tests/cp/riscv-test/run.lua -h
-direnv exec . build-cp/bin/lv tests/cp/riscv-test/run.lua --core cp.command_processor
-direnv exec . build-cp/bin/lv tests/cp/riscv-test/run.lua --core simtix.scalar_core
-direnv exec . build-cp/bin/lv tests/cp/interrupt/run.lua --core cp.command_processor
-direnv exec . build-cp/bin/lv tests/cp/prog0/run.lua --core simtix.scalar_core --golden tests/cp/prog0/rv64.golden
-direnv exec . build-cp/bin/lv tests/cp/coremark/run.lua --core cp.command_processor
-direnv exec . build-cp/bin/lv tests/cp/coremark/run.lua --core simtix.scalar_core --profile validation
-direnv exec . build-cp/bin/lv tests/cp/dhrystone/run.lua --core simtix.scalar_core
+./build/bin/lv tests/cp/riscv-test/run.lua -h
+./build/bin/lv tests/cp/riscv-test/run.lua --core cp.command_processor
+./build/bin/lv tests/cp/riscv-test/run.lua --core simtix.scalar_core
+./build/bin/lv tests/cp/interrupt/run.lua --core cp.command_processor
+./build/bin/lv tests/cp/prog0/run.lua --core simtix.scalar_core --golden tests/cp/prog0/rv64.golden
+./build/bin/lv tests/cp/coremark/run.lua --core cp.command_processor
+./build/bin/lv tests/cp/coremark/run.lua --core simtix.scalar_core --profile validation
+./build/bin/lv tests/cp/dhrystone/run.lua --core simtix.scalar_core
 ```
 
 `--core` is a Lua module name, passed directly to `require`. The runner finds
 its ELF automatically. Use `--elf` for another ELF; the ISA test also needs a
-matching `.tests` file beside it. CTest runs these same scripts.
+matching `.tests` file beside it. Xmake and CTest run these same scripts.
+Xmake stages the default ELF/manifest runfiles during build, so direct LV execution
+does not require `--elf` or an Xmake launcher. If using `xmake f -o <builddir>`,
+use `<builddir>/bin/lv`; the CMake example above uses `build-cp/bin/lv`.
 
 `prog0` compares 45 memory words against the golden file passed with `--golden`.
 Choose `rv32.golden` or `rv64.golden` to match the core. Its fixed
@@ -67,8 +78,12 @@ golden file when using a custom ELF.
    `boot(entry)` prepares the entry point or trampoline without advancing
    simulation or driving reset. It runs before the reset interval, so preparation
    must survive that reset. The run's cycle budget starts after boot completes.
-3. Add `<namespace>.<name>` to the available cores in `CMakeLists.txt` when its
-   model is enabled. Rebuild and run with `--core <namespace>.<name>`.
+3. Xmake discovers `cores/**/*.lua` and registers the compatible cases for each
+   adapter. Keep this directory limited to `cp.core` adapters; put helpers outside
+   it. Each program's `accepts` predicate owns its ISA/capability requirements;
+   discovery does not add support for a new ELF architecture automatically.
+   During the transition, also add `<namespace>.<name>` to CMake's available cores
+   when its model is enabled. Rebuild and run with `--core <namespace>.<name>`.
 
 ## Add a test program
 
@@ -78,9 +93,11 @@ golden file when using a custom ELF.
    `system:run(elf_path, check, options)`. The checker receives the system and
    elapsed cycles: return `nil` to continue, a truthy result to pass, or raise
    an error to fail. It can read memory or UART output.
-3. Add the ELF build and test registration in `<program>/CMakeLists.txt`, then
-   `add_subdirectory(<program>)` here. Follow
-   [the ISA registration](riscv-test/CMakeLists.txt) to use `CP_SELECTED_CORES`.
+3. Add the ELF build and test registration in `<program>/xmake.lua`, and include
+   it from [xmake.lua](xmake.lua). Stage the default ELF runfile after build;
+   [CoreMark](coremark/xmake.lua) provides an example. Its `accepts` predicate
+   selects adapters compatible with this program's image and runner. Keep the
+   CMake definition synchronized during the transition, using `CP_SELECTED_CORES`.
 
 C programs can call `add_cp_runtime(rv64im)` and link `cp-runtime-rv64im` to
 reuse startup, platform layout, standard headers, and console/string support.

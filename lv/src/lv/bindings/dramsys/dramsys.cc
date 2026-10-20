@@ -8,17 +8,25 @@
 #include <systemc.h>
 
 #include <cstdint>
+#include <filesystem>
 #include <memory>
 #include <stdexcept>
 #include <string>
-#include <string_view>
 
 namespace {
-constexpr std::string_view default_config_path =
-    DRAMSYS_RESOURCE_DIR "/ddr4-example.json";
+std::string resource_directory() {
+  const std::filesystem::path directory(DRAMSYS_RESOURCE_DIR);
+  if (directory.is_absolute()) return directory.string();
+  const std::string root = lv::Runtime()["__RUNFILE_PATH__"];
+  return (std::filesystem::path(root) / directory).string();
+}
+
+std::string default_config_path() {
+  return resource_directory() + "/ddr4-example.json";
+}
 
 struct Param {
-  std::string config = std::string(default_config_path);
+  std::string config = default_config_path();
 
   LV_SCHEMA(DRAMSys::DRAMSys, Param,
             LV_FIELD(config, "Path to the DRAMSys configuration JSON file"));
@@ -69,13 +77,13 @@ std::shared_ptr<DRAMSys::DRAMSys> make_dramsys(
 }
 }  // namespace
 
-LV_MODULE(dramsys).constant("RESOURCE_DIR", DRAMSYS_RESOURCE_DIR,
+LV_MODULE(dramsys).constant("RESOURCE_DIR", resource_directory(),
                             lv::doc("DRAMSys resource directory"));
 
 LV_BINDING_WITH_NAME(dramsys, DRAMSys::DRAMSys, "DRAMSys")
     .constructor(
         [](const char *name) {
-          auto config = DRAMSys::Config::from_path(default_config_path);
+          auto config = DRAMSys::Config::from_path(default_config_path());
           return make_dramsys(name, config);
         },
         lv::params("name"), lv::doc("Create a DRAMSys memory system"))

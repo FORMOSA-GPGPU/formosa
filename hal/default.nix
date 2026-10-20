@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-{ pkgs ? import <nixpkgs> { } }:
+{ pkgs ? import <nixpkgs> { }, buildSystem ? "cmake" }:
 
 let
   inherit (pkgs) lib;
@@ -14,6 +14,10 @@ let
       (root + "/CMakeLists.txt")
       (root + "/FormosaConfig.cmake.in")
       (root + "/cmake")
+      (root + "/formosa-sdk-xmake.lua")
+      (root + "/workflows.lua")
+      (root + "/xmake")
+      (root + "/ilha/platform-data/xmake.lua")
       (root + "/lv/device")
       (root + "/ilha/lua/addr_map.lua")
       (root + "/ilha/scripts/generate_header.lua")
@@ -35,14 +39,34 @@ let
   };
 
   crossPkgs = pkgs.pkgsCross.riscv64-embedded;
-in pkgs.stdenv.mkDerivation {
+in assert builtins.elem buildSystem [ "cmake" "xmake" ];
+pkgs.stdenv.mkDerivation ({
   pname = "hal";
   version = "0.1";
   inherit src;
 
-  nativeBuildInputs = with pkgs; [ cmake ninja tinyxxd llvmPackages.lld xmake ];
-
-  buildInputs = [ crossPkgs.stdenv.cc crossPkgs.buildPackages.gdb ];
-
+  nativeBuildInputs = with pkgs;
+    [ xmake tinyxxd llvmPackages.lld ]
+    ++ lib.optionals (buildSystem == "cmake") [ cmake ninja ];
+  buildInputs = [ crossPkgs.stdenv.cc ]
+    ++ lib.optionals (buildSystem == "cmake") [ crossPkgs.buildPackages.gdb ];
+} // (if buildSystem == "cmake" then {
   cmakeFlags = [ "-DENABLE_PROJECTS=hal" "-DFREERTOS_PATH=${freeRTOSKernel}" ];
-}
+} else {
+  postUnpack = ''
+    mkdir -p "$sourceRoot/third-party"
+    ln -s ${freeRTOSKernel} "$sourceRoot/third-party/FreeRTOS-Kernel"
+  '';
+  dontConfigure = true;
+  buildPhase = ''
+    runHook preBuild
+    xmake f -F formosa-sdk-xmake.lua -m release -o build
+    xmake -F formosa-sdk-xmake.lua -j "$NIX_BUILD_CORES" formosa-sdk
+    runHook postBuild
+  '';
+  installPhase = ''
+    runHook preInstall
+    xmake install -F formosa-sdk-xmake.lua -o "$out" formosa-sdk
+    runHook postInstall
+  '';
+}))

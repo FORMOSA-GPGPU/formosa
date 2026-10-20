@@ -8,6 +8,13 @@
 ---@overload fun(name: string): cp.command_processor
 local CommandProcessor =
   { isa = "rv64im", num_mem_ports = 1, has_ext_int = true, has_reset = false }
+
+-- Build tools inspect the same cp.core fields without loading runtime methods.
+if xmake then
+  function main() return CommandProcessor end
+  return
+end
+
 function CommandProcessor:__index(key)
   if key == "ext_int" then return self._native.ext_int end
   return CommandProcessor[key]

@@ -25,7 +25,7 @@ No FORMOSA override → Nix PoCL. No `FORMOSA_INSTALL_PREFIX` → Nix SDK.
 
 Firmware ships inside the HAL; the SDK install is the firmware step. Start at the first layer whose install does not yet contain the change.
 
-1. FORMOSA SDK — `opencl.debug` `--target install` (`outputs/out`)
+1. FORMOSA SDK — native `formosa-sdk` build/install (`outputs/out`), following [the HAL guide](../../../hal/README.md). The guide also documents the transitional CMake fallback.
 2. PoCL — `$cmakeFlags` `--target install` (`POCL_INSTALL_PREFIX`); links `FORMOSA_INSTALL_PREFIX` when set, else Nix SDK
 3. FORMOSA direnv — `FORMOSA_POCL_PREFIX` loads that PoCL
 

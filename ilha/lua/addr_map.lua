@@ -173,7 +173,7 @@ AddressMap.validate()
 -- Export a loader only inside that sandbox so the generator executes this SSOT
 -- instead of parsing its source text.
 ---@diagnostic disable-next-line: undefined-global
-if type(import) == "function" then
+if xmake then
   function xmake_address_map() return AddressMap end
 end
 

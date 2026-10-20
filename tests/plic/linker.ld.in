@@ -1,0 +1,24 @@
+/* SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+ * SPDX-License-Identifier: Apache-2.0 */
+
+/* Generated from plic.platform. */
+OUTPUT_ARCH(riscv)
+ENTRY(start)
+
+SECTIONS {
+  . = @PLIC_TEST_TEXT_BASE@;
+  .text : { KEEP(*(.text.start)) *(.text .text.*) }
+  .rodata : { *(.rodata .rodata.* .srodata .srodata.*) }
+  .data : { *(.data .data.* .sdata .sdata.*) }
+  PROVIDE(__global_pointer$ = . + 0x800);
+
+  /* start.S clears this range before calling C code. */
+  .bss ALIGN(8) : {
+    __bss_start = .;
+    *(.bss .bss.* .sbss .sbss.*) *(COMMON)
+    . = ALIGN(8);
+    __bss_end = .;
+  }
+
+  ASSERT(. <= @PLIC_TEST_RAM_END@, "PLIC test exceeds RAM")
+}

@@ -94,6 +94,13 @@
           formosa-pocl = softwareStacks.formosa-pocl;
         };
 
+        # Xmake's native configuration menu needs curses at build time.
+        xmakeWithCurses = pkgs.xmake.overrideAttrs (old: {
+          buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.ncurses ];
+          nativeBuildInputs = (old.nativeBuildInputs or [ ])
+            ++ [ pkgs.pkg-config ];
+        });
+
         basePackages = with pkgs; [
           git
           curl
@@ -104,7 +111,8 @@
           tree
           black
           lua-language-server
-          xmake
+          xmakeWithCurses
+          pkg-config
           opencl-headers
           opencl-clhpp
           ocl-icd
@@ -296,6 +304,10 @@
         } // projectDevShells;
 
         packages = {
+          formosa-sdk-xmake = import ./hal/default.nix {
+            inherit pkgs;
+            buildSystem = "xmake";
+          };
           dev-shell = defaultDevShell;
           formosa-docker-env-fingerprint = formosaDockerEnvFingerprint;
           formosa-docker-env-content = formosaDockerImageContent;

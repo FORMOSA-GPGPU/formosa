@@ -9,13 +9,11 @@ local impact = import("workflow.impact")
 local resolve = import("workflow.resolve")
 local serializer = import("workflow.serializer")
 local cmake = import("workflow.backends.cmake")
+local execute = import("workflow.execute")
+local commands = import("workflow.commands")
 
 local OUTPUT = "CMakePresets.json"
 local USER_OUTPUT = "CMakeUserPresets.json"
-local VALUE_OPTIONS = { adapter = true, base = true, head = true, profile = true }
-local REGRESSION_OPTIONS =
-  { "profile", "adapter", "base", "head", "working_tree", "all", "generate" }
-
 local function read_file(filename)
   local file = io.open(filename, "rb")
   if not file then return nil end
@@ -33,51 +31,15 @@ local function write_atomic(filename, contents)
   os.mv(temporary, filename)
 end
 
-local function reject_options(command, options, names)
-  for _, name in ipairs(names) do
-    if options[name] ~= nil then raise("--%s is not valid for '%s'", name, command) end
-  end
-end
-
-local function parse_arguments()
-  local arguments = option.get("arguments") or {}
-  local command = arguments[1]
-  local options = {}
-  local index = 2
-  while index <= #arguments do
-    local argument = arguments[index]
-    if argument == "--all" or argument == "--generate" or argument == "--working-tree" then
-      local name = argument:sub(3):gsub("-", "_")
-      if options[name] then raise("%s may be specified only once", argument) end
-      options[name] = true
-    else
-      local name, value = argument:match("^%-%-([%w-]+)=(.+)$")
-      if not name then
-        name = argument:match("^%-%-([%w-]+)$")
-        if name and VALUE_OPTIONS[name] then
-          index = index + 1
-          value = arguments[index]
-        end
-      end
-      if not name or not VALUE_OPTIONS[name] or not value or value == "" then
-        raise("Invalid workflow option: %s", argument)
-      end
-      if options[name] ~= nil then raise("--%s may be specified only once", name) end
-      options[name] = value
-    end
-    index = index + 1
-  end
-  return command, options
+local function usage_error(command, message, ...)
+  raise("%s\nRun: xmake workflow %s --help", string.format(message, ...), command)
 end
 
 local function print_list(title, values)
-  io.write(title .. ":\n")
-  if #values == 0 then
-    io.write("  (none)\n")
-  else
-    for _, value in ipairs(values) do
-      io.write("  - " .. value .. "\n")
-    end
+  if #values == 0 then return end
+  print("%s:", title)
+  for _, value in ipairs(values) do
+    print("  - %s", value)
   end
 end
 
@@ -86,10 +48,24 @@ local function option_text(value)
   return tostring(value)
 end
 
+local function list_names(config)
+  local names = frontend.keys(config.workflows)
+  local width = 0
+  for _, name in ipairs(names) do
+    width = math.max(width, #name)
+  end
+  print("Workflows:")
+  for _, name in ipairs(names) do
+    print("  %-" .. width .. "s - %s", name, config.workflows[name].description)
+  end
+  print_list("Test suites", frontend.keys(config.test_suites))
+  print_list("Build profiles", frontend.keys(config.build_profiles))
+end
+
 local function regression_result(config, rootdir, options)
   if options.all then
     if options.base or options.head or options.working_tree then
-      raise("--all cannot be combined with --base, --head, or --working-tree")
+      usage_error("regression", "--all cannot be combined with --base, --head, or --working-tree")
     end
     return {
       affected_components = {},
@@ -111,42 +87,70 @@ end
 
 local function run_regression(config, rootdir, options)
   local profile = options.profile
-  if not profile then raise("regression requires --profile") end
-  if not config.build_profiles[profile] then raise("Unknown build profile: %s", profile) end
+  if not profile then usage_error("regression", "regression requires --profile") end
   if options.generate and options.adapter and options.adapter ~= "cmake" then
-    raise("--generate supports only the CMake adapter")
+    usage_error("regression", "--generate supports only the CMake adapter")
   end
+  if options.generate and options.execute then
+    usage_error("regression", "--generate and --execute are mutually exclusive")
+  end
+  local adapter = options.generate and "cmake" or options.adapter or "xmake"
   local result = regression_result(config, rootdir, options)
   local run
   if #result.test_suites > 0 then
-    run = resolve.run(
-      config,
-      profile,
-      result.test_suites,
-      options.generate and "cmake" or options.adapter
-    )
+    run = resolve.run(config, profile, result.test_suites, adapter)
   end
 
-  io.write("Diff: " .. (result.base or "(not used)") .. ".." .. result.head .. "\n")
-  print_list("Changed files", result.changed_files)
-  print_list("Directly matched components", result.direct_components)
-  print_list("Transitively affected components", result.affected_components)
-  print_list("Selected test suites", result.test_suites)
-  print_list("Informationally affected workflows", result.affected_workflows)
-  if run then
-    io.write("Resolved profile/adapter: " .. run.profile .. " / " .. run.adapter .. "\n")
-    io.write("Merged build options:\n")
-    for _, name in ipairs(frontend.keys(run.build_options)) do
-      io.write("  " .. name .. " = " .. option_text(run.build_options[name]) .. "\n")
-    end
-    print_list("Merged selectors", run.selectors)
+  print("Regression: %s / %s", profile, adapter)
+  if options.all then
+    print("Selection: all suites requested by --all")
+  else
+    print(
+      "Selection: changes in %s..%s%s (%d changed files)",
+      result.base,
+      result.head,
+      options.working_tree and " + working tree" or "",
+      #result.changed_files
+    )
   end
-  print_list("Unmatched files", result.unmatched_files)
+  if #result.test_suites > 0 then
+    print_list("Selected test suites", result.test_suites)
+  else
+    print("Selected test suites: none")
+  end
+  if option.get("verbose") or option.get("diagnosis") then
+    print_list("Changed files", result.changed_files)
+    print_list("Directly matched components", result.direct_components)
+    print_list("Transitively affected components", result.affected_components)
+    print_list("Informationally affected workflows", result.affected_workflows)
+    if run then
+      print("Merged build options:")
+      for _, name in ipairs(frontend.keys(run.build_options)) do
+        print("  %s = %s", name, option_text(run.build_options[name]))
+      end
+      print_list("Merged selectors", run.selectors)
+    end
+    print_list("Unmatched files", result.unmatched_files)
+  elseif #result.unmatched_files > 0 then
+    print(
+      "Unmatched files: %d; use xmake workflow -v regression ... for details.",
+      #result.unmatched_files
+    )
+  end
+  if not options.execute and not options.generate then
+    print("Plan only; add --execute to build and test.")
+  end
   if options.generate then
     local contents = serializer.json(cmake.run_presets(run, "regression." .. profile, "build"))
       .. "\n"
     write_atomic(path.join(rootdir, USER_OUTPUT), contents)
     print("Generated %s", USER_OUTPUT)
+  elseif options.execute then
+    if run then
+      execute.run(run, options)
+    else
+      print("No affected test suites; nothing to run.")
+    end
   end
 end
 
@@ -155,29 +159,65 @@ local function generated_contents(config)
 end
 
 function run()
-  local command, options = parse_arguments()
-  if not command then raise("Usage: xmake workflow <graph|regression|generate|check> [options]") end
+  local arguments = option.get("arguments") or {}
+  local command = arguments[1]
+  if not command then raise("A workflow command is required\nRun: xmake workflow --help") end
+  if not commands.has_command(command) then
+    raise("Unknown workflow command '%s'\nRun: xmake workflow --help", command)
+  end
+  -- The tail belongs to xmake f, including any --help intended for configure.
+  for index = 2, #arguments do
+    if arguments[index] == "--" then break end
+    if arguments[index] == "--help" or arguments[index] == "-h" then
+      commands.show(command)
+      return
+    end
+  end
+  local options
+  try({
+    function() options = commands.parse(command, arguments) end,
+    catch({ function(err) usage_error(command, "%s", err) end }),
+  })
 
   local rootdir = os.projectdir()
   local config = frontend.load(rootdir)
-  if command == "graph" then
-    reject_options(command, options, REGRESSION_OPTIONS)
+  if options.profile and not config.build_profiles[options.profile] then
+    usage_error(
+      command,
+      "Unknown build profile: %s\nDiscover names: xmake workflow list",
+      options.profile
+    )
+  end
+  if command == "run" or command == "build" then
+    local name = options.name
+    local workflow = config.workflows[name]
+    if not workflow then
+      usage_error(command, "Unknown workflow: %s\nDiscover names: xmake workflow list", name)
+    end
+    local resolved = resolve.run(
+      config,
+      options.profile or "debug",
+      workflow.test_suites,
+      options.adapter or "xmake",
+      { workflow = name, install = workflow.install }
+    )
+    options.build_only = command == "build"
+    execute.run(resolved, options)
+  elseif command == "list" then
+    list_names(config)
+  elseif command == "graph" then
     io.write(graph.render(config))
   elseif command == "regression" then
     run_regression(config, rootdir, options)
   elseif command == "generate" then
-    reject_options(command, options, REGRESSION_OPTIONS)
     write_atomic(path.join(rootdir, OUTPUT), generated_contents(config))
     print("Generated %s", OUTPUT)
   elseif command == "check" then
-    reject_options(command, options, REGRESSION_OPTIONS)
     local expected = generated_contents(config)
     if read_file(path.join(rootdir, OUTPUT)) ~= expected then
       io.stderr:write(OUTPUT .. " is stale.\nRun: xmake workflow generate\n")
       os.exit(1)
     end
     print("%s is up to date.", OUTPUT)
-  else
-    raise("Unknown workflow command '%s'; expected graph, regression, generate, or check", command)
   end
 end

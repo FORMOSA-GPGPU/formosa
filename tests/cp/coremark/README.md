@@ -3,13 +3,25 @@
 
 # CoreMark simulation port
 
-Build the [CPU tests](../README.md), then run either seed profile independently:
+From the repository root in the development shell, build the desired profiles
+and run them directly with LV:
 
 ```sh
-direnv exec . build-cp/bin/lv tests/cp/coremark/run.lua --core cp.command_processor
-direnv exec . build-cp/bin/lv tests/cp/coremark/run.lua --core simtix.scalar_core --profile validation
-direnv exec . ctest --test-dir build-cp -L coremark --output-on-failure
+xmake build cp-coremark
+xmake build cp-coremark-validation
+./build/bin/lv tests/cp/coremark/run.lua --core cp.command_processor
+./build/bin/lv tests/cp/coremark/run.lua --core simtix.scalar_core --profile validation
 ```
+
+The build also supplies LV and stages each ELF under its logical runfile path.
+The manual commands need neither `--elf` nor an Xmake launcher. With a custom
+output directory, use `<builddir>/bin/lv`. To run all four profile/core pairs:
+
+```sh
+xmake test 'cp-coremark/**' 'cp-coremark-validation/**'
+```
+
+See the [CPU tests](../README.md) for the temporary CMake fallback.
 
 `--profile` defaults to `performance`. Both profiles run 10 iterations.
 The reported iterations/s/MHz is `iterations * 1e6 / measured_cycles`.

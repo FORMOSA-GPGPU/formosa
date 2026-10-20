@@ -22,7 +22,7 @@ parser:option("--drain", "Extra drain cycles after the main run"):convert(tonumb
 parser:flag("--keep-alive", "Ignore client Terminate and keep the simulation running")
 parser
   :option("--agent-socket-path", "Path of the socket that clients connect to (AGENT_SOCKET_PATH)")
-  :default("/tmp/formosa.sock")
+  :default(os.getenv("AGENT_SOCKET_PATH") or "/tmp/formosa.sock")
 
 local args = parser:parse({ ... })
 local config = ConfigCli.load(args)

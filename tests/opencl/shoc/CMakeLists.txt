@@ -85,7 +85,8 @@ add_shoc(s3d level2/s3d
 add_test(NAME opencl.shoc.validation
   COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_LIST_DIR}/verify_test.py"
     "${CMAKE_CXX_COMPILER}" "${UPSTREAM}/src" "${CMAKE_CURRENT_BINARY_DIR}")
-set_tests_properties(opencl.shoc.validation PROPERTIES LABELS "integration;opencl;shoc" TIMEOUT 30)
+# This oracle compiles comparator fixtures while simulator tests run in parallel.
+set_tests_properties(opencl.shoc.validation PROPERTIES LABELS "integration;opencl;shoc" TIMEOUT 120)
 
 function(add_shoc_test NAME)
   cmake_parse_arguments(CASE "" "CONFIG;TARGET;KIND" "" ${ARGN})

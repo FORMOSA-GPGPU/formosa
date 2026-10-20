@@ -15,7 +15,7 @@ Select the first viable route:
 
 - **Generic component**: `lv/src/lv/bindings/<ns>/`
 - **GPGPU arch**: `simtix/src/<area>/`
-- **Lua composite**: `$project/lua/` → `require("$project.name")` via `lv_register_project_lua_roots`
+- **Lua composite**: `$project/lua/` → `require("$project.name")` via the `lv.lua` rule
 - **Formosa system wiring**: `tests/formosa/lua/`
 
 ## Canonical examples
@@ -31,16 +31,17 @@ Inspect these files for conventions and patterns:
 | RTL source | `lv/src/lv/bindings/simple/vclint.sv` |
 | Verilated wrapper | `lv/src/lv/bindings/simple/vclint.cc` + `lv/tests/unit/simple/vclint.lua` |
 | Verilated time | `lv/src/liblv/vl_time.cc` |
-| Lua test registration | `lv/tests/unit/CMakeLists.txt` |
-| Independent CMake target | `simtix/src/CMakeLists.txt` (`lv_register_binding(simtix)`) |
+| Lua test registration | `lv/tests/xmake.lua` |
+| Binding object target | `simtix/xmake.lua` (`simtix`) |
 | Generated API | `.cache/lv_meta/lv_api.lua` |
 
 ## Gotchas
 
 - Keep a Lua-only binding's class and implementation in one `.cc`; add a header
   when another C++ translation unit consumes the type.
-- New `.cc` must be listed on the owning CMake target
-- New CMake library target must call `lv_register_binding()`
+- New `.cc` must belong to the owning Xmake target, including through its existing source glob.
+- A new binding object target must be an explicit dependency of `lv`.
+- During the transition, update the CMake fallback too; its binding libraries still use `lv_register_binding()`.
 - Lua classes that own a SystemC hierarchy use `require("lv.sc_module").wrap`
 - Constructors are name-first
 

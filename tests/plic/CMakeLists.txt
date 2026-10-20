@@ -14,6 +14,8 @@ file(MAKE_DIRECTORY "${IMAGE_DIR}")
 set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
   "${formosa_SOURCE_DIR}/tests/cp/platform.lua"
   "${CMAKE_CURRENT_SOURCE_DIR}/generate.lua"
+  "${CMAKE_CURRENT_SOURCE_DIR}/platform.h.in"
+  "${CMAKE_CURRENT_SOURCE_DIR}/linker.ld.in"
   "${CMAKE_CURRENT_SOURCE_DIR}/platform.lua")
 execute_process(COMMAND "${CMAKE_COMMAND}" -E env
   "LUA_PATH=${LV_LUA_RUNTIME_ROOT}/?.lua;$ENV{LUA_PATH};;"

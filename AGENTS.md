@@ -25,7 +25,7 @@
 - Add a test only when existing tests cannot catch the regression.
 - Every test MUST fail when its protected behavior regresses. Tautological tests
   MUST be discarded.
-- Edit `presets.lua`, not generated `CMakePresets.json`.
+- Edit `workflows.lua`, not generated `CMakePresets.json`.
 
 ## Architecture before convenience
 

@@ -32,5 +32,5 @@ set_target_properties(Formosa::formosa-hal.lv PROPERTIES
   IMPORTED_LOCATION "${_IMPORT_PREFIX}/lib/libformosa-hal.lv.a"
   INTERFACE_INCLUDE_DIRECTORIES "${_IMPORT_PREFIX}/include"
 @FORMOSA_HAL_COVERAGE@
-  INTERFACE_LINK_LIBRARIES "$<LINK_ONLY:Formosa::formosa-real.lv>;$<LINK_ONLY:Formosa::falloc>"
+  INTERFACE_LINK_LIBRARIES "$<LINK_ONLY:Formosa::formosa-real.lv>;$<LINK_ONLY:Formosa::falloc>;@FORMOSA_CXX_RUNTIME@"
 )

@@ -12,7 +12,7 @@ function(add_cp_riscv_image CORE)
   file(GLOB_RECURSE CONFIG_INPUTS CONFIGURE_DEPENDS
     "${RISCV_TESTS_ISA_DIR}/*/Makefrag")
   set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
-    ${CONFIG_INPUTS} "${TEST_SOURCE_DIR}/generate.lua"
+    ${CONFIG_INPUTS} "${TEST_SOURCE_DIR}/generate.lua" "${TEST_SOURCE_DIR}/prepare.lua"
     "${TEST_SOURCE_DIR}/start.S.in" "${TEST_SOURCE_DIR}/linker.ld.in")
   execute_process(COMMAND "${CMAKE_COMMAND}" -E env
     "LUA_PATH=${LV_LUA_RUNTIME_ROOT}/?.lua;$ENV{LUA_PATH};;"

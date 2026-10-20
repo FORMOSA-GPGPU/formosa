@@ -26,10 +26,11 @@ formosa/
 ├── tests/         Cross-component integration tests
 │                    (opencl, kernel-sim, baremetal-freertos, cp, hal, ipc, ...)
 ├── scripts/       Helper and code-generation scripts
-├── cmake/         Shared CMake modules
+├── xmake/         Native build rules and workflow tools
+├── cmake/         Transitional CMake fallback and SDK consumer support
 ├── third-party/   Vendored dependencies
 ├── flake.nix      Nix dev environment and packages
-└── CMakeLists.txt Top-level build entry
+└── xmake.lua      Top-level build entry
 ```
 
 ## Contributing

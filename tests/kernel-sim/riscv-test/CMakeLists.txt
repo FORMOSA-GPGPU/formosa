@@ -22,13 +22,14 @@ function(add_kernel_sim_riscv_test SOURCE)
 
   set(TEST_ID ${ISA_NAME}.${TEST_NAME})
   set(TARGET kernel-sim.riscv-test.${TEST_ID})
-  set(KERNEL_SOURCE ${CMAKE_CURRENT_BINARY_DIR}/kernel.${TEST_ID}.S)
-  set(RISCV_TEST_CALLS "    TEST(${TEST_NAME})\n")
-  configure_file(kernel.S.in ${KERNEL_SOURCE} @ONLY)
+  set(KERNEL_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/kernel.S)
 
   add_executable(${TARGET}
     ${KERNEL_SIM_START}
     ${KERNEL_SOURCE}
+  )
+  target_compile_definitions(${TARGET}
+    PRIVATE TEST_FUNC_NAME=${TEST_NAME} TEST_FUNC_RET=${TEST_NAME}_ret
   )
 
   set(OBJ ${TARGET}.obj)

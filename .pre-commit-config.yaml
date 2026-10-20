@@ -7,7 +7,7 @@
 # Preserve imported benchmark sources and notices without formatting changes.
 exclude: >-
   (?x)^(
-    third-party/(?!riscv-opcodes$|[^/]+\.cmake$|stb/(?:CMakeLists\.txt|libstb\.c)$).*
+    third-party/(?!riscv-opcodes$|[^/]+\.cmake$|xmake\.lua$|stb/(?:CMakeLists\.txt|libstb\.c)$).*
     | build/
     | tests/cp/coremark/upstream/
     | tests/cp/dhrystone/(?:main\.c$|LICENSE$)

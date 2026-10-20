@@ -395,7 +395,8 @@ end
 
 function load(rootdir)
   local config_loader = import("workflows", { rootdir = rootdir, anonymous = true })
-  local config = config_loader()
+  -- Imports are cached; normalization must not mutate the source definition.
+  local config = table.clone(config_loader(), math.huge)
 
   local errors = {}
   if not is_map(config) then

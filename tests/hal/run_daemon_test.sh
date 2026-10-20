@@ -18,10 +18,8 @@ TEST_EXEC=${3:?Test executable not provided}
 # Change to repo root
 cd "$(dirname "$0")/../.."
 
-export AGENT_SOCKET_PATH=/tmp/formosa.sock
-
-# Cleanup an existing socket if any
-rm -f /tmp/formosa.sock
+DAEMON_SOCKET_DIR=$(mktemp -d "${TMPDIR:-/tmp}/formosa.XXXXXX")
+export AGENT_SOCKET_PATH="${DAEMON_SOCKET_DIR}/agent.sock"
 
 # Start daemon in background
 DAEMON_COMMAND=("${DAEMON_EXEC}" "${DAEMON_LUA}")
@@ -37,7 +35,8 @@ cleanup() {
   echo "Cleaning up daemon (PID: ${DAEMON_PID})..."
   kill "${DAEMON_PID}" 2>/dev/null || true
   wait "${DAEMON_PID}" 2>/dev/null || true
-  rm -f /tmp/formosa.sock
+  rm -f "$AGENT_SOCKET_PATH"
+  rmdir "$DAEMON_SOCKET_DIR"
 }
 trap cleanup EXIT
 

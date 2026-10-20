@@ -22,7 +22,7 @@ Consult [lunaverse-modules.md](lunaverse-modules.md) for the decision tree, plac
 
 3. **Register module**
    - Register source files with the owning build target or place in the project Lua root per reference placement rules and gotchas.
-   - *Criterion*: Source registered in CMake or placed in Lua root.
+   - *Criterion*: Source belongs to the owning Xmake target or Lua namespace; keep the CMake fallback in sync during the transition.
 
 4. **Verify Definition of Done**
    - Build owning target to compile and regenerate `.cache/lv_meta/lv_api.lua`.

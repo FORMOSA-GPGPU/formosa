@@ -18,6 +18,7 @@ compile_commands.json
 .clangd/
 
 # Caches
+.xmake/
 .cache/
 .direnv/
 

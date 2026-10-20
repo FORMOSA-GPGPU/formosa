@@ -43,14 +43,8 @@ endforeach()
 
 if(BUILD_TESTING)
   target_sources(ilha PRIVATE tests/unit/cache_command_endpoint.cc)
-  find_program(LUAJIT_EXECUTABLE NAMES luajit luajit-2.1 REQUIRED)
-  add_test(NAME ilha.config
-    COMMAND "${CMAKE_COMMAND}" -E env
-      "LUA_PATH=${LV_LUA_RUNTIME_ROOT}/?.lua;;"
-      "${LUAJIT_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/config.lua"
-      "${CMAKE_BINARY_DIR}" "${CMAKE_CURRENT_SOURCE_DIR}")
-  set_property(TEST ilha.config PROPERTY LABELS unit ilha)
-  set_property(TEST ilha.config PROPERTY WORKING_DIRECTORY "/")
+  add_lv_test_script(ilha.config "${CMAKE_CURRENT_SOURCE_DIR}/tests/config.lua"
+    ARGS "${CMAKE_CURRENT_SOURCE_DIR}" LABELS unit ilha WORKING_DIRECTORY "/")
   set(_generator_test_header "${CMAKE_CURRENT_BINARY_DIR}/generator-header-test/formosa_addr_map.h")
   set(_generator_test_linker "${CMAKE_CURRENT_BINARY_DIR}/generator-linker-test/ilha_memory.ld")
   add_test(NAME ilha.generate_header
@@ -66,7 +60,7 @@ if(BUILD_TESTING)
       ilha.tests.data.addr_map_fixture)
   set_property(TEST ilha.generate_linker PROPERTY FIXTURES_SETUP ilha-generator)
   add_test(NAME ilha.platform_data
-    COMMAND "${LUAJIT_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/tests/platform_data.lua"
+    COMMAND "${XMAKE_EXECUTABLE}" lua "${CMAKE_CURRENT_SOURCE_DIR}/tests/platform_data.lua"
       "${_generator_test_header}" "${_generator_test_linker}")
   set_property(TEST ilha.platform_data PROPERTY FIXTURES_REQUIRED ilha-generator)
   set_property(TEST ilha.platform_data PROPERTY LABELS unit ilha)

@@ -120,6 +120,7 @@ owned_roots=(
   third-party/stb/CMakeLists.txt
   third-party/stb/libstb.c
   third-party/systemc.cmake
+  third-party/xmake.lua
   tools
 )
 

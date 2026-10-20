@@ -1,6 +1,18 @@
 {
   "buildPresets": [
     {
+      "configurePreset": "hal.coverage",
+      "name": "hal.coverage"
+    },
+    {
+      "configurePreset": "hal.debug",
+      "name": "hal.debug"
+    },
+    {
+      "configurePreset": "hal.release",
+      "name": "hal.release"
+    },
+    {
       "configurePreset": "ilha.platform.coverage",
       "name": "ilha.platform.coverage"
     },
@@ -11,6 +23,18 @@
     {
       "configurePreset": "ilha.platform.release",
       "name": "ilha.platform.release"
+    },
+    {
+      "configurePreset": "lv.coverage",
+      "name": "lv.coverage"
+    },
+    {
+      "configurePreset": "lv.debug",
+      "name": "lv.debug"
+    },
+    {
+      "configurePreset": "lv.release",
+      "name": "lv.release"
     },
     {
       "configurePreset": "opencl.coverage",
@@ -106,6 +130,48 @@
     },
     {
       "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "outputs/out",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "fw;hal;libcomm;lv;simtix;tests",
+        "FW_ENABLE_TESTING": true,
+        "HAL_ENABLE_TESTING": true,
+        "LIBCOMM_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "hal"
+      },
+      "inherits": "workflow.base",
+      "name": "hal.coverage"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_INSTALL_PREFIX": "outputs/out",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "fw;hal;libcomm;lv;simtix;tests",
+        "FW_ENABLE_TESTING": true,
+        "HAL_ENABLE_TESTING": true,
+        "LIBCOMM_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "hal"
+      },
+      "inherits": "workflow.base",
+      "name": "hal.debug"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_INSTALL_PREFIX": "outputs/out",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "fw;hal;libcomm;lv;simtix;tests",
+        "FW_ENABLE_TESTING": true,
+        "HAL_ENABLE_TESTING": true,
+        "LIBCOMM_ENABLE_TESTING": true,
+        "TESTS_ENABLE_TESTS": "hal"
+      },
+      "inherits": "workflow.base",
+      "name": "hal.release"
+    },
+    {
+      "cacheVariables": {
         "BUILD_TESTING": true,
         "CMAKE_BUILD_TYPE": "Debug",
         "ENABLE_COVERAGE": true,
@@ -136,6 +202,42 @@
       },
       "inherits": "workflow.base",
       "name": "ilha.platform.release"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": true,
+        "ENABLE_PROJECTS": "lv",
+        "LV_ENABLE_DOCGEN": true,
+        "LV_ENABLE_PERFETTO": true,
+        "LV_ENABLE_TESTING": true
+      },
+      "inherits": "workflow.base",
+      "name": "lv.coverage"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "lv",
+        "LV_ENABLE_DOCGEN": true,
+        "LV_ENABLE_PERFETTO": true,
+        "LV_ENABLE_TESTING": true
+      },
+      "inherits": "workflow.base",
+      "name": "lv.debug"
+    },
+    {
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "ENABLE_COVERAGE": false,
+        "ENABLE_PROJECTS": "lv",
+        "LV_ENABLE_DOCGEN": true,
+        "LV_ENABLE_PERFETTO": true,
+        "LV_ENABLE_TESTING": true
+      },
+      "inherits": "workflow.base",
+      "name": "lv.release"
     },
     {
       "cacheVariables": {
@@ -344,6 +446,51 @@
   ],
   "testPresets": [
     {
+      "configurePreset": "hal.coverage",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "fw|hal\\.lv_.*|libcomm\\.unit|^hal\\.(memory_copy|large_sm_capabilities|reboot)$"
+        }
+      },
+      "name": "hal.coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "hal.debug",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "fw|hal\\.lv_.*|libcomm\\.unit|^hal\\.(memory_copy|large_sm_capabilities|reboot)$"
+        }
+      },
+      "name": "hal.debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "hal.release",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": "fw|hal\\.lv_.*|libcomm\\.unit|^hal\\.(memory_copy|large_sm_capabilities|reboot)$"
+        }
+      },
+      "name": "hal.release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
       "configurePreset": "ilha.platform.coverage",
       "execution": {
         "noTestsAction": "error"
@@ -384,6 +531,51 @@
         }
       },
       "name": "ilha.platform.release",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "lv.coverage",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": ".*/.*\\.lua|^statistics\\.lua$|lv\\.unit\\..*"
+        }
+      },
+      "name": "lv.coverage",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "lv.debug",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": ".*/.*\\.lua|^statistics\\.lua$|lv\\.unit\\..*"
+        }
+      },
+      "name": "lv.debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "configurePreset": "lv.release",
+      "execution": {
+        "noTestsAction": "error"
+      },
+      "filter": {
+        "include": {
+          "name": ".*/.*\\.lua|^statistics\\.lua$|lv\\.unit\\..*"
+        }
+      },
+      "name": "lv.release",
       "output": {
         "outputOnFailure": true
       }
@@ -662,6 +854,48 @@
   "version": 8,
   "workflowPresets": [
     {
+      "displayName": "Validate firmware, HAL, libcomm, and HAL daemon behavior.",
+      "name": "hal.coverage",
+      "steps": [
+        {
+          "name": "hal.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "hal.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate firmware, HAL, libcomm, and HAL daemon behavior.",
+      "name": "hal.debug",
+      "steps": [
+        {
+          "name": "hal.debug",
+          "type": "configure"
+        },
+        {
+          "name": "hal.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate firmware, HAL, libcomm, and HAL daemon behavior.",
+      "name": "hal.release",
+      "steps": [
+        {
+          "name": "hal.release",
+          "type": "configure"
+        },
+        {
+          "name": "hal.release",
+          "type": "build"
+        }
+      ]
+    },
+    {
       "displayName": "Validate the Ilha platform configuration, bindings, work-group lifecycle, and SM composition.",
       "name": "ilha.platform.coverage",
       "steps": [
@@ -699,6 +933,48 @@
         },
         {
           "name": "ilha.platform.release",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the complete Lunaverse runtime and bindings.",
+      "name": "lv.coverage",
+      "steps": [
+        {
+          "name": "lv.coverage",
+          "type": "configure"
+        },
+        {
+          "name": "lv.coverage",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the complete Lunaverse runtime and bindings.",
+      "name": "lv.debug",
+      "steps": [
+        {
+          "name": "lv.debug",
+          "type": "configure"
+        },
+        {
+          "name": "lv.debug",
+          "type": "build"
+        }
+      ]
+    },
+    {
+      "displayName": "Validate the complete Lunaverse runtime and bindings.",
+      "name": "lv.release",
+      "steps": [
+        {
+          "name": "lv.release",
+          "type": "configure"
+        },
+        {
+          "name": "lv.release",
           "type": "build"
         }
       ]
