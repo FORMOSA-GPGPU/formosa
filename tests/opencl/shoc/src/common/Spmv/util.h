@@ -36,7 +36,7 @@ struct Coordinate {
 inline int intcmp(const void *v1, const void *v2);
 inline int coordcmp(const void *v1, const void *v2);
 template <typename floatType>
-void readMatrix(char *filename, floatType **val_ptr, int **cols_ptr,
+void readMatrix(const char *filename, floatType **val_ptr, int **cols_ptr,
                 int **rowDelimiters_ptr, int *n, int *size);
 template <typename floatType>
 void fill(floatType *A, const int n, const float maxi);
@@ -86,7 +86,7 @@ void convertToPadded(floatType *A, int *cols, int dim, int *rowDelimiters,
 //           returns n and size indirectly through pointers
 // ****************************************************************************
 template <typename floatType>
-void readMatrix(char *filename, floatType **val_ptr, int **cols_ptr,
+void readMatrix(const char *filename, floatType **val_ptr, int **cols_ptr,
                 int **rowDelimiters_ptr, int *n, int *size)
 {
     std::string line;

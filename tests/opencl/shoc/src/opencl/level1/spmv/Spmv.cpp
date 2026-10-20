@@ -840,9 +840,8 @@ void RunTest(cl_device_id dev, cl_context ctx, cl_command_queue queue,
         initRandomMatrix(h_cols, h_rowDelimiters, nItems, numRows);
     }
     else
-    {   char filename[FIELD_LENGTH];
-        strcpy(filename, inFileName.c_str());
-        readMatrix(filename, &h_val, &h_cols, &h_rowDelimiters,
+    {
+        readMatrix(inFileName.c_str(), &h_val, &h_cols, &h_rowDelimiters,
                 &nItems, &numRows);
     }
 

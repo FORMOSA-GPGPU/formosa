@@ -125,3 +125,5 @@ The imported sources retain upstream algorithms, with these corrections:
   local queue copy also excludes entries that have not been initialized.
   The graph fixture exercises queue spill, multiple work-groups, converging
   paths, and unreachable vertices.
+  SpMV passes its matrix path to the reader directly instead of copying it into
+  a 128-byte buffer, so long checkout paths no longer overflow it.
