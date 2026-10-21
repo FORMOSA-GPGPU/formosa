@@ -5,7 +5,8 @@
 -- Exercise real native configuration and execution without building the product.
 function main()
   local root = path.absolute(path.join(os.scriptdir(), "../.."))
-  local fixture = os.tmpdir() .. "/formosa-workflow-" .. tostring(os.getpid())
+  local enclosing = os.tmpdir() .. "/formosa-workflow-" .. tostring(os.getpid())
+  local fixture = path.join(enclosing, "worktree")
   os.mkdir(fixture)
   local errors
   try({
@@ -275,9 +276,18 @@ end)
       )
       invoke({ "f", "-c", "-y", "--workflow=install_failure" }, true)
       invoke({ "build" }, false, "deliberate install failure")
+      -- A worktree nested in another checkout must not hand its configure,
+      -- build or test commands to the outermost enclosing project.
+      local enclosing_project = path.join(enclosing, "xmake.lua")
+      io.writefile(
+        enclosing_project,
+        'target("enclosing", function() on_load(function() raise("selected the enclosing project") end) end)'
+      )
+      invoke({ "workflow", "-P", fixture, "run", "good" }, true)
+      os.rm(enclosing_project)
     end,
     catch({ function(err) errors = err end }),
-    finally({ function() os.tryrm(fixture) end }),
+    finally({ function() os.tryrm(enclosing) end }),
   })
   assert(not errors, errors)
   print("Workflow configuration, suite union and native failure propagation passed")

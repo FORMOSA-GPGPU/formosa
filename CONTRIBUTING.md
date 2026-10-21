@@ -130,6 +130,19 @@ xmake workflow regression --profile=coverage --all --adapter=cmake --generate
 These commands write `CMakeUserPresets.json`; use its `regression.<profile>`
 configure/build/test presets. Generators continue to require Xmake.
 
+## Nested Git worktrees
+
+Without `-P`, Xmake uses the outermost enclosing directory that contains an
+`xmake.lua`. In a worktree nested inside another checkout, pass the worktree
+directly after the task name of every command; `xmake workflow` forwards it to
+the commands it starts:
+
+```sh
+xmake f -P . -m debug --workflow=simtix.pipelined_sm
+xmake build -P .
+xmake workflow -P . run simtix.pipelined_sm --profile=debug
+```
+
 ## Internal CMake fallback during the transition
 
 Public PRs use Xmake CI. During the approximately one-to-two-week observation
