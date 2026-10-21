@@ -4,6 +4,8 @@
 
 cmake_minimum_required(VERSION 3.30...4.1)
 
+include(cmake/BuildTransitionNotice.cmake)
+
 project(
   formosa
   VERSION 0.1

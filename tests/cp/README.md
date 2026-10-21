@@ -22,7 +22,7 @@ cmake --build build-cp -j8
 ctest --test-dir build-cp -L cp --output-on-failure
 ```
 
-Run individual programs using the LV executable from the same build:
+Run individual programs using the lv executable from the same build:
 
 ```sh
 ./build/bin/lv tests/cp/riscv-test/run.lua -h
@@ -38,7 +38,7 @@ Run individual programs using the LV executable from the same build:
 `--core` is a Lua module name, passed directly to `require`. The runner finds
 its ELF automatically. Use `--elf` for another ELF; the ISA test also needs a
 matching `.tests` file beside it. Xmake and CTest run these same scripts.
-Xmake stages the default ELF/manifest runfiles during build, so direct LV execution
+Xmake stages the default ELF/manifest runfiles during build, so direct lv execution
 does not require `--elf` or an Xmake launcher. If using `xmake f -o <builddir>`,
 use `<builddir>/bin/lv`; the CMake example above uses `build-cp/bin/lv`.
 
@@ -66,7 +66,7 @@ golden file when using a custom ELF.
 ## Add a core
 
 1. Copy [a core adapter](cores/simtix/scalar_core.lua) into `cores/<namespace>/<name>.lua` and
-   wrap its native LV model. Set `isa`, `num_mem_ports`, `has_ext_int`, and `has_reset`.
+   wrap its native lv model. Set `isa`, `num_mem_ports`, `has_ext_int`, and `has_reset`.
 2. Implement `clock`, `boot(entry)`, and either `mem_target` or
    `imem_target`/`dmem_target`. These port properties accept memory targets.
    Expose `ext_int` as an `sc.BoolIn` port when supported; the system owns
@@ -99,9 +99,10 @@ golden file when using a custom ELF.
    selects adapters compatible with this program's image and runner. Keep the
    CMake definition synchronized during the transition, using `CP_SELECTED_CORES`.
 
-C programs can call `add_cp_runtime(rv64im)` and link `cp-runtime-rv64im` to
-reuse startup, platform layout, standard headers, and console/string support.
-See [the standalone runtime test](runtime/CMakeLists.txt) for a complete example.
+C programs use the `cp.runtime-image` rule to reuse startup, platform layout,
+standard headers, and console/string support. See
+[the standalone runtime test](runtime/xmake.lua) for a complete example.
+The CMake fallback uses `add_cp_runtime(rv64im)` and `cp-runtime-rv64im`.
 The runtime initializes `gp`, `sp`, and BSS, calls `main`, then halts if it returns.
 It supplies unsigned 64-bit division for printf on RV32.
 It imposes no program completion or benchmark protocol; the program and its Lua

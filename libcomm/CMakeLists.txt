@@ -5,6 +5,10 @@
 # Works with 3.14 and tested through 3.28
 cmake_minimum_required(VERSION 3.14...3.28)
 
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  include("${CMAKE_CURRENT_SOURCE_DIR}/../cmake/BuildTransitionNotice.cmake")
+endif()
+
 # Project name and a few useful settings. Other commands can pick up the results
 project(
   libcomm

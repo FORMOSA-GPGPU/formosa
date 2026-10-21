@@ -26,6 +26,10 @@ request or ask a maintainer for guidance.
 
 ## Development workflows
 
+Xmake is the primary configuration, build and test entry. FORMOSA's CMake
+source build is deprecated; use it under the
+[temporary fallback policy](#internal-cmake-fallback-during-the-transition).
+
 `workflows.lua` owns workflows, profiles, suite membership and impact selection.
 Modules register native Xmake cases; suites select their full names with globs.
 Case paths use `/`, while model names retain their Lua module spelling, such as
@@ -111,24 +115,20 @@ xmake workflow generate
 xmake workflow check
 ```
 
-For the CMake fallback, use the same workflow definitions and independent output:
+### Commands for CMake users
 
-```sh
-cmake --workflow --preset simtix.pipelined_sm.debug --fresh
-cmake --build --preset simtix.pipelined_sm.debug
-ctest --preset simtix.pipelined_sm.debug
-```
+Run these from the repository root in the development environment:
 
-The CMake workflow configures and builds; its tests run through the explicit
-CTest command. To generate presets for an affected or complete regression:
-
-```sh
-xmake workflow regression --profile=debug --adapter=cmake --generate
-xmake workflow regression --profile=coverage --all --adapter=cmake --generate
-```
-
-These commands write `CMakeUserPresets.json`; use its `regression.<profile>`
-configure/build/test presets. Generators continue to require Xmake.
+| Operation | Xmake |
+| --- | --- |
+| Discover workflows and profiles | `xmake workflow list` |
+| Configure a workflow | `xmake f -m debug --workflow=lv` |
+| Build | `xmake` |
+| Run selected tests, building their dependencies | `xmake test` |
+| Select individual cases | `xmake test 'lv/unit/systemc/**'` |
+| Choose another build directory | `xmake f -o build-xmake --workflow=lv` |
+| Build and install the SDK | `xmake build formosa-sdk`, then `xmake install -o outputs/sdk formosa-sdk` |
+| Complete regression | `xmake workflow regression --profile=coverage --all --execute` |
 
 ## Nested Git worktrees
 
@@ -145,19 +145,40 @@ xmake workflow -P . run simtix.pipelined_sm --profile=debug
 
 ## Internal CMake fallback during the transition
 
-Public PRs use Xmake CI. During the approximately one-to-two-week observation
-period after integration into `main`, keep new targets, generated inputs and
-tests working in both build systems. Remove CMake only in a separate reviewed
-MR after the workflows are proven; expiry does not remove it automatically.
+Xmake became the primary entry on 2026-10-20. Public PRs use Xmake CI. During
+the approximately one-to-two-week observation period, keep new targets,
+generated inputs and tests working in both build systems. Maintainers decide
+when to remove CMake in a separate reviewed MR after real workflow use and
+platform verification; the date alone does not trigger removal.
 
-CMake replaces native build/test failures and still uses Xmake generators.
-Keep output and installation directories separate when comparing backends:
+CMake is a temporary fallback for native build/test failures; its generators
+continue to require Xmake. A CMake configure prints a non-blocking migration
+warning. Keep build and installation directories separate when comparing
+backends. For a single workflow:
 
 ```sh
-cmake --preset opencl.debug -B build-cmake -DCMAKE_INSTALL_PREFIX=outputs/cmake-sdk
+cmake --preset simtix.pipelined_sm.debug -B build-cmake -DCMAKE_INSTALL_PREFIX=outputs/cmake-sdk
 cmake --build build-cmake
-ctest --test-dir build-cmake --output-on-failure
+ctest --preset simtix.pipelined_sm.debug --test-dir build-cmake
+```
+
+Installation workflows such as `opencl` also require
+`cmake --install build-cmake`. To generate presets for an affected or complete
+regression:
+
+```sh
+xmake workflow regression --profile=debug --adapter=cmake --generate
+xmake workflow regression --profile=coverage --all --adapter=cmake --generate
+```
+
+These commands write `CMakeUserPresets.json`. For the complete coverage
+regression generated above:
+
+```sh
+cmake --preset regression.coverage -B build-cmake -DCMAKE_INSTALL_PREFIX=outputs/cmake-sdk
+cmake --build build-cmake
 cmake --install build-cmake
+ctest --preset regression.coverage --test-dir build-cmake
 ```
 
 The shared Nix/Docker runtime continues to use a CMake-built SDK. The independent
@@ -174,3 +195,23 @@ again; GitHub PRs do not have this fallback path. Native Xmake infrastructure
 checks are explicitly skipped on fallback and are not claimed as validated.
 
 Local SDK/PoCL overrides remain explicit for either producer.
+
+### Reporting a migration failure
+
+The contributor or agent should record the commit, platform, command, workflow,
+build directory, relevant local overrides and failing logs. Reproduce in a
+separate build directory before attributing the failure to the backend. Keep
+functional failures visible even when CMake passes. The reviewer decides
+whether the evidence justifies fallback; maintainers track unresolved migration
+issues through the observation period.
+
+### Follow-up before removing CMake
+
+| Area | Maintainer follow-up |
+| --- | --- |
+| Developer workflows | Confirm actual use of the main workflows and resolve blockers that still require fallback. |
+| Validation | Recheck complete regression and coverage parity, Linux x86_64, macOS arm64 and SDK/PoCL consumption on the removal candidate. |
+| Shared Nix/Docker SDK | Switch the SDK producer to Xmake after its independent validation; retain the CMake producer until then. |
+| Source build and tooling | In the removal MR, remove FORMOSA's CMake source recipes, presets, CTest path, workflow adapter and GitLab backend selection together. Update guides and component shells. |
+| Consumers and dependencies | Preserve SDK `find_package(Formosa)` metadata and external projects' CMake builds, including PoCL and LLVM. |
+| Notifications | Remove the configure warning and temporary fallback instructions when source-build removal lands. |

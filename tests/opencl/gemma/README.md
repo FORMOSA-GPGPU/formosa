@@ -87,9 +87,17 @@ After export, these files should exist:
 From the repository root:
 
 ```bash
-cmake --preset integration-test
-cmake --build build --target gemma verify_layer_breakdown verify_layer_e2e verify_full
+xmake f -m release --workflow=opencl
+xmake build ilha-daemon
+xmake build opencl-gemma
+xmake build opencl-verify_layer_breakdown
+xmake build opencl-verify_layer_e2e
+xmake build opencl-verify_full
 ```
+
+These tools remain manual checks. For the temporary CMake fallback, see the
+[contributor guide](../../../CONTRIBUTING.md#internal-cmake-fallback-during-the-transition);
+its executable names omit the `opencl-` prefix.
 
 ## Verification
 
@@ -103,7 +111,7 @@ Run all layer-breakdown stages manually:
 
 ```bash
 python tests/opencl/gemma/scripts/verify_layer_breakdown.py \
-  --bin build/bin/verify_layer_breakdown
+  --bin build/bin/opencl-verify_layer_breakdown
 ```
 
 By default, C++ intermediate tensors are written into a temporary directory and
@@ -113,7 +121,7 @@ Run one stage only:
 
 ```bash
 python tests/opencl/gemma/scripts/verify_layer_breakdown.py \
-  --bin build/bin/verify_layer_breakdown \
+  --bin build/bin/opencl-verify_layer_breakdown \
   --stage q_rope
 ```
 
@@ -121,7 +129,7 @@ Keep intermediate files for debugging:
 
 ```bash
 python tests/opencl/gemma/scripts/verify_layer_breakdown.py \
-  --bin build/bin/verify_layer_breakdown \
+  --bin build/bin/opencl-verify_layer_breakdown \
   --stage q_rope \
   --dump-dir /tmp/gemma-breakdown-debug
 ```
@@ -130,14 +138,14 @@ Run the manual single-layer input/output check:
 
 ```bash
 python tests/opencl/gemma/scripts/verify_layer_e2e.py \
-  --bin build/bin/verify_layer_e2e
+  --bin build/bin/opencl-verify_layer_e2e
 ```
 
 Run full-model verification:
 
 ```bash
 python tests/opencl/gemma/scripts/verify_full.py \
-  --bin build/bin/verify_full
+  --bin build/bin/opencl-verify_full
 ```
 
 ## Generation Smoke Run
@@ -145,7 +153,7 @@ python tests/opencl/gemma/scripts/verify_full.py \
 Tokenize a prompt and pass token IDs to the `gemma` binary:
 
 ```bash
-./build/bin/gemma \
+./build/bin/opencl-gemma \
   --max-new-tokens 8 \
   $(python tests/opencl/gemma/scripts/tokenize_prompt.py "Explain OpenCL in one sentence.")
 ```

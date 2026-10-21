@@ -9,7 +9,7 @@ SPDX-License-Identifier: Apache-2.0
 ILHA (Ilha Lua Hardware Architecture) composes Lunaverse modules and SM
 implementations into the FORMOSA system platform. It owns system configuration,
 the hardware/software address-map ABI, platform runfiles, and platform-specific
-LV bindings. simtix owns the SM implementations.
+lv bindings. simtix owns the SM implementations.
 
 ## Choose a system configuration
 
@@ -107,7 +107,7 @@ and is not an `sm.param` field.
 A custom runner can apply overrides directly before constructing the system:
 
 ```lua
--- Run inside LV, which supplies sc and the registered component bindings.
+-- Run inside lv, which supplies sc and the registered component bindings.
 local Config = require("ilha.config")
 local System = require("ilha.system")
 
@@ -152,17 +152,20 @@ those complete compositions require the ILHA plugin to be linked.
 ## Keep software and hardware consistent
 
 [`lua/addr_map.lua`](lua/addr_map.lua) owns the fixed platform address map and
-platform ABI. Component register contracts live in LV's shared C headers.
-CMake invokes two xmake Lua backends, including for HAL/firmware-only builds:
+platform ABI. Component register contracts live in lv's shared C headers.
+Xmake's `ilha-platform-data` target invokes two Lua generators, including for
+HAL/firmware-only builds. The temporary CMake fallback reuses these generators:
 
 ```text
 ilha/lua/addr_map.lua
-  ├─ scripts/generate_header.lua → build/generated/ilha/formosa_addr_map.h
-  └─ scripts/generate_linker.lua → build/generated/ilha/ilha_memory.ld
+  ├─ scripts/generate_header.lua → formosa_addr_map.h
+  └─ scripts/generate_linker.lua → ilha_memory.ld
 ```
 
-Generated files stay in the build tree. Changing an experimental configuration
-does not change the fixed address-map ABI.
+Xmake places the generated files in the target's autogen directory and supplies
+that include path through its dependency. The CMake fallback uses
+`<builddir>/generated/ilha`. Changing an experimental configuration does not
+change the fixed address-map ABI.
 
 Runtime capabilities come from the same settings that construct the hardware:
 
@@ -185,4 +188,4 @@ DMA offsets/status and CLINT offsets come from the headers under
 `formosa_addr_map.h` includes these contracts and retains the `FSA_DMA_*` and
 `FSA_CLINT_*` compatibility names. The software-only CMake path stages copies
 of the maintained headers next to the generated platform data and tracks their
-changes; HAL/firmware builds need no LV executable or SystemC dependency.
+changes; HAL/firmware builds need no lv executable or SystemC dependency.

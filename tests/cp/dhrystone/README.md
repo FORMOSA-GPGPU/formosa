@@ -8,10 +8,14 @@ SPDX-License-Identifier: Apache-2.0
 Build the [CPU tests](../README.md), then run Dhrystone independently:
 
 ```sh
-direnv exec . build-cp/bin/lv tests/cp/dhrystone/run.lua --core cp.command_processor
-direnv exec . build-cp/bin/lv tests/cp/dhrystone/run.lua --core simtix.scalar_core
-direnv exec . ctest --test-dir build-cp -L dhrystone --output-on-failure
+xmake build cp-dhrystone
+./build/bin/lv tests/cp/dhrystone/run.lua --core cp.command_processor
+./build/bin/lv tests/cp/dhrystone/run.lua --core simtix.scalar_core
+xmake test 'cp-dhrystone/**'
 ```
+
+See the [CPU test guide](../README.md) for the temporary CMake fallback and
+custom build directories.
 
 This ports the Dhrystone C 2.2 implementation in the existing
 [`riscv-tests` submodule](../../../third-party/riscv-tests/benchmarks/dhrystone),
