@@ -80,6 +80,15 @@ for i, blk_size in ipairs(BLOCK_SIZE_TO_TEST) do
   systems[i] = new_system(blk_size, clock)
 end
 
+-- Debug transport bypasses alignment: a debugger reaches the memory behind
+-- the aligner with requests that are unaligned and span several blocks.
+local dbg_aligner = simple.BlockAligner("BlockAligner_dbg", 16)
+local dbg_memory = simple.Memory("memory_dbg", { size = MEM_SIZE })
+local debugger = dbg.MemoryDebugger("debugger")
+dbg_memory.clock = clock
+debugger.target = dbg_aligner.from
+dbg_aligner.to = dbg_memory.port
+
 for i, system in ipairs(systems) do
   for _ = 1, ITER_PER_SIZE do
     local payload = random_payload(system)
@@ -99,6 +108,16 @@ for i, system in ipairs(systems) do
   end
   print("Passed for blk_size = ", system.blk_size)
 end
+
+local dbg_addr = 0x1003
+local dbg_data = {}
+for i = 1, 37 do
+  dbg_data[i] = bit.band(i * 7 + 1, 0xff)
+end
+assert(debugger:write_bytes(dbg_addr, dbg_data) == #dbg_data)
+assert(is_match(dbg_memory:read_bytes(dbg_addr, #dbg_data), dbg_data))
+assert(is_match(debugger:read_bytes(dbg_addr, #dbg_data), dbg_data))
+print("Passed for debug transport")
 
 print("Simulation stops at", sc.time_stamp())
 print("------------------------------------------------------")

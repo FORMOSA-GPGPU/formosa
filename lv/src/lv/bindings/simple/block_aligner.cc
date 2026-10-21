@@ -29,7 +29,12 @@ class BlockAligner : public sc_module {
  public:
   explicit BlockAligner(const sc_module_name &name, unsigned int align_size)
       : sc_module(name),
-        from_("from_", nullptr),
+        // Debug transport is untimed and passes through unaligned: alignment
+        // only serves the timed path.
+        from_("from_",
+              [this](tlm::tlm_generic_payload &trans) {
+                return to_.PutRequestDbg(trans);
+              }),
         to_("to_"),
         align_size_(align_size),
         addr_align_mask_(~(align_size - 1)) {

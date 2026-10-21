@@ -26,11 +26,13 @@ end
 -- Make sure size of write data is correct
 assert(size == #write_data)
 
--- Write the data to the memory via WriteBytes
-md:write_bytes(0, write_data)
+-- Write the data to the memory via WriteBytes, at an unaligned address and
+-- across 64-byte boundaries: only DRAMSys's timed path requires alignment.
+local addr = 0x1003
+assert(md:write_bytes(addr, write_data) == size, "DRAMSys did not take the whole debug write")
 
 -- Read the data back via ReadBytes
-local read_data = md:read_bytes(0, size)
+local read_data = md:read_bytes(addr, size)
 
 -- Size must match
 assert(#read_data == #write_data, "Size of read_data and write_data must match")
