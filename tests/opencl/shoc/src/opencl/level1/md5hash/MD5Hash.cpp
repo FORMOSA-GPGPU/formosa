@@ -300,7 +300,7 @@ addBenchmarkSpecOptions(OptionParser &op)
 {
     op.addOption("key-length", OPT_INT, "0", "key length in bytes (0 selects size class)");
     op.addOption("values-per-byte", OPT_INT, "0", "key alphabet size (0 selects size class)");
-    op.addOption("seed", OPT_INT, "0", "random seed (0 selects current time)");
+    op.addOption("seed", OPT_INT, "2486", "random seed");
 }
 
 // ****************************************************************************
@@ -635,8 +635,7 @@ RunBenchmark(cl_device_id dev,
     //
     // Choose a random key from the keyspace, and calculate its hash.
     //
-    //srandom(12345);
-    srandom(op.getOptionInt("seed") ? op.getOptionInt("seed") : time(NULL));
+    srandom(op.getOptionInt("seed"));
 
     int passes = op.getOptionInt("passes");
 

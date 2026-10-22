@@ -76,7 +76,7 @@ create_matrix_from_random(float **mp, int size){
   float *l, *u, *m;
   int i,j,k;
 
-  srand(time(NULL));
+  srand(2486);
 
   l = (float*)malloc(size*size*sizeof(float));
   if ( l == NULL)

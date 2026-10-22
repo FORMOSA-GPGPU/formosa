@@ -250,7 +250,7 @@ main(	int argc,
 	//====================================================================================================100
 
 	// random generator seed set to random value - time in this case
-	srand(time(NULL));
+	srand(2486);
 
 	// input (distances)
 	rv_cpu = (FOUR_VECTOR*)malloc(dim_cpu.space_mem);

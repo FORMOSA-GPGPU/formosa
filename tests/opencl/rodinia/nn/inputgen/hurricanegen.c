@@ -48,7 +48,7 @@ int main(int argc, char **argv) {
       (total_canes + num_files - 1) / num_files;  // round up (ceiling division)
   total_canes = canes * num_files;
 
-  srand(time(NULL));
+  srand(2486);
 
   for (j = 0; j < num_files; j++) {
     if (num_files == 1)

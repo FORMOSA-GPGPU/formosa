@@ -115,7 +115,7 @@ def verify_readbacks(
         if len(files) != 1 or len(uploads) != 4:
             raise ValueError("missing LavaMD input/output buffer transfers")
         # One box with zero neighbors, followed by positions, charges and
-        # initially zero forces. Use the host's actual time-seeded inputs.
+        # initially zero forces. Use the host's actual seeded inputs.
         box = uploads[0].read_bytes()
         if len(box) != 656 or any(box[:28]):
             raise ValueError("LavaMD input does not describe one isolated box")
