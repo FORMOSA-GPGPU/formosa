@@ -6,27 +6,68 @@
 
 let
   inherit (pkgs) lib;
-  root = ./..;
+  root = builtins.dirOf ./.;
+  sourceFiles = directory:
+    lib.fileset.fileFilter (file: lib.any file.hasExt [ "c" "cc" "h" "S" "ld" ])
+    directory;
 
+  # Keep the SDK's source identity independent of CI/tasks, documentation and
+  # the other build backend. Both producers use the same code and generators.
   src = lib.fileset.toSource {
     inherit root;
-    fileset = lib.fileset.unions [
-      (root + "/CMakeLists.txt")
-      (root + "/FormosaConfig.cmake.in")
-      (root + "/cmake")
-      (root + "/formosa-sdk-xmake.lua")
-      (root + "/workflows.lua")
-      (root + "/xmake")
-      (root + "/ilha/platform-data/xmake.lua")
-      (root + "/lv/device")
+    fileset = lib.fileset.unions ([
+      (root + "/hal/include")
+      (sourceFiles (root + "/hal/src"))
+      (lib.fileset.difference (sourceFiles (root + "/fw")) (root + "/fw/tests"))
+      (root + "/fw/tinyprintf/LICENSE.BSD-new")
+      (root + "/libcomm/include")
+      (root + "/lv/device/include")
       (root + "/ilha/lua/addr_map.lua")
       (root + "/ilha/scripts/generate_header.lua")
       (root + "/ilha/scripts/generate_linker.lua")
-      (root + "/fw")
-      (root + "/hal")
-      (root + "/libcomm")
+    ] ++ (if buildSystem == "cmake" then [
+      # Temporary producer inputs: remove with the CMake build branch in #49.
+      (root + "/CMakeLists.txt")
+      (root + "/FormosaConfig.cmake.in")
+      # The root CMake entry includes these helpers even for ENABLE_PROJECTS=hal.
+      (lib.fileset.fileFilter (file: file.hasExt "cmake") (root + "/cmake"))
+      (root + "/hal/CMakeLists.txt")
+      (lib.fileset.fileFilter (file: file.name == "CMakeLists.txt")
+        (root + "/hal/src"))
+      (root + "/fw/CMakeLists.txt")
+      (root + "/libcomm/CMakeLists.txt")
+      (root + "/lv/device/CMakeLists.txt")
       (root + "/third-party/FreeRTOS-Kernel.cmake")
-    ];
+    ] else [
+      (root + "/formosa-sdk-xmake.lua")
+      (root + "/workflows.lua")
+      (root + "/hal/xmake.lua")
+      # Consumer exports remain supported after the CMake producer is removed.
+      (root + "/hal/cmake/FormosaConfig.cmake")
+      (root + "/hal/cmake/FormosaConfigVersion.cmake")
+      (root + "/hal/cmake/FormosaTargets.install.cmake.in")
+      (root + "/fw/xmake.lua")
+      (root + "/libcomm/xmake.lua")
+      (root + "/lv/device/xmake.lua")
+      (root + "/ilha/platform-data/xmake.lua")
+      (root + "/xmake/rules/freertos/xmake.lua")
+      (root + "/xmake/rules/freestanding/xmake.lua")
+      (root + "/xmake/rules/workflow/xmake.lua")
+      (root + "/xmake/modules/workflow/backends/xmake.lua")
+      (root + "/xmake/modules/workflow/frontend.lua")
+      (root + "/xmake/modules/workflow/resolve.lua")
+      (root + "/xmake/modules/lv/layout.lua")
+      # The shared module recipes also declare these native test/example targets.
+      (root + "/hal/tests/xmake.lua")
+      (sourceFiles (root + "/hal/tests/lv"))
+      (root + "/hal/tests/lv/run_lv_test.sh")
+      (root + "/fw/tests/xmake.lua")
+      (sourceFiles (root + "/fw/tests"))
+      (sourceFiles (root + "/libcomm/example"))
+      (sourceFiles (root + "/libcomm/tests"))
+      (root + "/libcomm/tests/unit/install_consumer.sh")
+      (root + "/xmake/modules/testing.lua")
+    ]));
   };
 
   # Fixed-output archive fetches keep evaluation offline.  The rev remains

@@ -21,7 +21,11 @@ end
 add_moduledirs(path.join(os.projectdir(), "xmake/modules"))
 option("workflow", function() set_default("") end)
 option("test-suites", function() set_default("") end)
-includes("xmake/rules/*/xmake.lua")
+includes(
+  "xmake/rules/freertos/xmake.lua",
+  "xmake/rules/freestanding/xmake.lua",
+  "xmake/rules/workflow/xmake.lua"
+)
 add_rules("workflow.test_suites")
 includes(
   "libcomm/xmake.lua",
