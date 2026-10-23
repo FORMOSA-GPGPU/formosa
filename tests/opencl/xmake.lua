@@ -146,6 +146,8 @@ for _, name in ipairs({
   "kernel_clock",
   "kernel_args",
   "lmem_allocate",
+  "lmem_layout",
+  "lmem_size",
   "memory_ops",
   "oclprintf",
   "spirv_smoke",

@@ -7,6 +7,8 @@ foreach(SMOKE_CHECK IN ITEMS
   divergence
   inactive_lanes
   lmem_allocate
+  lmem_layout
+  lmem_size
   spirv_smoke
   kernel_clock
   oclprintf
