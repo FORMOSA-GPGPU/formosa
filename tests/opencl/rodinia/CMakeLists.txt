@@ -181,6 +181,10 @@ add_rodinia_test(streamcluster streamcluster CONFIG large_sm OUTPUT centers.txt
   ARGS 2 3 2 256 256 4 none centers.txt 1 -p 0
   REFERENCE rodinia_streamcluster_reference
   REFERENCE_ARGS 2 3 2 256 256 4 none centers.txt 1)
+# Debug CI exceeds the suite's 300-second limit on the atomic simulator.
+foreach(SM IN LISTS OPENCL_SMS)
+  set_tests_properties(opencl.rodinia.streamcluster.${SM} PROPERTIES TIMEOUT 900)
+endforeach()
 add_rodinia_test(lavamd lavaMD CONFIG large_sm READBACK OUTPUT result.txt ARGS -boxes1d 1 -p 0)
 foreach(CASE explicit default)
   set(OUTPUT "result.dwt")
