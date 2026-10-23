@@ -91,6 +91,10 @@ class TraceManager final {
       cfg.set_output_path(CreateOutputPath(settings.output_prefix));
     }
 
+    auto *builtin = cfg.mutable_builtin_data_sources();
+    builtin->set_disable_service_events(true);
+    builtin->set_disable_clock_snapshotting(true);
+
     auto *buffer_cfg = cfg.add_buffers();
     buffer_cfg->set_size_kb(settings.buffer_size_kb);
     buffer_cfg->set_fill_policy(
