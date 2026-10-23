@@ -4,6 +4,7 @@
 #include <iostream>
 #include <vector>
 #include <float.h>
+#include <limits.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +46,6 @@ float *OpenClFindNearestNeighbors(
 int loadData(char *filename,std::vector<Record> &records,std::vector<LatLong> &locations);
 void findLowest(std::vector<Record> &records,float *distances,int numRecords,int topN);
 void printUsage();
-int parseCommandline(int argc, char *argv[], char* filename,int *r,float *lat,float *lng,
+int parseCommandline(int argc, char *argv[], char** filename,int *r,float *lat,float *lng,
                      int *q, int *t, int *p, int *d);
 #endif

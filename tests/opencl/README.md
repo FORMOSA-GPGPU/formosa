@@ -126,7 +126,10 @@ The imported sources retain upstream algorithms, with these corrections:
   buffer and passes time as floating point. CFD accepts positional paths safely
   and uses a valid C++ stream-open check; padded cells copy the last real cell's
   normals instead of reading uninitialized memory. Gaussian NUL-terminates
-  matrix paths up to its 200-byte buffer and reports open failures.
+  matrix paths up to its 200-byte buffer and reports open failures. NN uses its
+  filelist argument directly instead of copying it into a 100-byte buffer, and
+  joins database paths with `snprintf` into a `PATH_MAX` buffer instead of
+  `sprintf` into 128 bytes, so long checkout paths no longer overflow them.
 - Parboil SGEMM: declare `int main` and return success from both matrix readers.
 - Parboil TPACF: synchronize local histogram initialization before atomics.
   MRI-Gridding fixes ambiguous OpenCL integer overloads, initializes padded

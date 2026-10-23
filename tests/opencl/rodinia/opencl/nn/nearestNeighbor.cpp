@@ -29,12 +29,12 @@ int main(int argc, char *argv[]) {
   std::vector<LatLong> locations;
   int i;
   // args
-  char filename[100];
+  char *filename;
   int resultsCount=10,quiet=0,timing=0,platform=-1,device=-1;
   float lat=0.0,lng=0.0;
   
   // parse command line
-  if (parseCommandline(argc, argv, filename,&resultsCount,&lat,&lng,
+  if (parseCommandline(argc, argv, &filename,&resultsCount,&lat,&lng,
                      &quiet, &timing, &platform, &device)) {
     printUsage();
     return 0;
@@ -240,7 +240,7 @@ float *OpenClFindNearestNeighbors(
 int loadData(char *filename,std::vector<Record> &records,std::vector<LatLong> &locations){
     FILE   *flist,*fp;
 	int    i=0;
-	char dbname[64], db_fullname[128];
+	char dbname[64], db_fullname[PATH_MAX];
 	int recNum=0;
 	
     /**Main processing **/
@@ -256,7 +256,7 @@ int loadData(char *filename,std::vector<Record> &records,std::vector<LatLong> &l
             fprintf(stderr, "error reading filelist\n");
             exit(0);
         }
-        sprintf(db_fullname, "%s/%s", data_folder, dbname);
+        snprintf(db_fullname, sizeof(db_fullname), "%s/%s", data_folder, dbname);
         fp = fopen(db_fullname, "r");
         if(!fp) {
             printf("error opening a db (%s)\n", db_fullname);
@@ -318,11 +318,11 @@ void findLowest(std::vector<Record> &records,float *distances,int numRecords,int
   }
 }
 
-int parseCommandline(int argc, char *argv[], char* filename,int *r,float *lat,float *lng,
+int parseCommandline(int argc, char *argv[], char** filename,int *r,float *lat,float *lng,
                      int *q, int *t, int *p, int *d){
     int i;
     if (argc < 2) return 1; // error
-    strncpy(filename,argv[1],100);
+    *filename = argv[1];
     char flag;
     
     for(i=1;i<argc;i++) {
