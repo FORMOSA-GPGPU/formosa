@@ -24,33 +24,9 @@ end)
 -- Optional validators wrap the same command and retain their numerical oracle.
 rule("opencl.benchmark", function()
   on_load(function(target) target:add("deps", "lv", "fw.runfiles", { inherit = false }) end)
-  on_test(function(target, opt)
-    import("core.project.config")
-    local output = path.absolute(path.join(config.builddir(), "testing-out", opt.name))
-    os.mkdir(output)
-    local argv = {
-      path.join(os.projectdir(), "tests/opencl/run_opencl.lua"),
-      "-s",
-      path.join(output, "stats.toml"),
-      "-t",
-      path.join(output, "trace"),
-      "--sm",
-      opt.sm,
-    }
-    if opt.config then table.join2(argv, { "--config", opt.config }) end
-    table.join2(argv, { "--", path.absolute(target:targetfile()) }, opt.hostargs or {})
-    opt.runenvs =
-      table.join(opt.runenvs or {}, { POCL_CACHE_DIR = path.join(output, "pocl-cache") })
-    local binary = path.absolute(target:dep("lv"):targetfile())
-    if opt.wrapper then
-      return import("testing").run_with(
-        "python3",
-        table.join(opt.wrapper, { "--", binary }, argv),
-        opt
-      )
-    end
-    return import("testing").run_with(binary, argv, opt)
-  end)
+  on_test(
+    function(target, opt) return import("benchmark", { rootdir = os.scriptdir() }).run(target, opt) end
+  )
 end)
 
 target("run-opencl", function()
@@ -58,8 +34,7 @@ target("run-opencl", function()
   add_deps("fw.runfiles", { inherit = false })
 end)
 
--- Cases belong to their host executable. The perf manifest uses the same native
--- test metadata; workflow membership remains in workflows.lua selectors.
+-- Cases and their native groups belong to their host executable.
 local function program(name, directory, cases, sources)
   target("opencl-" .. name, function()
     set_group("opencl/" .. directory:match("^[^/]+"))
@@ -75,24 +50,18 @@ local function program(name, directory, cases, sources)
     end
     after_load(function(target)
       local variants = type(cases) == "function" and cases(target) or cases or { { "" } }
-      local perf_cases = {}
       for _, case in ipairs(variants) do
         local variant = case[1]
         local hostargs = table.slice(case, 2)
-        local id = name .. (variant ~= "" and "_" .. variant or "")
-        if not directory:startswith("smoke/") then
-          table.insert(perf_cases, table.concat(table.join({ id, target:name() }, hostargs), "\t"))
-        end
         for _, sm in ipairs({ "simtix.atomic_sm", "simtix.pipelined_sm" }) do
           target:add("tests", (variant ~= "" and variant .. "/" or "") .. sm, {
             sm = sm,
             hostargs = hostargs,
-            perf_id = not directory:startswith("smoke/") and id or nil,
             rundir = os.projectdir(),
+            run_timeout = case.run_timeout,
           })
         end
       end
-      target:data_set("opencl.perf-cases", perf_cases)
     end)
   end)
 end
@@ -191,7 +160,8 @@ program("spmv", "formosa/spmv", function(target)
   local data = path.absolute(target:dep("opencl.spmv-data"):autogendir(), os.projectdir())
   return {
     { "regular", path.join(data, "msc00726/msc00726.mtx") },
-    { "irregular", path.join(data, "dc2/dc2.mtx") },
+    -- Coverage runs approach ten minutes for this dataset on shared CI runners.
+    { "irregular", path.join(data, "dc2/dc2.mtx"), run_timeout = 1200000 },
   }
 end)
 target("opencl-spmv", function() add_deps("opencl.spmv-data") end)
@@ -215,22 +185,3 @@ for _, name in ipairs({ "gemma", "verify_layer_e2e", "verify_layer_breakdown", "
 end
 
 includes("rodinia/xmake.lua", "parboil/xmake.lua", "shoc/xmake.lua")
-
-target("opencl.perf-cases", function()
-  set_kind("phony")
-  set_default(true)
-  on_build(function()
-    import("core.project.project")
-    import("core.project.config")
-    local entries = {}
-    for _, target in ipairs(project.ordertargets()) do
-      for _, entry in ipairs(target:data("opencl.perf-cases") or {}) do
-        table.insert(entries, entry)
-      end
-    end
-    table.sort(entries)
-    local output = path.join(config.builddir(), "tests/opencl/opencl_perf_cases.tsv")
-    os.mkdir(path.directory(output))
-    io.writefile(output, table.concat(entries, "\n") .. "\n")
-  end)
-end)

@@ -31,7 +31,15 @@ parser:option("-t --trace", "Output prefix of the Perfetto trace"):args(1):defau
 parser:argument("host_program", "Host program to run with the simulator"):args("1")
 parser:argument("host_program_args", "Arguments for the host program"):args("*")
 
-local args = parser:parse({ ... })
+local argv = { ... }
+local args = parser:parse(argv)
+-- An explicit delimiter reserves everything after it for the host command.
+for index, value in ipairs(argv) do
+  if value == "--" then
+    assert(#args.host_program_args + 1 == #argv - index, "Host command must follow --")
+    break
+  end
+end
 local config = ConfigCli.load(args)
 
 trace.settings.streaming = true

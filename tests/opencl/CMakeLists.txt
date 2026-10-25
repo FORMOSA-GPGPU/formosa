@@ -11,9 +11,6 @@ set(TESTING_OUT ${CMAKE_BINARY_DIR}/testing-out)
 file(MAKE_DIRECTORY ${TESTING_OUT})
 
 set(OPENCL_SMS simtix.atomic_sm simtix.pipelined_sm)
-set(OPENCL_PERF_CASES "${CMAKE_CURRENT_BINARY_DIR}/opencl_perf_cases.tsv")
-file(WRITE "${OPENCL_PERF_CASES}" "")
-
 function(add_lv_opencl_integration_test PROGRAM)
   cmake_parse_arguments(TEST "" "ID;SUFFIX;WORKING_DIRECTORY;CONFIG" "ARGS;WRAPPER" ${ARGN})
 
@@ -32,18 +29,6 @@ function(add_lv_opencl_integration_test PROGRAM)
   endif()
   if(TEST_ID)
     set(FINAL_ID ${TEST_ID})
-  endif()
-
-  # The perf manifest stores arguments without per-test execution settings.
-  if(NOT FINAL_ID MATCHES "^smoke\\."
-      AND TEST_WORKING_DIRECTORY STREQUAL "${PROJECT_SOURCE_DIR}"
-      AND NOT TEST_CONFIG AND NOT TEST_WRAPPER)
-    string(REPLACE ";" "\t" TEST_ARGS_TSV "${TEST_ARGS}")
-    if(TEST_ARGS_TSV)
-      file(APPEND "${OPENCL_PERF_CASES}" "${FINAL_ID}\t${PROGRAM}\t${TEST_ARGS_TSV}\n")
-    else()
-      file(APPEND "${OPENCL_PERF_CASES}" "${FINAL_ID}\t${PROGRAM}\n")
-    endif()
   endif()
 
   # Preserve the wrapper list through the helper's argument parsing.

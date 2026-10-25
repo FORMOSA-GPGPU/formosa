@@ -61,18 +61,6 @@
       ]
     },
     {
-      "configurePreset": "perf.coverage",
-      "name": "perf.coverage"
-    },
-    {
-      "configurePreset": "perf.debug",
-      "name": "perf.debug"
-    },
-    {
-      "configurePreset": "perf.release",
-      "name": "perf.release"
-    },
-    {
       "configurePreset": "simtix.atomic_sm.coverage",
       "name": "simtix.atomic_sm.coverage"
     },
@@ -274,36 +262,6 @@
       },
       "inherits": "workflow.base",
       "name": "opencl.release"
-    },
-    {
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_COVERAGE": true,
-        "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "opencl"
-      },
-      "inherits": "workflow.base",
-      "name": "perf.coverage"
-    },
-    {
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Debug",
-        "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "opencl"
-      },
-      "inherits": "workflow.base",
-      "name": "perf.debug"
-    },
-    {
-      "cacheVariables": {
-        "CMAKE_BUILD_TYPE": "Release",
-        "ENABLE_COVERAGE": false,
-        "ENABLE_PROJECTS": "fw;simtix;tests",
-        "TESTS_ENABLE_TESTS": "opencl"
-      },
-      "inherits": "workflow.base",
-      "name": "perf.release"
     },
     {
       "cacheVariables": {
@@ -621,51 +579,6 @@
         }
       },
       "name": "opencl.release",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "perf.coverage",
-      "execution": {
-        "noTestsAction": "error"
-      },
-      "filter": {
-        "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
-        }
-      },
-      "name": "perf.coverage",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "perf.debug",
-      "execution": {
-        "noTestsAction": "error"
-      },
-      "filter": {
-        "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
-        }
-      },
-      "name": "perf.debug",
-      "output": {
-        "outputOnFailure": true
-      }
-    },
-    {
-      "configurePreset": "perf.release",
-      "execution": {
-        "noTestsAction": "error"
-      },
-      "filter": {
-        "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm"
-        }
-      },
-      "name": "perf.release",
       "output": {
         "outputOnFailure": true
       }
@@ -1017,48 +930,6 @@
         },
         {
           "name": "opencl.release",
-          "type": "build"
-        }
-      ]
-    },
-    {
-      "displayName": "Run OpenCL tests with simtix pipelined SM to measure performance.",
-      "name": "perf.coverage",
-      "steps": [
-        {
-          "name": "perf.coverage",
-          "type": "configure"
-        },
-        {
-          "name": "perf.coverage",
-          "type": "build"
-        }
-      ]
-    },
-    {
-      "displayName": "Run OpenCL tests with simtix pipelined SM to measure performance.",
-      "name": "perf.debug",
-      "steps": [
-        {
-          "name": "perf.debug",
-          "type": "configure"
-        },
-        {
-          "name": "perf.debug",
-          "type": "build"
-        }
-      ]
-    },
-    {
-      "displayName": "Run OpenCL tests with simtix pipelined SM to measure performance.",
-      "name": "perf.release",
-      "steps": [
-        {
-          "name": "perf.release",
-          "type": "configure"
-        },
-        {
-          "name": "perf.release",
           "type": "build"
         }
       ]

@@ -6,13 +6,13 @@ SPDX-License-Identifier: Apache-2.0
 
 # OpenCL suites
 
-| Directory | Contents | CTest label |
+| Directory | Contents | Xmake group |
 | --- | --- | --- |
-| `smoke/` | OpenCL API and execution checks. | `smoke` |
-| `formosa/` | Computational workloads and microbenchmarks maintained by FORMOSA. | `formosa` |
-| `rodinia/` | Rodinia benchmarks. | `rodinia` |
-| `parboil/` | Parboil benchmarks. | `parboil` |
-| `shoc/` | SHOC benchmarks. | `shoc` |
+| `smoke/` | OpenCL API and execution checks. | `opencl/smoke` |
+| `formosa/` | Computational workloads and microbenchmarks maintained by FORMOSA. | `opencl/formosa` |
+| `rodinia/` | Rodinia benchmarks. | `opencl/rodinia` |
+| `parboil/` | Parboil benchmarks. | `opencl/parboil` |
+| `shoc/` | SHOC benchmarks. | `opencl/shoc` |
 | [`gemma/`](gemma/README.md) | Model preparation and manual verification. | Manual |
 
 ## Build and run
@@ -42,27 +42,13 @@ Run an already built host directly through the Lua launcher:
 ./build/bin/run_opencl.lua --sm simtix.pipelined_sm ./build/bin/opencl-vecadd
 ```
 
-The directory/CTest labels above describe the retained CMake fallback; native
-suite membership belongs to the central `workflows.lua` definition.
+For coverage, configure with `xmake f -m coverage --workflow=opencl`, then run
+the same `xmake test` commands. Input sizes and numerical checks are the same
+in both profiles. Tests run on atomic and pipelined SMs. The runner needs
+permission to bind a local Unix socket for host/simulator communication.
 
-For the retained CMake build:
-
-```sh
-direnv exec . cmake --preset perf.release
-direnv exec . cmake --build --preset perf.release -j 8
-direnv exec . ctest --test-dir build -L '^(rodinia|parboil|shoc)$' --output-on-failure -j 4
-```
-
-To validate CI's Debug/coverage configuration, use `perf.coverage` in both CMake
-commands. Input sizes and numerical checks are the same in both profiles.
-
-Use a single suite label to select it. `benchmark` selects the benchmark runs;
-the suite labels also include comparator regression checks. Tests run on atomic
-and pipelined SMs. The runner needs permission to bind a local Unix socket for
-host/simulator communication.
-
-The three suites register 114 CTests: Rodinia 49, Parboil 20, and SHOC 45.
-These include 112 benchmark executions and two comparator regression checks.
+For performance runs and comparisons, use
+[`xmake perf`](../../scripts/perf/README.md).
 
 ## Imported benchmarks
 

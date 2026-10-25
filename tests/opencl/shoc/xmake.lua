@@ -125,7 +125,10 @@ local workloads = {
     directory = "level1/fft",
     sources = { "FFT.cpp", "fftlib.cpp" },
     kernels = { "fft" },
-    cases = { { args = { "--passes", "1", "--KiB", "16" } } },
+    cases = {
+      -- FFT can exceed ten minutes on slower machines or under concurrent load.
+      { args = { "--passes", "1", "--KiB", "16" }, timeout = 1200000 },
+    },
   },
   gemm = {
     directory = "level1/gemm",

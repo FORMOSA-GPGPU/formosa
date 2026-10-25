@@ -870,12 +870,6 @@ local config = {
         "hal.unit",
       },
     },
-    ["perf"] = {
-      description = "Run OpenCL tests with simtix pipelined SM to measure performance.",
-      test_suites = {
-        "opencl.simtix.pipelined_sm",
-      },
-    },
   },
 }
 

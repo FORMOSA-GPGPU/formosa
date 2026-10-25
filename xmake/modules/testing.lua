@@ -6,11 +6,15 @@
 -- Keep results in Xmake's test report, including a failed command's output.
 function run_with(program, args, opt)
   local outfile, errfile = os.tmpfile(), os.tmpfile()
+  -- GNU timeout kills the command's process group, including validator children.
+  if opt.run_timeout then
+    args = table.join({ "--signal=KILL", tostring(opt.run_timeout / 1000) .. "s", program }, args)
+    program = "timeout"
+  end
   local code, errors = os.execv(program, args, {
     try = true,
     curdir = opt.rundir,
     envs = opt.runenvs,
-    timeout = opt.run_timeout,
     stdout = outfile,
     stderr = errfile,
   })
