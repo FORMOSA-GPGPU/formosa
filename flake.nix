@@ -35,12 +35,16 @@
           config.allowUnfree = true;
         };
 
-        projectPackages = { hal = import ./hal/default.nix { inherit pkgs; }; };
+        projectPackages = {
+          hal = import ./hal/default.nix { inherit pkgs; };
+          pytorch-dlprim =
+            import ./pytorch-dlprim/default.nix { inherit pkgs; };
+        };
 
         gemmaPython = pkgs.python313.withPackages (ps:
           with ps;
           [ matplotlib numpy safetensors sentencepiece torch tqdm transformers ]
-          ++ [ ps."huggingface-hub" ]);
+          ++ [ ps."huggingface-hub" projectPackages.pytorch-dlprim ]);
 
         formosaToolchain = import ./formosa-llvm/default.nix {
           inherit pkgs;
@@ -176,6 +180,8 @@
           packages = [ gemmaPython softwareStacks.formosa-pocl ] ++ basePackages
             ++ ciPackages ++ toolPackages;
           AGENT_SOCKET_PATH = "/tmp/formosa.sock";
+          TORCH_ROOT =
+            "${pkgs.python313Packages.torch}/${pkgs.python313.sitePackages}/torch";
           OCL_ICD_VENDORS = "${softwareStacks.formosa-pocl}/etc/OpenCL/vendors";
           shellHook = ''
             export PATH="${pkgs.lib.concatStringsSep ":" shellToolBins}:$PATH"

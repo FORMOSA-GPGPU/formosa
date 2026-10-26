@@ -185,3 +185,4 @@ for _, name in ipairs({ "gemma", "verify_layer_e2e", "verify_layer_breakdown", "
 end
 
 includes("rodinia/xmake.lua", "parboil/xmake.lua", "shoc/xmake.lua")
+includes("dlprim/xmake.lua")
