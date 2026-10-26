@@ -147,6 +147,8 @@ local workloads = {
       {
         "",
         config = "large_sm",
+        -- Allow the same 900-second budget as the CMake fallback in Debug CI.
+        timeout = 900000,
         output = "centers.txt",
         args = { "2", "3", "2", "256", "256", "4", "none", "centers.txt", "1", "-p", "0" },
         reference_args = { "2", "3", "2", "256", "256", "4", "none", "centers.txt", "1" },
@@ -512,7 +514,7 @@ for name, workload in pairs(workloads) do
             sm = sm,
             wrapper = wrapper,
             rundir = path.join(directory, name .. case[1], sm),
-            run_timeout = 600000,
+            run_timeout = case.timeout or 600000,
           })
         end
       end
