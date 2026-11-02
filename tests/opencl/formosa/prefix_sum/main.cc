@@ -17,16 +17,20 @@
 
 namespace {
 
-constexpr size_t kInputSize = 256;
+constexpr size_t kBatchSize = 1024;
+constexpr size_t kNumBatches = 16;
 constexpr size_t kPreferredLocalSize = 256;
 
 std::vector<int32_t> inclusive_prefix_sum_cpu(
     const std::vector<int32_t> &input) {
   std::vector<int32_t> output(input.size());
-  int32_t sum = 0;
-  for (size_t i = 0; i < input.size(); ++i) {
-    sum += input[i];
-    output[i] = sum;
+  for (size_t batch = 0; batch < kNumBatches; ++batch) {
+    int32_t sum = 0;
+    const size_t start = batch * kBatchSize;
+    for (size_t i = start; i < start + kBatchSize; ++i) {
+      sum += input[i];
+      output[i] = sum;
+    }
   }
   return output;
 }
@@ -37,10 +41,12 @@ int main() {
   static_assert(sizeof(int32_t) == sizeof(cl_int));
 
   std::cout << "Benchmark: prefix_sum\n"
-            << "Mode: inclusive scan\n"
-            << "Input size: " << kInputSize << "\n";
+            << "Mode: batched inclusive scan\n"
+            << "Batches: " << kNumBatches << "\n"
+            << "Batch size: " << kBatchSize << "\n"
+            << "Input size: " << kBatchSize * kNumBatches << "\n";
 
-  std::vector<int32_t> input(kInputSize);
+  std::vector<int32_t> input(kBatchSize * kNumBatches);
   for (size_t i = 0; i < input.size(); ++i) {
     input[i] = static_cast<int32_t>((i % 7) + 1);
   }
@@ -110,14 +116,15 @@ int main() {
 
     kernel.setArg(0, input_buffer);
     kernel.setArg(1, output_buffer);
-    kernel.setArg(2, cl::Local(sizeof(int32_t) * kInputSize));
-    kernel.setArg(3, cl::Local(sizeof(int32_t) * kInputSize));
-    kernel.setArg(4, static_cast<cl_uint>(kInputSize));
+    kernel.setArg(2, cl::Local(sizeof(int32_t) * kBatchSize));
+    kernel.setArg(3, cl::Local(sizeof(int32_t) * kBatchSize));
+    kernel.setArg(4, static_cast<cl_uint>(kBatchSize));
 
-    queue.enqueueNDRangeKernel(kernel, cl::NullRange, cl::NDRange(local_size),
+    queue.enqueueNDRangeKernel(kernel, cl::NullRange,
+                               cl::NDRange(local_size * kNumBatches),
                                cl::NDRange(local_size));
 
-    std::vector<int32_t> output(kInputSize);
+    std::vector<int32_t> output(input.size());
     queue.enqueueReadBuffer(output_buffer, CL_TRUE, 0,
                             sizeof(int32_t) * output.size(), output.data());
     std::cout << "OpenCL kernel: done\n";

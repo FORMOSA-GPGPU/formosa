@@ -18,7 +18,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define TOKENS 32
+#define TOKENS 256
 #define MODEL_DIM 32
 #define HEAD_DIM 32
 #define HIDDEN_DIM 128

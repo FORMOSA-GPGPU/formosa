@@ -15,7 +15,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define TOKENS 4
+#define TOKENS 256
 #define MODEL_DIM 8
 #define HEAD_DIM 8
 #define FP_ERROR 0.001f

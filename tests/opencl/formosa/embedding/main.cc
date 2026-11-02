@@ -18,7 +18,7 @@
 #endif
 
 #define VOCAB 32
-#define TOKENS 12
+#define TOKENS 64
 #define DIM 16
 #define FP_ERROR 0.0001f
 

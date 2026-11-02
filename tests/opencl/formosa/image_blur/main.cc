@@ -13,8 +13,8 @@
 #include <vector>
 
 int main() {
-  constexpr int width = 8;
-  constexpr int height = 8;
+  constexpr int width = 32;
+  constexpr int height = 32;
   constexpr int channels = 4;
   std::vector<uint8_t> input(width * height * channels);
   std::vector<uint8_t> output(input.size());
@@ -59,7 +59,7 @@ int main() {
     kernel.setArg(1, dst);
     kernel.setArg(2, sampler);
     queue.enqueueNDRangeKernel(kernel, cl::NullRange,
-                               cl::NDRange(width, height), cl::NDRange(2, 2));
+                               cl::NDRange(width, height), cl::NullRange);
     queue.enqueueReadImage(dst, CL_TRUE, origin, region, 0, 0, output.data());
   } catch (const cl::Error &error) {
     std::cerr << error.what() << ": " << error.err() << '\n';
@@ -84,6 +84,6 @@ int main() {
           return 1;
         }
       }
-  std::cout << "8x8 RGBA image blur passed\n";
+  std::cout << width << "x" << height << " RGBA image blur passed\n";
   return 0;
 }

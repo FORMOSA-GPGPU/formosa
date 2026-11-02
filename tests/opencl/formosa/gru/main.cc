@@ -17,7 +17,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define BATCH 4
+#define BATCH 128
 #define INPUT_DIM 8
 #define HIDDEN_DIM 8
 #define FP_ERROR 0.001f

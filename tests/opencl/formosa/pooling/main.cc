@@ -18,7 +18,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define INPUT_W 8
+#define INPUT_W 64
 #define POOL 2
 #define STRIDE 2
 #define OUTPUT_W ((INPUT_W - POOL) / STRIDE + 1)

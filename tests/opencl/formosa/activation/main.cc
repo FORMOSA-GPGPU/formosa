@@ -19,7 +19,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define ELEMENTS 256
+#define ELEMENTS 1024
 #define FP_ERROR 0.001f
 
 #define RED "\033[0;31m"

@@ -9,6 +9,10 @@ __kernel void inclusive_prefix_sum(__global const int *input,
                                    const uint count) {
   const size_t lid = get_local_id(0);
   const size_t local_size = get_local_size(0);
+  // Each work-group scans one independent batch using its own local buffers.
+  const size_t batch_offset = get_group_id(0) * count;
+  input += batch_offset;
+  output += batch_offset;
 
   for (size_t i = lid; i < count; i += local_size) {
     scratch_a[i] = input[i];

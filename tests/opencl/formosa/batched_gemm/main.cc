@@ -17,7 +17,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define BATCH 4
+#define BATCH 16
 #define M 8
 #define N 8
 #define K 8

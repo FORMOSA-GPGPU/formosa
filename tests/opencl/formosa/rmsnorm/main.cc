@@ -17,7 +17,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define ROWS 8
+#define ROWS 1024
 #define COLS 8
 #define EPS 1e-5f
 #define FP_ERROR 0.001f

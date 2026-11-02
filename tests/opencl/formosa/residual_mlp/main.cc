@@ -18,7 +18,7 @@
 #define KERNEL_PATH "./kernel.cl"
 #endif
 
-#define TOKENS 4
+#define TOKENS 256
 #define MODEL_DIM 8
 #define HIDDEN_DIM 16
 #define EPS 1e-5f
