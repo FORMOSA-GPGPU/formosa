@@ -75,7 +75,7 @@ class PacketFactory {
 
 MshrCore::PrimaryMissAllocation AllocatePrimaryMissWithId(MshrCore &mshr,
                                                           Packet *packet) {
-  auto probe = mshr.ProbeReadMiss(*packet);
+  auto probe = mshr.ProbeMiss(*packet);
   REQUIRE(probe.status == Status::kAcceptablePrimaryMiss);
   static size_t next_reservation = 0;
   return mshr.AllocatePrimaryMiss(
@@ -88,7 +88,7 @@ uint64_t AllocatePrimaryMiss(MshrCore &mshr, Packet *packet) {
 }
 
 void AddSecondaryMiss(MshrCore &mshr, Packet *packet) {
-  auto probe = mshr.ProbeReadMiss(*packet);
+  auto probe = mshr.ProbeMiss(*packet);
   REQUIRE(probe.status == Status::kAcceptableSecondaryMiss);
 
   mshr.AddSecondaryMiss(probe.entry, packet);
@@ -101,7 +101,7 @@ SCENARIO("MSHR primary miss owns its victim reservation until refill",
   PacketFactory packets;
   MshrCore mshr(MakeParam(16, 1, 1));
   Packet *miss = packets.ReadMiss(0x24, 4);
-  auto probe = mshr.ProbeReadMiss(*miss);
+  auto probe = mshr.ProbeMiss(*miss);
   REQUIRE(probe.status == Status::kAcceptablePrimaryMiss);
 
   const simtix::cache::VictimReservationId reservation_id{3, 7};
@@ -131,7 +131,7 @@ SCENARIO("MSHR core allocates primary misses", "[cache][mshr]") {
     auto miss = packets.ReadMiss(miss_address, miss_data_length);
 
     WHEN("a read miss probes the MSHR") {
-      auto probe = mshr.ProbeReadMiss(*miss);
+      auto probe = mshr.ProbeMiss(*miss);
 
       THEN("the miss can be accepted as a primary miss") {
         REQUIRE(probe.status == Status::kAcceptablePrimaryMiss);
@@ -149,9 +149,9 @@ SCENARIO("MSHR core allocates primary misses", "[cache][mshr]") {
 
         AND_THEN("another request to the same line is a secondary miss") {
           auto same_line_miss = packets.ReadMiss(same_line_address);
-          auto same_line_probe = mshr.ProbeReadMiss(*same_line_miss);
+          auto same_line_probe = mshr.ProbeMiss(*same_line_miss);
 
-          CHECK(mshr.CanAcceptReadMiss(same_line_address));
+          CHECK(mshr.CanAcceptMiss(same_line_address));
           CHECK(same_line_probe.status == Status::kAcceptableSecondaryMiss);
           CHECK(same_line_probe.entry == probe.entry);
         }
@@ -170,7 +170,7 @@ SCENARIO("MSHR core merges secondary misses and replays them on refill",
     const uint64_t primary_address = 0x20;
     const unsigned int primary_data_length = 4;
     auto primary = packets.ReadMiss(primary_address, primary_data_length);
-    auto primary_probe = mshr.ProbeReadMiss(*primary);
+    auto primary_probe = mshr.ProbeMiss(*primary);
     REQUIRE(primary_probe.status == Status::kAcceptablePrimaryMiss);
 
     Packet *primary_packet = primary;
@@ -182,7 +182,7 @@ SCENARIO("MSHR core merges secondary misses and replays them on refill",
       const unsigned int secondary_data_length = 8;
       auto secondary =
           packets.ReadMiss(secondary_address, secondary_data_length);
-      auto secondary_probe = mshr.ProbeReadMiss(*secondary);
+      auto secondary_probe = mshr.ProbeMiss(*secondary);
       REQUIRE(secondary_probe.status == Status::kAcceptableSecondaryMiss);
       REQUIRE(secondary_probe.entry == primary_probe.entry);
 
@@ -197,19 +197,19 @@ SCENARIO("MSHR core merges secondary misses and replays them on refill",
 
         THEN("the entry rejects same-line misses while replaying") {
           auto same_line_miss = packets.ReadMiss(0x28);
-          auto same_line_probe = mshr.ProbeReadMiss(*same_line_miss);
+          auto same_line_probe = mshr.ProbeMiss(*same_line_miss);
 
           CHECK(mshr.HasReplayPacket());
-          CHECK_FALSE(mshr.CanAcceptReadMiss(0x28));
+          CHECK_FALSE(mshr.CanAcceptMiss(0x28));
           CHECK(same_line_probe.status == Status::kReplaying);
           CHECK(same_line_probe.entry == nullptr);
         }
 
         AND_THEN("the replaying entry still occupies MSHR capacity") {
           auto different_line_miss = packets.ReadMiss(0x40);
-          auto different_line_probe = mshr.ProbeReadMiss(*different_line_miss);
+          auto different_line_probe = mshr.ProbeMiss(*different_line_miss);
 
-          CHECK_FALSE(mshr.CanAcceptReadMiss(0x40));
+          CHECK_FALSE(mshr.CanAcceptMiss(0x40));
           CHECK(different_line_probe.status == Status::kMshrFull);
           CHECK(different_line_probe.entry == nullptr);
         }
@@ -227,15 +227,14 @@ SCENARIO("MSHR core merges secondary misses and replays them on refill",
             CHECK(mshr.HasReplayPacket());
 
             auto same_line_miss = packets.ReadMiss(0x28);
-            auto same_line_probe = mshr.ProbeReadMiss(*same_line_miss);
-            CHECK_FALSE(mshr.CanAcceptReadMiss(0x28));
+            auto same_line_probe = mshr.ProbeMiss(*same_line_miss);
+            CHECK_FALSE(mshr.CanAcceptMiss(0x28));
             CHECK(same_line_probe.status == Status::kReplaying);
             CHECK(same_line_probe.entry == nullptr);
 
             auto different_line_miss = packets.ReadMiss(0x40);
-            auto different_line_probe =
-                mshr.ProbeReadMiss(*different_line_miss);
-            CHECK_FALSE(mshr.CanAcceptReadMiss(0x40));
+            auto different_line_probe = mshr.ProbeMiss(*different_line_miss);
+            CHECK_FALSE(mshr.CanAcceptMiss(0x40));
             CHECK(different_line_probe.status == Status::kMshrFull);
             CHECK(different_line_probe.entry == nullptr);
           }
@@ -254,9 +253,9 @@ SCENARIO("MSHR core merges secondary misses and replays them on refill",
               CHECK_FALSE(mshr.HasReplayPacket());
 
               auto next_miss = packets.ReadMiss(primary_address);
-              auto next_probe = mshr.ProbeReadMiss(*next_miss);
+              auto next_probe = mshr.ProbeMiss(*next_miss);
 
-              CHECK(mshr.CanAcceptReadMiss(primary_address));
+              CHECK(mshr.CanAcceptMiss(primary_address));
               REQUIRE(next_probe.status == Status::kAcceptablePrimaryMiss);
               CHECK(next_probe.entry == primary_probe.entry);
 
@@ -326,7 +325,7 @@ SCENARIO("MSHR core reports sub-entry capacity separately", "[cache][mshr]") {
 
     WHEN("another miss targets the same line") {
       auto overflow = packets.ReadMiss(overflow_address);
-      auto probe = mshr.ProbeReadMiss(*overflow);
+      auto probe = mshr.ProbeMiss(*overflow);
 
       THEN("the probe is rejected as sub-entry full") {
         CHECK(probe.status == Status::kSubentryFull);
@@ -336,7 +335,7 @@ SCENARIO("MSHR core reports sub-entry capacity separately", "[cache][mshr]") {
 
     AND_WHEN("a miss targets a different line") {
       auto different_line = packets.ReadMiss(different_line_address);
-      auto probe = mshr.ProbeReadMiss(*different_line);
+      auto probe = mshr.ProbeMiss(*different_line);
 
       THEN("the free MSHR entry can still accept it as a primary miss") {
         CHECK(probe.status == Status::kAcceptablePrimaryMiss);
@@ -361,7 +360,7 @@ SCENARIO("MSHR core reports entry capacity separately", "[cache][mshr]") {
 
     WHEN("a new line misses") {
       auto different_line = packets.ReadMiss(different_line_address);
-      auto probe = mshr.ProbeReadMiss(*different_line);
+      auto probe = mshr.ProbeMiss(*different_line);
 
       THEN("the probe is rejected as MSHR full") {
         CHECK(probe.status == Status::kMshrFull);
@@ -371,7 +370,7 @@ SCENARIO("MSHR core reports entry capacity separately", "[cache][mshr]") {
 
     AND_WHEN("an occupied line receives a secondary miss") {
       auto same_line = packets.ReadMiss(same_line_address);
-      auto probe = mshr.ProbeReadMiss(*same_line);
+      auto probe = mshr.ProbeMiss(*same_line);
 
       THEN("the secondary miss can still be accepted") {
         CHECK(probe.status == Status::kAcceptableSecondaryMiss);

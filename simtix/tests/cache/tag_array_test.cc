@@ -87,8 +87,18 @@ class TagArrayTester {
   PacketBuilder Refill(uint64_t addr) {
     PacketBuilder p(PacketType::kRefill, addr);
     dut_.Process(p.packet());
+    // These tests have no MSHR replay to release the installed line.
+    if (p.packet()->is_hit) {
+      FinishReplay(addr);
+    }
     TimeAdvance();
     return p;
+  }
+
+  void FinishReplay(uint64_t addr) {
+    PacketBuilder p(PacketType::kReplay, addr);
+    p.packet()->is_last_replay = true;
+    dut_.Process(p.packet());
   }
 
   PacketBuilder Replay(uint64_t addr, bool is_write = false) {
@@ -547,6 +557,7 @@ SCENARIO("Tag array refill does not evict locked entries",
       AND_WHEN("the locked way is released and the same refill retries") {
         tag_array.UnlockEntry(refill_a.packet()->location);
         status = tag_array.Process(refill_b.packet());
+        driver.FinishReplay(addr_b);
 
         THEN("the refill can evict the released way") {
           CHECK(status == TagArray::AccessStatus::kHit);

@@ -273,9 +273,11 @@ void Cache::Tick() {
   SendMemRequest();
   // Data Array stage
   AccessDataArrayStage();
+  // A command must observe every earlier queue write, so it runs before the tag
+  // stage adds this tick's packet.
+  AdvanceCommandSequencer();
   // Tag Array stage
   AccessTagArrayStage();
-  AdvanceCommandSequencer();
   // Accept input
   AcceptCommand();
   AcceptCoreRequest();
@@ -342,7 +344,8 @@ Packet *Cache::AllocateCoreRequestPacket(tlm::tlm_generic_payload *payload) {
   auto *packet = packet_pool_.Acquire(payload);
   assert(packet != nullptr);
   packet->is_atomic = IsAtomicRequest(*payload);
-  packet->type = (IsNonCacheableRequest(*payload) ||
+  packet->is_non_cacheable = IsNonCacheableRequest(*payload);
+  packet->type = (packet->is_non_cacheable ||
                   (packet->is_atomic && !config_.atomic_linearization))
                      ? PacketType::kBypassCoreReq
                      : PacketType::kCoreReq;
@@ -644,16 +647,9 @@ bool Cache::TryRejectInvalidAtomicRequest(Packet *packet) {
 /**
  * @brief Select the next packet allowed to enter the tag-array stage.
  *
- * @param mem_resp_packet Optional memory response currently at the response
- * queue head.
- * @param selected_refill Set to true when the selected packet is a refill
- * response.
  * @return Selected packet, or nullptr when all candidates are blocked.
  */
-Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
-                                    bool *selected_refill) {
-  assert(selected_refill != nullptr);
-  *selected_refill = false;
+Packet *Cache::SelectTagArrayPacket() {
   const bool tag_array_output_available = tag_array_resp_queue_.nb_can_put();
 
   Packet *packet = nullptr;
@@ -662,17 +658,9 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
 
   // Tag-array arbitration is encoded by branch order.
   if (mshr_file_replay_queue_.nb_can_get()) {
-    defer_tag_arbitration_for_refill_replay_cycles_ = 0;
     success = mshr_file_replay_queue_.nb_peek(packet);
     assert(success);
     assert(packet != nullptr);
-    if (atomic_sequencer_.phase == AtomicSequencer::Phase::kWaitReplay &&
-        packet == atomic_sequencer_.packet) {
-      MarkBlockReason("atomic_wait_replay", false);
-      LogPacketEvent(cache_log::Category::kArb, "blocked", "atomic_wait_replay",
-                     "replay", packet);
-      return nullptr;
-    }
     if (ShouldStallForLineEscapeHazard(packet)) {
       MarkBlockReason("escape_hazard", false);
       LogPacketEvent(cache_log::Category::kArb, "blocked", "escape_hazard",
@@ -694,9 +682,17 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
     }
   }
 
+  Packet *mem_resp_packet = nullptr;
+  if (mem_resp_queue_.nb_can_peek()) {
+    success = mem_resp_queue_.nb_peek(mem_resp_packet);
+    assert(success);
+    assert(mem_resp_packet != nullptr);
+    assert(mem_resp_packet->type == PacketType::kRefill ||
+           mem_resp_packet->type == PacketType::kBypassCoreResp);
+  }
+
   if (mem_resp_packet != nullptr &&
       mem_resp_packet->type == PacketType::kBypassCoreResp) {
-    assert(mem_resp_packet != nullptr);
     if (!tag_array_output_available) {
       MarkBlockReason("tag_output_full", false);
       LogPacketEvent(cache_log::Category::kArb, "blocked", "tag_output_full",
@@ -719,21 +715,9 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
     return nullptr;
   }
 
-  if (defer_tag_arbitration_for_refill_replay_cycles_ > 0) {
-    // MSHR publishes replay packets from the refill notification on the next
-    // clock edge. The tlm_fifo write is not visible to this cache tick yet, so
-    // hold younger tag work for one cycle to keep the refilled line replayable.
-    --defer_tag_arbitration_for_refill_replay_cycles_;
-    MarkBlockReason("refill_replay_visibility", false);
-    LogPacketEvent(cache_log::Category::kArb, "blocked",
-                   "refill_replay_visibility", "refill", nullptr);
-    return nullptr;
-  }
-
   if (mem_resp_packet != nullptr &&
       mem_resp_packet->type == PacketType::kRefill) {
     // Refill arbitration path.
-    assert(mem_resp_packet != nullptr);
     if (!tag_array_output_available) {
       MarkBlockReason("tag_output_full", false);
       LogPacketEvent(cache_log::Category::kArb, "blocked", "tag_output_full",
@@ -748,7 +732,6 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
       return nullptr;
     }
 
-    *selected_refill = true;
     LogPacketEvent(cache_log::Category::kArb, "selected", "none", "refill",
                    mem_resp_packet);
     return mem_resp_packet;
@@ -772,9 +755,9 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
       // stale local copy of the same line. Reuse the atomic sequencer and the
       // maintenance writeback path; explicitly non-cacheable regions have no
       // local copy to reconcile.
-      if (packet->is_atomic && !IsNonCacheableRequest(*packet->GetTlmGp())) {
+      if (packet->is_atomic && !packet->is_non_cacheable) {
         if (!TryRejectInvalidAtomicRequest(packet))
-          (void)TryStartAtomicSequencerFromCoreQueue(packet);
+          StartForwardedAtomic(packet);
         return nullptr;
       }
       if (ShouldStallForLineEscapeHazard(packet)) {
@@ -799,21 +782,9 @@ Packet *Cache::SelectTagArrayPacket(Packet *mem_resp_packet,
     }
 
     assert(packet->type == PacketType::kCoreReq);
-    if (packet->is_atomic) {
-      if (TryRejectInvalidAtomicRequest(packet)) {
-        LogPacketEvent(cache_log::Category::kArb, "blocked",
-                       "atomic_reject_or_response_full", "core", packet);
-        return nullptr;
-      }
-      if (ShouldStallForLineEscapeHazard(packet)) {
-        MarkBlockReason("escape_hazard", false);
-        LogPacketEvent(cache_log::Category::kArb, "blocked", "escape_hazard",
-                       "atomic", packet);
-        return nullptr;
-      }
-      (void)TryStartAtomicSequencerFromCoreQueue(packet);
-      LogPacketEvent(cache_log::Category::kArb, "selected", "none", "atomic",
-                     packet);
+    if (packet->is_atomic && TryRejectInvalidAtomicRequest(packet)) {
+      LogPacketEvent(cache_log::Category::kArb, "blocked",
+                     "atomic_reject_or_response_full", "core", packet);
       return nullptr;
     }
 
@@ -844,25 +815,12 @@ void Cache::AccessTagArrayStage() {
     return;
   }
 
-  Packet *mem_resp_packet = nullptr;
-  bool success = false;
-
-  // Peek the memory response queue to see if there is a memory response packet
-  if (mem_resp_queue_.nb_can_peek()) {
-    success = mem_resp_queue_.nb_peek(mem_resp_packet);
-    assert(success);
-    assert(mem_resp_packet != nullptr);
-    assert(mem_resp_packet->type == PacketType::kRefill ||
-           mem_resp_packet->type == PacketType::kBypassCoreResp);
-  }
-
-  bool tag_array_packet_is_refill = false;
-  Packet *tag_array_packet =
-      SelectTagArrayPacket(mem_resp_packet, &tag_array_packet_is_refill);
-
+  Packet *tag_array_packet = SelectTagArrayPacket();
   if (tag_array_packet == nullptr) {
     return;
   }
+
+  bool success = false;
 
   if (tag_array_packet->type == PacketType::kBypassCoreResp) {
     success = tag_array_resp_queue_.nb_put(tag_array_packet);
@@ -885,9 +843,9 @@ void Cache::AccessTagArrayStage() {
 
   // Process the packet through tag array
   const TagArray::AccessStatus status = tag_array_.Process(tag_array_packet);
-  if (tag_array_packet_is_refill) {
+  if (tag_array_packet->type == PacketType::kRefill) {
     if (status == TagArray::AccessStatus::kNoVictim) {
-      // All victim candidates are locked, so the refill cannot be processed
+      // No victim candidate can be evicted, so the refill cannot be processed
       // this cycle.
       MarkBlockReason("no_victim", false);
       LogPacketEvent(cache_log::Category::kArb, "blocked", "no_victim",
@@ -911,16 +869,36 @@ void Cache::AccessTagArrayStage() {
           ToLineAddress(tag_array_packet->victim_address));
     }
   } else if (tag_array_packet->type == PacketType::kCoreReq) {
+    if (status == TagArray::AccessStatus::kPendingReplay) {
+      MarkBlockReason("pending_replay", false);
+      LogPacketEvent(cache_log::Category::kArb, "blocked", "pending_replay",
+                     "core", tag_array_packet);
+      return;
+    }
     assert(status == TagArray::AccessStatus::kHit ||
            status == TagArray::AccessStatus::kMiss);
 
+    // The write-no-allocate check and MSHR admission share one probe.
+    const std::optional<MshrFile::ProbeStatus> mshr_probe =
+        status == TagArray::AccessStatus::kMiss
+            ? std::make_optional(mshr_file_.ProbeMiss(*tag_array_packet))
+            : std::nullopt;
+
+    // A write-no-allocate miss may skip the MSHR only when the MSHR does not
+    // track its line. A same-line refill in flight carries the pre-write line,
+    // so that write must merge into the entry or wait to stay ordered with the
+    // refill.
+    const bool mshr_untracked_write_no_allocate_miss =
+        status == TagArray::AccessStatus::kMiss &&
+        tag_array_packet->is_write() &&
+        config_.write_miss_policy == WriteMissPolicy::kWriteNoAllocate &&
+        !MshrFile::HasLineEntry(*mshr_probe);
+
     if (status == TagArray::AccessStatus::kMiss &&
-        !(tag_array_packet->is_write() &&
-          config_.write_miss_policy == WriteMissPolicy::kWriteNoAllocate)) {
+        !mshr_untracked_write_no_allocate_miss) {
       const MshrFile::AcceptStatus accept_status =
-          TryAcceptReadMiss(tag_array_packet);
+          TryAcceptMiss(tag_array_packet, *mshr_probe);
       if (accept_status == MshrFile::AcceptStatus::kRejected) {
-        MarkBlockReason("mshr_reject", false);
         LogPacketEvent(cache_log::Category::kArb, "blocked", "mshr_reject",
                        "core_miss", tag_array_packet);
         return;
@@ -930,19 +908,19 @@ void Cache::AccessTagArrayStage() {
       success = core_req_queue_.nb_get(dequeued_packet);
       assert(success);
       assert(dequeued_packet == tag_array_packet);
+      if (tag_array_packet->is_atomic) {
+        atomic_sequencer_.Start(tag_array_packet,
+                                AtomicSequencer::Phase::kWaitReplay);
+      }
       MarkProgress("mshr_accept_core_miss");
       return;
     }
 
-    const bool write_no_allocate_miss =
-        status == TagArray::AccessStatus::kMiss &&
-        tag_array_packet->is_write() &&
-        config_.write_miss_policy == WriteMissPolicy::kWriteNoAllocate;
     const bool write_through_hit =
         status == TagArray::AccessStatus::kHit &&
         tag_array_packet->is_write() &&
         config_.write_hit_policy == WriteHitPolicy::kWriteThrough;
-    if (write_no_allocate_miss || write_through_hit) {
+    if (mshr_untracked_write_no_allocate_miss || write_through_hit) {
       IncrementLineEscapeHazard(tag_array_packet);
     }
 
@@ -956,6 +934,11 @@ void Cache::AccessTagArrayStage() {
     success = core_req_queue_.nb_get(dequeued_packet);
     assert(success);
     assert(dequeued_packet == tag_array_packet);
+    if (tag_array_packet->is_atomic) {
+      atomic_sequencer_.Start(tag_array_packet,
+                              AtomicSequencer::Phase::kReadOld);
+      tag_array_.LockEntry(tag_array_packet->location);
+    }
     MarkProgress("tag_accept_core_hit_or_wna");
   } else {
     assert(tag_array_packet->type == PacketType::kReplay);
@@ -963,6 +946,12 @@ void Cache::AccessTagArrayStage() {
     if (tag_array_packet->is_write() &&
         config_.write_hit_policy == WriteHitPolicy::kWriteThrough) {
       IncrementLineEscapeHazard(tag_array_packet);
+    }
+    if (tag_array_packet->is_atomic) {
+      assert(tag_array_packet == atomic_sequencer_.packet);
+      assert(atomic_sequencer_.phase == AtomicSequencer::Phase::kWaitReplay);
+      atomic_sequencer_.phase = AtomicSequencer::Phase::kReadOld;
+      tag_array_.LockEntry(tag_array_packet->location);
     }
   }
 
@@ -1019,23 +1008,29 @@ Packet *Cache::AllocateVictimPacketFrom(const Packet *refill_packet) {
 }
 
 /**
- * @brief Admit a cacheable read miss with dirty-victim escape capacity.
+ * @brief Admit a cacheable miss with dirty-victim escape capacity.
  *
  * Secondary misses reuse the primary entry's reservation. Primary misses must
  * reserve a VictimBuffer slot before MSHR state or a memory request is created.
  *
  * @param packet Core request that missed in the tag array.
+ * @param probe MSHR probe of `packet` from the same tag-stage attempt.
  * @return MSHR admission result; rejection leaves the packet in its queue.
  */
-MshrFile::AcceptStatus Cache::TryAcceptReadMiss(Packet *packet) {
-  const MshrFile::ProbeStatus probe = mshr_file_.ProbeReadMiss(*packet);
-  if (probe == MshrFile::ProbeStatus::kRejected) {
+MshrFile::AcceptStatus Cache::TryAcceptMiss(Packet *packet,
+                                            MshrFile::ProbeStatus probe) {
+  if (!MshrFile::IsAcceptable(probe)) {
+    const char *reason = MshrFile::ProbeStatusName(probe);
+    MarkBlockReason(reason, false);
+    LogPacketEvent(cache_log::Category::kMshr, "blocked", reason, "mshr_file",
+                   packet);
     return MshrFile::AcceptStatus::kRejected;
   }
-  if (probe == MshrFile::ProbeStatus::kAcceptableSecondary) {
-    return mshr_file_.TryAcceptReadMiss(packet);
+  if (probe == MshrFile::ProbeStatus::kAcceptableSecondaryMiss) {
+    return mshr_file_.TryAcceptMiss(packet);
   }
   if (!mshr_file_mem_req_queue_.nb_can_put()) {
+    MarkBlockReason("mshr_mem_req_full", false);
     LogPacketEvent(cache_log::Category::kMshr, "blocked", "mshr_mem_req_full",
                    "mshr_file_mem_req_queue", packet);
     return MshrFile::AcceptStatus::kRejected;
@@ -1050,7 +1045,7 @@ MshrFile::AcceptStatus Cache::TryAcceptReadMiss(Packet *packet) {
   LogPacketEvent(cache_log::Category::kMshr, "victim_reserve", "accepted",
                  "victim_buffer", packet);
   const MshrFile::AcceptStatus status =
-      mshr_file_.TryAcceptReadMiss(packet, &*reservation);
+      mshr_file_.TryAcceptMiss(packet, &*reservation);
   assert(status == MshrFile::AcceptStatus::kAcceptedPrimary);
   return status;
 }
@@ -1068,15 +1063,13 @@ void Cache::RecordAcceptedMshrMiss(MshrFile::AcceptStatus status) {
 }
 
 /**
- * @brief Start the atomic sequencer from the core request queue head.
+ * @brief Start forwarding an atomic from the core request queue head.
  *
- * @param packet Atomic core request to dequeue and sequence.
- * @return true after the sequencer is started.
+ * @param packet Atomic bypass request to dequeue and sequence.
  */
-bool Cache::TryStartAtomicSequencerFromCoreQueue(Packet *packet) {
+void Cache::StartForwardedAtomic(Packet *packet) {
   assert(packet != nullptr);
-  assert(packet->type == PacketType::kCoreReq ||
-         packet->type == PacketType::kBypassCoreReq);
+  assert(packet->type == PacketType::kBypassCoreReq);
   assert(packet->is_atomic);
   assert(!atomic_sequencer_.IsBusy());
 
@@ -1085,104 +1078,8 @@ bool Cache::TryStartAtomicSequencerFromCoreQueue(Packet *packet) {
   assert(got_packet);
   assert(dequeued_packet == packet);
 
-  atomic_sequencer_.Start(packet, ToLineAddress(packet->GetAddress()));
-  if (packet->type == PacketType::kBypassCoreReq)
-    atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitBypassDrain;
+  atomic_sequencer_.Start(packet, AtomicSequencer::Phase::kWaitBypassDrain);
   MarkProgress("atomic_start");
-  return true;
-}
-
-/**
- * @brief Probe or miss-handle the atomic packet in the tag-array stage.
- *
- * @return true when the atomic path used or held the tag stage; false when MSHR
- * backpressure leaves the stage available for other arbitration.
- */
-bool Cache::TryProbeAtomicSequencer() {
-  assert(atomic_sequencer_.IsBusy());
-  assert(atomic_sequencer_.phase == AtomicSequencer::Phase::kProbeOrMiss);
-  Packet *packet = atomic_sequencer_.packet;
-  assert(packet != nullptr);
-  assert(packet->is_atomic);
-  assert(packet->type == PacketType::kCoreReq);
-
-  const TagArray::AccessStatus status = tag_array_.ProbeAtomic(packet);
-  switch (status) {
-    case TagArray::AccessStatus::kLocked:
-      MarkBlockReason("atomic_locked", false);
-      return true;
-    case TagArray::AccessStatus::kHit:
-      stats_.total_hits++;
-      tag_array_.LockEntry(packet->location);
-      atomic_sequencer_.location = packet->location;
-      atomic_sequencer_.phase = AtomicSequencer::Phase::kReadOld;
-      MarkProgress("atomic_probe_hit");
-      return true;
-    case TagArray::AccessStatus::kMiss: {
-      const MshrFile::AcceptStatus accept_status = TryAcceptReadMiss(packet);
-      if (accept_status == MshrFile::AcceptStatus::kRejected) {
-        MarkBlockReason("mshr_reject", false);
-        LogPacketEvent(cache_log::Category::kArb, "blocked", "mshr_reject",
-                       "atomic_miss", packet);
-        return false;
-      }
-      RecordAcceptedMshrMiss(accept_status);
-      atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitReplay;
-      MarkProgress("atomic_mshr_accept");
-      return true;
-    }
-    case TagArray::AccessStatus::kNoVictim:
-      assert(false && "Atomic probe cannot select a victim");
-      return true;
-  }
-  return false;
-}
-
-/**
- * @brief Consume the replay packet awaited by the atomic sequencer.
- *
- * @return true when the matching replay used or held the tag stage; false when
- * no matching replay is ready.
- */
-bool Cache::TryConsumeAtomicReplay() {
-  assert(atomic_sequencer_.IsBusy());
-  assert(atomic_sequencer_.phase == AtomicSequencer::Phase::kWaitReplay);
-
-  if (!mshr_file_replay_queue_.nb_can_peek()) {
-    return false;
-  }
-
-  Packet *packet = nullptr;
-  bool success = mshr_file_replay_queue_.nb_peek(packet);
-  assert(success);
-  assert(packet != nullptr);
-  if (packet != atomic_sequencer_.packet) {
-    MarkBlockReason("atomic_replay_order", false);
-    return false;
-  }
-
-  const TagArray::AccessStatus status = tag_array_.ProbeAtomic(packet);
-  switch (status) {
-    case TagArray::AccessStatus::kLocked:
-      MarkBlockReason("atomic_locked", false);
-      return true;
-    case TagArray::AccessStatus::kHit:
-      success = mshr_file_replay_queue_.nb_get(packet);
-      assert(success);
-      assert(packet == atomic_sequencer_.packet);
-      tag_array_.LockEntry(packet->location);
-      atomic_sequencer_.location = packet->location;
-      atomic_sequencer_.phase = AtomicSequencer::Phase::kReadOld;
-      MarkProgress("atomic_replay_consume");
-      return true;
-    case TagArray::AccessStatus::kMiss:
-      assert(false && "Atomic replay should hit after refill");
-      return true;
-    case TagArray::AccessStatus::kNoVictim:
-      assert(false && "Atomic replay cannot select a victim");
-      return true;
-  }
-  return false;
 }
 
 /**
@@ -1198,33 +1095,29 @@ bool Cache::TryAdvanceAtomicTagStage() {
   switch (atomic_sequencer_.phase) {
     case AtomicSequencer::Phase::kIdle:
       return false;
-    case AtomicSequencer::Phase::kWaitEscapeFence:
-      if (HasLineEscapeHazard(atomic_sequencer_.line_address)) {
-        MarkBlockReason("escape_hazard", false);
-        return false;
-      }
-      atomic_sequencer_.phase = AtomicSequencer::Phase::kProbeOrMiss;
-      MarkProgress("atomic_escape_fence_clear");
-      return TryProbeAtomicSequencer();
-    case AtomicSequencer::Phase::kProbeOrMiss:
-      return TryProbeAtomicSequencer();
     case AtomicSequencer::Phase::kWaitReplay:
-      return TryConsumeAtomicReplay();
     case AtomicSequencer::Phase::kReadOld:
     case AtomicSequencer::Phase::kWriteNewRespond:
     case AtomicSequencer::Phase::kFlushBypassLine:
     case AtomicSequencer::Phase::kWaitBypassResponse:
       return false;
     case AtomicSequencer::Phase::kWaitBypassDrain:
-      if (!HasPendingDataPathWork()) {
-        atomic_sequencer_.phase = AtomicSequencer::Phase::kFlushBypassLine;
-        MarkProgress("atomic_bypass_drained");
+      if (HasPendingDataPathWork()) {
+        MarkBlockReason("atomic_bypass_drain", false);
+        return false;
       }
+      atomic_sequencer_.phase = AtomicSequencer::Phase::kFlushBypassLine;
+      MarkProgress("atomic_bypass_drained");
       return false;
     case AtomicSequencer::Phase::kWaitBypassWriteback:
-      if (HasLineEscapeHazard(atomic_sequencer_.line_address) ||
-          !bypass_req_queue_.nb_can_put())
+      if (ShouldStallForLineEscapeHazard(atomic_sequencer_.packet)) {
+        MarkBlockReason("escape_hazard", false);
         return false;
+      }
+      if (!bypass_req_queue_.nb_can_put()) {
+        MarkBlockReason("bypass_queue_full", false);
+        return false;
+      }
       IncrementLineEscapeHazard(atomic_sequencer_.packet);
       {
         const bool queued = bypass_req_queue_.nb_put(atomic_sequencer_.packet);
@@ -1252,13 +1145,7 @@ bool Cache::TryAdvanceAtomicDataStage() {
   assert(packet->is_atomic);
 
   if (atomic_sequencer_.phase == AtomicSequencer::Phase::kFlushBypassLine) {
-    // FIFO writes become readable after the SystemC update phase. Recheck in
-    // the next tick so a last MSHR replay cannot hide between the entry being
-    // released and its packet appearing in the replay FIFO.
-    if (HasPendingDataPathWork()) {
-      atomic_sequencer_.phase = AtomicSequencer::Phase::kWaitBypassDrain;
-      return false;
-    }
+    assert(!HasPendingDataPathWork());
     if (!write_buffer_mem_req_queue_.nb_can_put()) return true;
     auto dirty = tag_array_.ProbeDirtyLine(packet->GetAddress());
     if (dirty) {
@@ -1271,24 +1158,36 @@ bool Cache::TryAdvanceAtomicDataStage() {
     return true;
   }
 
+  if (atomic_sequencer_.phase != AtomicSequencer::Phase::kReadOld &&
+      atomic_sequencer_.phase != AtomicSequencer::Phase::kWriteNewRespond) {
+    return false;
+  }
+
+  // Older packets ahead of the atomic in the queue must finish first, and
+  // younger replays stay behind it.
+  Packet *queue_head = nullptr;
+  if (!tag_array_resp_queue_.nb_peek(queue_head) || queue_head != packet) {
+    return false;
+  }
+
+  const size_t size = packet->GetTlmGp()->get_data_length();
   if (atomic_sequencer_.phase == AtomicSequencer::Phase::kReadOld) {
-    atomic_sequencer_.size = packet->GetTlmGp()->get_data_length();
-    const bool read_ok = data_array_.ReadBytes(
-        packet, atomic_sequencer_.old_value.data(), atomic_sequencer_.size);
+    const bool read_ok =
+        data_array_.ReadBytes(packet, atomic_sequencer_.old_value.data(), size);
     assert(read_ok);
 
     simtix::AtomicExtension *ext = nullptr;
     packet->GetTlmGp()->get_extension(ext);
     assert(ext != nullptr);
     const uint8_t *operand = packet->GetTlmGp()->get_data_ptr();
-    if (atomic_sequencer_.size == sizeof(uint32_t)) {
+    if (size == sizeof(uint32_t)) {
       const uint32_t old_value = LoadU32(atomic_sequencer_.old_value.data());
       const uint32_t operand_value = LoadU32(operand);
       StoreU32(atomic_sequencer_.new_value.data(),
                ApplyAtomicOp32(ext->op, old_value, operand_value,
                                ext->compare_value));
     } else {
-      assert(atomic_sequencer_.size == sizeof(uint64_t));
+      assert(size == sizeof(uint64_t));
       const uint64_t old_value = LoadU64(atomic_sequencer_.old_value.data());
       const uint64_t operand_value = LoadU64(operand);
       StoreU64(atomic_sequencer_.new_value.data(),
@@ -1300,21 +1199,23 @@ bool Cache::TryAdvanceAtomicDataStage() {
     return true;
   }
 
-  if (atomic_sequencer_.phase != AtomicSequencer::Phase::kWriteNewRespond) {
-    return false;
-  }
   if (!core_resp_queue_.nb_can_put()) {
     MarkBlockReason("core_resp_backpressure", true);
     return true;
   }
 
-  const bool write_ok = data_array_.WriteBytes(
-      packet, atomic_sequencer_.new_value.data(), atomic_sequencer_.size);
+  Packet *dequeued_packet = nullptr;
+  const bool got_packet = tag_array_resp_queue_.nb_get(dequeued_packet);
+  assert(got_packet);
+  assert(dequeued_packet == packet);
+
+  const bool write_ok =
+      data_array_.WriteBytes(packet, atomic_sequencer_.new_value.data(), size);
   assert(write_ok);
-  tag_array_.MarkDirty(atomic_sequencer_.location);
+  tag_array_.MarkDirty(packet->location);
   std::memcpy(packet->GetTlmGp()->get_data_ptr(),
-              atomic_sequencer_.old_value.data(), atomic_sequencer_.size);
-  tag_array_.UnlockEntry(atomic_sequencer_.location);
+              atomic_sequencer_.old_value.data(), size);
+  tag_array_.UnlockEntry(packet->location);
 
   const bool put_response = core_resp_queue_.nb_put(packet);
   assert(put_response);
@@ -1463,7 +1364,6 @@ bool Cache::TryProcessDataArrayHit(Packet *packet) {
       success = mshr_file_refill_notify_queue_.nb_put(
           {packet->GetAddress(), packet->unique_id, *packet->mshr_id});
       assert(success);
-      defer_tag_arbitration_for_refill_replay_cycles_ = 2;
       LogPacketTraceEvent(cache_log::Category::kStage, "refill_error",
                           "data_array", "data_array", packet);
       ReleasePacket(packet);
@@ -1510,7 +1410,6 @@ bool Cache::TryProcessDataArrayHit(Packet *packet) {
     success = mshr_file_refill_notify_queue_.nb_put(
         {packet->GetAddress(), packet->unique_id, *packet->mshr_id});
     assert(success);
-    defer_tag_arbitration_for_refill_replay_cycles_ = 2;
     MarkProgress("refill_notify_enqueue");
     // Refill packet is consumed after processing, release the packet
     LogPacketTraceEvent(cache_log::Category::kStage, "refill_complete",

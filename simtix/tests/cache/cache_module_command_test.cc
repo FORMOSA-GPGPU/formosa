@@ -2,6 +2,8 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
+#include <algorithm>
+
 #include "cache_module_test_common.h"
 
 namespace {
@@ -26,7 +28,19 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
         cmd_overflow_bench_(
             "cmd_overflow_bench",
             MakeParam(WriteMissPolicy::kWriteAllocate,
-                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 2)) {
+                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 2)),
+        cmd_flush_replay_bench_(
+            "cmd_flush_replay_bench",
+            MakeParam(WriteMissPolicy::kWriteAllocate,
+                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 2)),
+        cmd_invalidate_replay_bench_(
+            "cmd_invalidate_replay_bench",
+            MakeParam(WriteMissPolicy::kWriteAllocate,
+                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 1)),
+        cmd_stalled_write_bench_(
+            "cmd_stalled_write_bench",
+            MakeParam(WriteMissPolicy::kWriteAllocate,
+                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 1)) {
     SC_THREAD(Run);
   }
 
@@ -37,6 +51,9 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
     cmd_busy_bench_.clock_.write(false);
     cmd_full_bench_.clock_.write(false);
     cmd_overflow_bench_.clock_.write(false);
+    cmd_flush_replay_bench_.clock_.write(false);
+    cmd_invalidate_replay_bench_.clock_.write(false);
+    cmd_stalled_write_bench_.clock_.write(false);
     wait(sc_core::SC_ZERO_TIME);
 
     RunBench("cmd_flush_bench", [this] {
@@ -53,6 +70,15 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
     });
     RunBench("cmd_overflow_bench", [this] {
       TestCommandOverflowingRangeIsFatal();
+    });
+    RunBench("cmd_flush_replay_bench", [this] {
+      TestCommandFlushWaitsForWriteReplay();
+    });
+    RunBench("cmd_invalidate_replay_bench", [this] {
+      TestCommandInvalidateWaitsForReplayBehindHit();
+    });
+    RunBench("cmd_stalled_write_bench", [this] {
+      TestCommandFlushWaitsForStalledWrite();
     });
 
     sc_core::sc_stop();
@@ -285,11 +311,140 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
            "full invalidate removes second cached line");
   }
 
+  void TestCommandFlushWaitsForWriteReplay() {
+    auto &bench = cmd_flush_replay_bench_;
+    CacheModuleTester view(bench.cache_);
+    const size_t request_index = bench.memory_.request_count();
+    const auto patch = Sequence(4, 0xC0);
+    auto *write = bench.core_.SendWrite(0x14, patch);
+    Expect(bench.WaitForMemoryRequests(request_index + 1),
+           "older write miss reaches memory");
+
+    Expect(SendCacheCommand(bench, kFlushOpcode, 0x10, 0x10),
+           "flush behind the write miss is accepted");
+    bench.AdvanceCycle();
+    auto expected = Sequence(16, 0x60);
+    bench.memory_.RespondAt(request_index, expected);
+    std::copy(patch.begin(), patch.end(), expected.begin() + 4);
+
+    Expect(bench.WaitForMemoryRequests(request_index + 2, 64),
+           "flush writes back the line the replay made dirty");
+    ExpectWriteRequest(bench, request_index + 1, 0x10, expected,
+                       "flush writeback carries the older write",
+                       AllEnabledMask(expected.size()));
+    bench.memory_.RespondAt(request_index + 1);
+    Expect(WaitForCacheCommandResponse(bench, 64),
+           "flush completes after its writeback");
+    Expect(bench.core_.HasResponse(write), "older write responds");
+
+    const auto line = view.CachedLine(0x10);
+    Expect(line.has_value() && line->data == expected && !line->tag.dirty,
+           "flush leaves the written line clean");
+  }
+
+  void TestCommandInvalidateWaitsForReplayBehindHit() {
+    // With depth-one queues, a hit accepted as the MSHR publishes the last
+    // replay keeps that replay out of the tag stage for one more cycle.
+    auto &bench = cmd_invalidate_replay_bench_;
+    CacheModuleTester view(bench.cache_);
+    const auto hit_block = Sequence(16, 0x10);
+    const auto miss_block = Sequence(16, 0x60);
+    FillLineWithRead(bench, 0x00, hit_block);
+
+    const size_t request_index = bench.memory_.request_count();
+    const size_t response_count = bench.core_.response_count();
+    auto *miss = bench.core_.SendRead(0x14, 4);
+    Expect(bench.WaitForMemoryRequests(request_index + 1),
+           "older read miss reaches memory");
+
+    bench.memory_.RespondAt(request_index, miss_block);
+    auto *hit = bench.core_.SendRead(0x00, 4);
+    bench.AdvanceCycle();
+    bench.AdvanceCycle();
+    Expect(SendCacheCommand(bench, kInvalidateOpcode, 0x10, 0x10),
+           "invalidate behind the refill is accepted");
+
+    Expect(WaitForCacheCommandResponse(bench, 64),
+           "invalidate completes after the replay");
+    Expect(bench.WaitForCoreResponses(response_count + 2, 32),
+           "hit and replay respond");
+    Expect(PayloadData(miss) == Slice(miss_block, 4, 4),
+           "replay returns its refill data");
+    Expect(PayloadData(hit) == Slice(hit_block, 0, 4),
+           "hit returns the cached data");
+    Expect(!view.CachedLine(0x10).has_value(),
+           "invalidate removes the line after its replay");
+  }
+
+  void TestCommandFlushWaitsForStalledWrite() {
+    auto &bench = cmd_stalled_write_bench_;
+    CacheModuleTester view(bench.cache_);
+    FillLineWithRead(bench, 0x00, Sequence(16, 0x10));
+    const auto block = Sequence(16, 0x60);
+    FillLineWithRead(bench, 0x10, block);
+
+    const auto stall_responses = [&] {
+      view.FillCoreResponseQueueWithTestPackets(0x1000);
+      wait(sc_core::SC_ZERO_TIME);
+    };
+
+    // Stall a read in the data stage and queue a write hit behind it.
+    stall_responses();
+    bench.core_.SendRead(0x00, 4);
+    for (size_t cycle = 0; cycle < 8; ++cycle) {
+      bench.AdvanceCycle();
+      stall_responses();
+    }
+    Expect(view.Queues().tag_array_resp == 1,
+           "response backpressure stalls the read in the data stage");
+    const auto patch = Sequence(4, 0xC0);
+    bench.core_.SendWrite(0x14, patch);
+    for (size_t cycle = 0; cycle < 8; ++cycle) {
+      bench.AdvanceCycle();
+      stall_responses();
+    }
+    Expect(view.Queues().core_req == 1, "write hit waits behind the read");
+
+    const size_t writeback_index = bench.memory_.request_count();
+    Expect(SendCacheCommand(bench, kFlushOpcode, 0x10, 0x10),
+           "flush behind the write hit is accepted");
+    for (size_t cycle = 0; cycle < 4; ++cycle) {
+      bench.AdvanceCycle();
+      stall_responses();
+    }
+
+    // Release the read for one cycle, so the write passes the tag stage and
+    // then stalls in the data stage with the command still draining.
+    view.ClearCoreResponseQueue();
+    wait(sc_core::SC_ZERO_TIME);
+    bench.AdvanceCycle();
+    for (size_t cycle = 0; cycle < 8; ++cycle) {
+      bench.AdvanceCycle();
+      stall_responses();
+    }
+    view.ClearCoreResponseQueue();
+    wait(sc_core::SC_ZERO_TIME);
+
+    Expect(bench.WaitForMemoryRequests(writeback_index + 1, 32),
+           "flush writes back the dirty line");
+    auto expected = block;
+    std::copy(patch.begin(), patch.end(), expected.begin() + 4);
+    ExpectWriteRequest(bench, writeback_index, 0x10, expected,
+                       "flush writeback carries the stalled write",
+                       AllEnabledMask(expected.size()));
+    bench.memory_.RespondAt(writeback_index);
+    Expect(WaitForCacheCommandResponse(bench, 32),
+           "flush completes after its writeback");
+  }
+
   CacheBench cmd_flush_bench_;
   CacheBench cmd_invalidate_bench_;
   CacheBench cmd_busy_bench_;
   CacheBench cmd_full_bench_;
   CacheBench cmd_overflow_bench_;
+  CacheBench cmd_flush_replay_bench_;
+  CacheBench cmd_invalidate_replay_bench_;
+  CacheBench cmd_stalled_write_bench_;
 };
 
 }  // namespace

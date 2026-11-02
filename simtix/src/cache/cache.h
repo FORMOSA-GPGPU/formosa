@@ -148,8 +148,6 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   struct AtomicSequencer {
     enum class Phase {
       kIdle,             ///< No atomic request is currently being sequenced.
-      kWaitEscapeFence,  ///< Wait for same-line bypass/write-buffer hazards.
-      kProbeOrMiss,      ///< Probe the tag array or enqueue a miss to MSHR.
       kWaitReplay,       ///< Wait for the atomic miss to refill and replay.
       kReadOld,          ///< Read the old value from the locked cache line.
       kWriteNewRespond,  ///< Write the new value, respond, and unlock the line.
@@ -163,26 +161,19 @@ class Cache : public sc_module, public PacketLifecycleIntf {
     void Reset() {
       phase = Phase::kIdle;
       packet = nullptr;
-      line_address = 0;
-      size = 0;
-      location = {};
       old_value.fill(0);
       new_value.fill(0);
     }
 
-    void Start(Packet *new_packet, uint64_t new_line_address) {
+    void Start(Packet *new_packet, Phase new_phase) {
       assert(!IsBusy());
       assert(new_packet != nullptr);
-      phase = Phase::kWaitEscapeFence;
+      phase = new_phase;
       packet = new_packet;
-      line_address = new_line_address;
     }
 
     Phase phase = Phase::kIdle;
     Packet *packet = nullptr;
-    uint64_t line_address = 0;
-    size_t size = 0;
-    Location location;
     std::array<uint8_t, sizeof(uint64_t)> old_value{};
     std::array<uint8_t, sizeof(uint64_t)> new_value{};
   };
@@ -259,15 +250,14 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   Packet *AllocateCoreRequestPacket(tlm::tlm_generic_payload *payload);
   Packet *AllocateWriteBufferPacketFrom(const Packet *source_packet);
   Packet *AllocateVictimPacketFrom(const Packet *refill_packet);
-  MshrFile::AcceptStatus TryAcceptReadMiss(Packet *packet);
+  MshrFile::AcceptStatus TryAcceptMiss(Packet *packet,
+                                       MshrFile::ProbeStatus probe);
   void RecordAcceptedMshrMiss(MshrFile::AcceptStatus status);
-  Packet *SelectTagArrayPacket(Packet *mem_resp_packet, bool *selected_refill);
+  Packet *SelectTagArrayPacket();
   uint64_t ToLineAddress(uint64_t address) const;
   bool TryRejectInvalidAtomicRequest(Packet *packet);
-  bool TryStartAtomicSequencerFromCoreQueue(Packet *packet);
+  void StartForwardedAtomic(Packet *packet);
   bool TryAdvanceAtomicTagStage();
-  bool TryProbeAtomicSequencer();
-  bool TryConsumeAtomicReplay();
   bool TryAdvanceAtomicDataStage();
   bool TryProcessDataArrayMiss(Packet *packet);
   bool TryProcessDataArrayHit(Packet *packet);
@@ -365,7 +355,6 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   uint64_t progress_epoch_ = 0;
   DeadlockWatchdog deadlock_watchdog_;
   bool defer_mshr_mem_req_for_write_buffer_ = false;
-  size_t defer_tag_arbitration_for_refill_replay_cycles_ = 0;
   std::unordered_map<uint64_t, size_t> line_escape_hazards_;
 };
 

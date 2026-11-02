@@ -356,6 +356,7 @@ class CacheModuleTester {
   void AccessDataArrayStage() { dut_.AccessDataArrayStage(); }
   void AccessTagArrayStage() { dut_.AccessTagArrayStage(); }
   void SendMemRequest() { dut_.SendMemRequest(); }
+  void SendCoreResponse() { dut_.SendCoreResponse(); }
 
  private:
   Packet *AllocateTestWritePacket(uint64_t address) {

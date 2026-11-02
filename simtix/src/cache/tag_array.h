@@ -29,8 +29,9 @@ class TagArray {
   enum class AccessStatus {
     kHit,
     kMiss,
-    kLocked,
     kNoVictim,
+    kPendingReplay,  ///< Line is installed but older MSHR packets must go
+                     ///< first.
   };
 
   /**
@@ -41,13 +42,6 @@ class TagArray {
    */
   AccessStatus Process(Packet *packet);
 
-  /**
-   * @brief Probe a cache line for the atomic sequencer.
-   *
-   * @param packet Atomic packet to probe; cache lookup metadata is modified.
-   * @return Result of the tag access, including kLocked for locked entries.
-   */
-  AccessStatus ProbeAtomic(Packet *packet);
   void LockEntry(Location location);
   void UnlockEntry(Location location);
   void MarkDirty(Location location);
@@ -58,6 +52,7 @@ class TagArray {
   };
 
   size_t EntryCount() const { return tag_array_.size(); }
+  bool HasPendingReplayLine() const { return pending_replay_lines_ != 0; }
   std::optional<DirtyLine> ProbeDirtyEntry(size_t index);
   std::optional<DirtyLine> ProbeDirtyLine(uint64_t address);
   void InvalidateEntry(size_t index);
@@ -67,11 +62,16 @@ class TagArray {
     bool valid = false;
     bool dirty = false;
     bool locked = false;
+    // Set when a refill installs the line and cleared when the last replay of
+    // its MSHR entry probes it. Meanwhile core requests cannot hit the line and
+    // refills cannot evict it.
+    bool pending_replay = false;
     // the tag address stored in this tag entry, aligned to cache block size
     uint64_t tag = 0;
     SC_TIME_DT access_timestamp;  // for replacement policy
 
     void UpdateTimestamp() { access_timestamp = sc_time_stamp().value(); }
+    bool CanBeEvicted() const { return !locked && !pending_replay; }
   };
 
  private:
@@ -80,7 +80,7 @@ class TagArray {
     TagEntry *entry = nullptr;
   };
 
-  AccessStatus Probe(Packet *packet, bool respect_lock);
+  AccessStatus Probe(Packet *packet);
   AccessStatus Refill(Packet *packet);
 
   uint64_t ToLineAddress(uint64_t address) const {
@@ -109,6 +109,7 @@ class TagArray {
 
   // Storage layout: [sets][ways].
   std::vector<TagEntry> tag_array_;
+  size_t pending_replay_lines_ = 0;
 
   const size_t set_index_shift_;
 };

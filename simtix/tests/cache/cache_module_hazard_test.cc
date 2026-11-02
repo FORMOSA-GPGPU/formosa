@@ -89,7 +89,32 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
         dirty_victim_stalled_hazard_bench_(
             "dirty_victim_stalled_hazard_bench",
             MakeParam(WriteMissPolicy::kWriteAllocate,
-                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 2)) {
+                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 2)),
+        wna_pending_refill_wt_bench_(
+            "wna_pending_refill_wt_bench",
+            MakeParam(WriteMissPolicy::kWriteNoAllocate,
+                      WriteHitPolicy::kWriteThrough, 1, 2, 2, 4, 2)),
+        wna_pending_refill_wb_bench_(
+            "wna_pending_refill_wb_bench",
+            MakeParam(WriteMissPolicy::kWriteNoAllocate,
+                      WriteHitPolicy::kWriteBack, 1, 2, 2, 4, 2)),
+        wna_subentry_full_bench_(
+            "wna_subentry_full_bench",
+            MakeParam(WriteMissPolicy::kWriteNoAllocate,
+                      WriteHitPolicy::kWriteThrough, 1, 2, 1, 4, 2)),
+        wna_single_replay_bench_(
+            "wna_single_replay_bench",
+            MakeParam(WriteMissPolicy::kWriteNoAllocate,
+                      WriteHitPolicy::kWriteThrough, 1, 2, 1, 4, 1)),
+        replay_order_wa_bench_(
+            "replay_order_wa_bench",
+            MakeStalledDataStageParam(WriteMissPolicy::kWriteAllocate, 2)),
+        replay_order_wna_bench_(
+            "replay_order_wna_bench",
+            MakeStalledDataStageParam(WriteMissPolicy::kWriteNoAllocate, 2)),
+        refill_eviction_bench_(
+            "refill_eviction_bench",
+            MakeStalledDataStageParam(WriteMissPolicy::kWriteAllocate, 1)) {
     SC_THREAD(Run);
   }
 
@@ -109,6 +134,13 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
     write_hazard_wb_wna_bench_.clock_.write(false);
     wna_stalled_hazard_bench_.clock_.write(false);
     dirty_victim_stalled_hazard_bench_.clock_.write(false);
+    wna_pending_refill_wt_bench_.clock_.write(false);
+    wna_pending_refill_wb_bench_.clock_.write(false);
+    wna_subentry_full_bench_.clock_.write(false);
+    wna_single_replay_bench_.clock_.write(false);
+    replay_order_wa_bench_.clock_.write(false);
+    replay_order_wna_bench_.clock_.write(false);
+    refill_eviction_bench_.clock_.write(false);
     wait(sc_core::SC_ZERO_TIME);
 
     RunBench("mshr_deadlock_bench", [this] {
@@ -160,6 +192,31 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
     });
     RunBench("dirty_victim_stalled_hazard_bench", [this] {
       TestDirtyVictimStalledWritebackFencesSameLineRead();
+    });
+    RunBench("wna_pending_refill_wt_bench", [this] {
+      TestWriteNoAllocateMissObservedAfterPendingRefill(
+          wna_pending_refill_wt_bench_, WriteHitPolicy::kWriteThrough);
+    });
+    RunBench("wna_pending_refill_wb_bench", [this] {
+      TestWriteNoAllocateMissObservedAfterPendingRefill(
+          wna_pending_refill_wb_bench_, WriteHitPolicy::kWriteBack);
+    });
+    RunBench("wna_subentry_full_bench", [this] {
+      TestWriteNoAllocateMissObservedAfterPendingRefill(
+          wna_subentry_full_bench_, WriteHitPolicy::kWriteThrough);
+    });
+    RunBench("wna_single_replay_bench", [this] {
+      TestWriteNoAllocateMissObservedAfterPendingRefill(
+          wna_single_replay_bench_, WriteHitPolicy::kWriteThrough);
+    });
+    RunBench("replay_order_wa_bench", [this] {
+      TestYoungerWriteCannotPassUnreplayedWrite(replay_order_wa_bench_);
+    });
+    RunBench("replay_order_wna_bench", [this] {
+      TestYoungerWriteCannotPassUnreplayedWrite(replay_order_wna_bench_);
+    });
+    RunBench("refill_eviction_bench", [this] {
+      TestYoungerRefillCannotEvictUnreplayedLine();
     });
 
     sc_core::sc_stop();
@@ -1105,6 +1162,267 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
            "same-line read after stalled dirty-victim writeback is not stale");
   }
 
+  void TestWriteNoAllocateMissObservedAfterPendingRefill(
+      CacheBench &bench, WriteHitPolicy write_hit_policy) {
+    const uint64_t line_address = 0x00;
+    const uint64_t access_address = 0x04;
+    const auto old_block = Sequence(16, 0x10);
+    const auto patch = Sequence(4, 0xA0);
+
+    auto *older_read = bench.core_.SendRead(access_address, patch.size());
+    Expect(bench.WaitForMemoryRequests(1),
+           "read miss before the write reaches memory");
+    ExpectReadRequest(bench, 0, line_address, old_block.size(),
+                      "read miss before the write issues a block read");
+
+    auto *write = bench.core_.SendWrite(access_address, patch);
+    for (size_t cycle = 0; cycle < 16; ++cycle) {
+      bench.AdvanceCycle();
+    }
+    Expect(bench.memory_.request_count() == 1,
+           "write does not reach memory ahead of the pending refill");
+
+    // Memory served the read first, so the refill carries the pre-write line.
+    bench.memory_.RespondAt(0, old_block);
+    for (size_t cycle = 0; cycle < 16; ++cycle) {
+      bench.AdvanceCycle();
+    }
+
+    // Ack the write only after the refill had every chance to install.
+    const auto line_writes = DrainWriteRequests(bench, 1, line_address);
+    if (write_hit_policy == WriteHitPolicy::kWriteThrough) {
+      Expect(line_writes.size() == 1,
+             "write-through write reaches memory once after the refill");
+      if (!line_writes.empty()) {
+        ExpectObservedWrite(line_writes.front(), 4, patch,
+                            "write-through write carries the written bytes");
+      }
+    } else {
+      Expect(line_writes.empty(),
+             "write-back write stays in the cache after the refill");
+    }
+
+    Expect(bench.core_.HasResponse(older_read),
+           "read miss before the write responds to the core");
+    Expect(PayloadData(older_read) == Slice(old_block, 4, patch.size()),
+           "read miss before the write does not observe the younger write");
+    Expect(bench.core_.HasResponse(write), "write response is observed");
+
+    auto *younger_read = bench.core_.SendRead(access_address, patch.size());
+    for (size_t cycle = 0; cycle < 32 && !bench.core_.HasResponse(younger_read);
+         ++cycle) {
+      bench.AdvanceCycle();
+    }
+    Expect(bench.core_.HasResponse(younger_read),
+           "read after the completed write responds to the core");
+    Expect(PayloadData(younger_read) == patch,
+           "read after the completed write observes the written bytes");
+  }
+
+  /**
+   * @brief Build a cache whose tag stage can run ahead of a stalled data stage.
+   *
+   * The queues hold more than a blocker and one refill, so a tag-stage update
+   * can precede the refill's data-stage handling by several cycles.
+   */
+  static Param MakeStalledDataStageParam(WriteMissPolicy write_miss_policy,
+                                         size_t mshr_subentries) {
+    Param param = MakeParam(write_miss_policy, WriteHitPolicy::kWriteThrough, 1,
+                            2, mshr_subentries, 1, kStalledDataStageQueueSize);
+    param.cache_size_bytes = 128;
+    return param;
+  }
+
+  /** @brief Install the lines later written by StallDataStage. */
+  void FillDataStageBlockerLines(CacheBench &bench) {
+    for (size_t index = 0; index < kDataStageBlockerWrites; ++index) {
+      FillLineWithRead(bench, kDataStageBlockerBase + index * 0x10,
+                       Sequence(16, 0x20));
+    }
+  }
+
+  /**
+   * @brief Stall the data stage until the blocking writes are acknowledged.
+   *
+   * One write-through hit occupies the only write-buffer entry, others fill the
+   * write-buffer input queue, and the last one waits at the data-stage head.
+   */
+  void StallDataStage(CacheBench &bench) {
+    CacheModuleTester view(bench.cache_);
+    for (size_t index = 0; index < kDataStageBlockerWrites; ++index) {
+      bench.core_.SendWrite(kDataStageBlockerBase + index * 0x10,
+                            Sequence(4, 0x40));
+      for (size_t cycle = 0; cycle < 8; ++cycle) {
+        bench.AdvanceCycle();
+      }
+    }
+    Expect(view.Queues().tag_array_resp == 1,
+           "blocking write waits at the data-stage head");
+    Expect(view.Queues().write_buffer_mem_req == kStalledDataStageQueueSize,
+           "blocking writes fill the write-buffer input queue");
+  }
+
+  /** @brief Memory write contents captured before the cache reclaims them. */
+  struct ObservedWrite {
+    std::vector<uint8_t> data;
+    std::vector<uint8_t> byte_enable;
+  };
+
+  void ExpectObservedWrite(const ObservedWrite &write, size_t offset,
+                           const std::vector<uint8_t> &patch,
+                           std::string_view message) {
+    Expect(write.data == LineWriteData(write.data.size(), offset, patch),
+           message);
+    Expect(write.byte_enable ==
+               LineWriteMask(write.data.size(), offset, patch.size()),
+           message);
+  }
+
+  /**
+   * @brief Acknowledge memory writes as they arrive.
+   *
+   * @return Writes that targeted `line_address`, in memory arrival order.
+   */
+  std::vector<ObservedWrite> DrainWriteRequests(CacheBench &bench,
+                                                size_t begin_index,
+                                                uint64_t line_address) {
+    std::vector<ObservedWrite> line_writes;
+    size_t next_request = begin_index;
+    for (size_t cycle = 0; cycle < 128; ++cycle) {
+      for (; next_request < bench.memory_.request_count(); ++next_request) {
+        tlm::tlm_generic_payload *request = bench.memory_.request(next_request);
+        if (!request->is_write()) {
+          continue;
+        }
+        if (request->get_address() == line_address) {
+          const uint8_t *byte_enable = request->get_byte_enable_ptr();
+          line_writes.push_back(
+              {PayloadData(request),
+               byte_enable == nullptr
+                   ? std::vector<uint8_t>{}
+                   : std::vector<uint8_t>(
+                         byte_enable,
+                         byte_enable + request->get_byte_enable_length())});
+        }
+        bench.memory_.RespondAt(next_request);
+      }
+      bench.AdvanceCycle();
+    }
+    return line_writes;
+  }
+
+  void TestYoungerWriteCannotPassUnreplayedWrite(CacheBench &bench) {
+    CacheModuleTester view(bench.cache_);
+    const uint64_t line_address = 0x00;
+    const uint64_t access_address = 0x04;
+    const auto old_block = Sequence(16, 0x10);
+    const auto older_patch = Sequence(4, 0xA0);
+    const auto younger_patch = Sequence(4, 0xC0);
+
+    FillDataStageBlockerLines(bench);
+    const size_t refill_request = bench.memory_.request_count();
+    auto *older_read = bench.core_.SendRead(access_address, older_patch.size());
+    Expect(bench.WaitForMemoryRequests(refill_request + 1),
+           "read miss reaches memory");
+
+    auto *older_write = bench.core_.SendWrite(access_address, older_patch);
+    for (size_t cycle = 0; cycle < 8; ++cycle) {
+      bench.AdvanceCycle();
+    }
+    Expect(view.Mshr().tracked_sub_entries == 2,
+           "older write waits in the MSHR entry of the read miss");
+
+    StallDataStage(bench);
+
+    // The full MSHR entry holds this write in the core queue until the refill
+    // installs its tag.
+    auto *younger_write = bench.core_.SendWrite(access_address, younger_patch);
+    for (size_t cycle = 0; cycle < 8; ++cycle) {
+      bench.AdvanceCycle();
+    }
+    bench.memory_.RespondAt(refill_request, old_block);
+    for (size_t cycle = 0; cycle < 16; ++cycle) {
+      bench.AdvanceCycle();
+    }
+
+    const auto line_writes =
+        DrainWriteRequests(bench, refill_request + 1, line_address);
+    Expect(bench.core_.HasResponse(older_read), "older read responds");
+    Expect(PayloadData(older_read) == Slice(old_block, 4, older_patch.size()),
+           "older read does not observe a younger write");
+    Expect(bench.core_.HasResponse(older_write), "older write responds");
+    Expect(bench.core_.HasResponse(younger_write), "younger write responds");
+
+    Expect(line_writes.size() == 2, "both writes reach memory");
+    if (line_writes.size() == 2) {
+      ExpectObservedWrite(line_writes[0], 4, older_patch,
+                          "older write reaches memory first");
+      ExpectObservedWrite(line_writes[1], 4, younger_patch,
+                          "younger write reaches memory last");
+    }
+
+    auto *younger_read =
+        bench.core_.SendRead(access_address, younger_patch.size());
+    for (size_t cycle = 0; cycle < 32 && !bench.core_.HasResponse(younger_read);
+         ++cycle) {
+      bench.AdvanceCycle();
+    }
+    Expect(bench.core_.HasResponse(younger_read), "younger read responds");
+    Expect(PayloadData(younger_read) == younger_patch,
+           "younger read observes the youngest write");
+  }
+
+  void TestYoungerRefillCannotEvictUnreplayedLine() {
+    CacheBench &bench = refill_eviction_bench_;
+    CacheModuleTester view(bench.cache_);
+    // Both lines share a set of the direct-mapped cache.
+    const uint64_t first_address = 0x04;
+    const uint64_t second_address = 0x84;
+    const auto first_block = Sequence(16, 0x10);
+    const auto second_block = Sequence(16, 0x60);
+
+    FillDataStageBlockerLines(bench);
+    const size_t first_request = bench.memory_.request_count();
+    auto *first_read = bench.core_.SendRead(first_address, 4);
+    Expect(bench.WaitForMemoryRequests(first_request + 1),
+           "first read miss reaches memory");
+    auto *second_read = bench.core_.SendRead(second_address, 4);
+    Expect(bench.WaitForMemoryRequests(first_request + 2),
+           "second read miss reaches memory");
+
+    StallDataStage(bench);
+
+    bench.memory_.RespondAt(first_request, first_block);
+    bench.memory_.RespondAt(first_request + 1, second_block);
+    for (size_t cycle = 0; cycle < 16; ++cycle) {
+      bench.AdvanceCycle();
+    }
+
+    // Replays assume their line stays installed, so stop here on a regression
+    // to report it instead of aborting every remaining bench on that assertion.
+    const bool first_line_cached = view.CachedLine(first_address).has_value();
+    Expect(first_line_cached,
+           "refill keeps the installed line until its read replays");
+    if (!first_line_cached) {
+      return;
+    }
+
+    DrainWriteRequests(bench, first_request + 2, 0x00);
+    Expect(bench.core_.HasResponse(first_read), "first read responds");
+    Expect(PayloadData(first_read) == Slice(first_block, 4, 4),
+           "first read returns its refilled line");
+    Expect(bench.core_.HasResponse(second_read), "second read responds");
+    Expect(PayloadData(second_read) == Slice(second_block, 4, 4),
+           "second read returns its refilled line");
+  }
+
+  static constexpr size_t kStalledDataStageQueueSize = 3;
+  // One inflight write, a full write-buffer input queue, and the data-stage
+  // head.
+  static constexpr size_t kDataStageBlockerWrites =
+      kStalledDataStageQueueSize + 2;
+  static constexpr uint64_t kDataStageBlockerBase = 0x10;
+
   CacheBench mshr_deadlock_bench_;
   CacheBench write_resp_hol_bench_;
   CacheBench write_buffer_pressure_bench_;
@@ -1119,6 +1437,13 @@ class CacheModuleHazardTestRunner : public CacheModuleTestRunnerBase {
   CacheBench write_hazard_wb_wna_bench_;
   CacheBench wna_stalled_hazard_bench_;
   CacheBench dirty_victim_stalled_hazard_bench_;
+  CacheBench wna_pending_refill_wt_bench_;
+  CacheBench wna_pending_refill_wb_bench_;
+  CacheBench wna_subentry_full_bench_;
+  CacheBench wna_single_replay_bench_;
+  CacheBench replay_order_wa_bench_;
+  CacheBench replay_order_wna_bench_;
+  CacheBench refill_eviction_bench_;
 };
 
 }  // namespace

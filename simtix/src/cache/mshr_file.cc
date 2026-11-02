@@ -27,22 +27,6 @@ const char *AcceptStatusName(MshrFile::AcceptStatus status) {
   return "unknown";
 }
 
-const char *ProbeStatusName(MshrCore::ProbeResult::Status status) {
-  switch (status) {
-    case MshrCore::ProbeResult::Status::kAcceptablePrimaryMiss:
-      return "acceptable_primary";
-    case MshrCore::ProbeResult::Status::kAcceptableSecondaryMiss:
-      return "acceptable_secondary";
-    case MshrCore::ProbeResult::Status::kMshrFull:
-      return "mshr_full";
-    case MshrCore::ProbeResult::Status::kSubentryFull:
-      return "subentry_full";
-    case MshrCore::ProbeResult::Status::kReplaying:
-      return "replaying";
-  }
-  return "unknown";
-}
-
 }  // namespace
 
 MshrCore::MshrEntry::MshrEntry(size_t index, size_t max_sub_entries)
@@ -78,7 +62,7 @@ MshrFile::MshrFile(sc_module_name name, const Param &param,
   dont_initialize();
 }
 
-MshrCore::ProbeResult MshrCore::ProbeReadMiss(const Packet &packet) {
+MshrCore::ProbeResult MshrCore::ProbeMiss(const Packet &packet) {
   const uint64_t line_address = ToLineAddress(packet.GetAddress());
 
   auto entry_opt = FindMshrEntry(line_address);
@@ -182,7 +166,7 @@ bool MshrCore::HasPendingWork() const {
   return false;
 }
 
-bool MshrCore::CanAcceptReadMiss(uint64_t address) const {
+bool MshrCore::CanAcceptMiss(uint64_t address) const {
   const uint64_t line_address = ToLineAddress(address);
   bool has_free_entry = false;
 
@@ -253,6 +237,7 @@ Packet *MshrCore::PopReplayPacket() {
   if (entry.sub_entries.empty()) {
     // Finished replaying all sub-entries for this MSHR entry, reset it and move
     // on.
+    packet->is_last_replay = true;
     entry.Reset();
     replaying_mshr_index_.reset();
   }
@@ -334,28 +319,62 @@ bool MshrFile::HasPendingWork() const { return core_.HasPendingWork(); }
 
 bool MshrFile::HasReplayWork() const { return core_.HasReplayPacket(); }
 
-bool MshrFile::CanAcceptReadMiss(uint64_t address) const {
-  return core_.CanAcceptReadMiss(address);
+bool MshrFile::CanAcceptMiss(uint64_t address) const {
+  return core_.CanAcceptMiss(address);
 }
 
-MshrFile::ProbeStatus MshrFile::ProbeReadMiss(const Packet &packet) {
-  const auto result = core_.ProbeReadMiss(packet);
-  switch (result.status) {
-    case MshrCore::ProbeResult::Status::kAcceptablePrimaryMiss:
-      return ProbeStatus::kAcceptablePrimary;
-    case MshrCore::ProbeResult::Status::kAcceptableSecondaryMiss:
-      return ProbeStatus::kAcceptableSecondary;
-    default:
-      return ProbeStatus::kRejected;
+bool MshrFile::IsAcceptable(ProbeStatus status) {
+  switch (status) {
+    case ProbeStatus::kAcceptablePrimaryMiss:
+    case ProbeStatus::kAcceptableSecondaryMiss:
+      return true;
+    case ProbeStatus::kMshrFull:
+    case ProbeStatus::kSubentryFull:
+    case ProbeStatus::kReplaying:
+      return false;
   }
+  return false;
 }
 
-MshrFile::AcceptStatus MshrFile::TryAcceptReadMiss(
-    Packet *packet, VictimReservation *reservation) {
+bool MshrFile::HasLineEntry(ProbeStatus status) {
+  switch (status) {
+    case ProbeStatus::kAcceptableSecondaryMiss:
+    case ProbeStatus::kSubentryFull:
+    case ProbeStatus::kReplaying:
+      return true;
+    case ProbeStatus::kAcceptablePrimaryMiss:
+    case ProbeStatus::kMshrFull:
+      return false;
+  }
+  return false;
+}
+
+const char *MshrFile::ProbeStatusName(ProbeStatus status) {
+  switch (status) {
+    case ProbeStatus::kAcceptablePrimaryMiss:
+      return "acceptable_primary";
+    case ProbeStatus::kAcceptableSecondaryMiss:
+      return "acceptable_secondary";
+    case ProbeStatus::kMshrFull:
+      return "mshr_full";
+    case ProbeStatus::kSubentryFull:
+      return "subentry_full";
+    case ProbeStatus::kReplaying:
+      return "replaying";
+  }
+  return "unknown";
+}
+
+MshrFile::ProbeStatus MshrFile::ProbeMiss(const Packet &packet) {
+  return core_.ProbeMiss(packet).status;
+}
+
+MshrFile::AcceptStatus MshrFile::TryAcceptMiss(Packet *packet,
+                                               VictimReservation *reservation) {
   assert(packet != nullptr);
   assert(packet->type == PacketType::kCoreReq);
 
-  auto probe_result = core_.ProbeReadMiss(*packet);
+  auto probe_result = core_.ProbeMiss(*packet);
 
   switch (probe_result.status) {
     case MshrCore::ProbeResult::Status::kAcceptablePrimaryMiss: {
@@ -365,7 +384,7 @@ MshrFile::AcceptStatus MshrFile::TryAcceptReadMiss(
       if (!mshr_mem_req->nb_can_put()) {
         SIMTIX_CACHE_LOG_DEBUG(
             name(), cache_log::Category::kMshr,
-            "event=accept_read_miss status={} reason=mshr_mem_req_full "
+            "event=accept_miss status={} reason=mshr_mem_req_full "
             "pkt={} parent={} type={} cmd={} addr={:#x} line={:#x} "
             "probe_status={}",
             AcceptStatusName(AcceptStatus::kRejected), packet->unique_id,
@@ -387,7 +406,7 @@ MshrFile::AcceptStatus MshrFile::TryAcceptReadMiss(
       assert(success);
       SIMTIX_CACHE_LOG_DEBUG(
           name(), cache_log::Category::kMshr,
-          "event=accept_read_miss status={} reason=primary pkt={} parent={} "
+          "event=accept_miss status={} reason=primary pkt={} parent={} "
           "type={} cmd={} addr={:#x} line={:#x} mem_req_pkt={} "
           "mem_req_addr={:#x} probe_status={}",
           AcceptStatusName(AcceptStatus::kAcceptedPrimary), packet->unique_id,
@@ -405,7 +424,7 @@ MshrFile::AcceptStatus MshrFile::TryAcceptReadMiss(
       core_.AddSecondaryMiss(probe_result.entry, packet);
       SIMTIX_CACHE_LOG_DEBUG(
           name(), cache_log::Category::kMshr,
-          "event=accept_read_miss status={} reason=secondary pkt={} parent={} "
+          "event=accept_miss status={} reason=secondary pkt={} parent={} "
           "type={} cmd={} addr={:#x} line={:#x} probe_status={}",
           AcceptStatusName(AcceptStatus::kAcceptedSecondary), packet->unique_id,
           cache_log::PacketParentId(packet),
@@ -419,7 +438,7 @@ MshrFile::AcceptStatus MshrFile::TryAcceptReadMiss(
     default:
       SIMTIX_CACHE_LOG_DEBUG(
           name(), cache_log::Category::kMshr,
-          "event=accept_read_miss status={} reason={} pkt={} parent={} "
+          "event=accept_miss status={} reason={} pkt={} parent={} "
           "type={} cmd={} addr={:#x} line={:#x} probe_status={}",
           AcceptStatusName(AcceptStatus::kRejected),
           ProbeStatusName(probe_result.status), packet->unique_id,

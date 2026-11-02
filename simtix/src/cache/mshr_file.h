@@ -30,7 +30,7 @@ class MshrCore {
 
  public:
   /**
-   * @brief Result of probing a read miss against the current MSHR state.
+   * @brief Result of probing a miss against the current MSHR state.
    *
    * `entry` is non-null only for acceptable probe statuses.
    */
@@ -51,13 +51,15 @@ class MshrCore {
   ~MshrCore();
 
   /**
-   * @brief Check whether a read miss can be accepted.
+   * @brief Check whether a miss can be accepted.
+   *
+   * Writes that wait for the refill are probed here as well as reads.
    *
    * @pre `packet.GetTlmGp()` is non-null.
-   * @param packet The read-miss packet to probe.
+   * @param packet The miss packet to probe.
    * @return The acceptance status and an entry handle when acceptable.
    */
-  ProbeResult ProbeReadMiss(const Packet &packet);
+  ProbeResult ProbeMiss(const Packet &packet);
 
   /** @brief Result of allocating a primary MSHR entry. */
   struct PrimaryMissAllocation {
@@ -71,7 +73,7 @@ class MshrCore {
    * @pre `entry` came from a `kAcceptablePrimaryMiss` ProbeResult.
    * @pre `packet` and `packet->GetTlmGp()` are non-null.
    * @param entry The free MSHR entry to allocate.
-   * @param packet The original read-miss packet.
+   * @param packet The original miss packet.
    * @param reservation Victim-buffer capacity reserved for this miss.
    * @return Memory read address and generation-protected MSHR identity.
    */
@@ -79,12 +81,12 @@ class MshrCore {
                                             VictimReservation reservation);
 
   /**
-   * @brief Merge a read miss into an existing MSHR entry.
+   * @brief Merge a read or write miss into an existing MSHR entry.
    *
    * @pre `entry` came from a `kAcceptableSecondaryMiss` ProbeResult.
    * @pre `packet` and `packet->GetTlmGp()` are non-null.
    * @param entry Existing MSHR entry for the packet line.
-   * @param packet Read-miss packet to replay after refill.
+   * @param packet Miss packet to replay after refill.
    */
   void AddSecondaryMiss(MshrEntry *entry, Packet *packet);
 
@@ -121,7 +123,7 @@ class MshrCore {
    * @param address Byte address of the request that may miss in the tag array.
    * @return true when MSHR has capacity to accept the miss.
    */
-  bool CanAcceptReadMiss(uint64_t address) const;
+  bool CanAcceptMiss(uint64_t address) const;
 
   /**
    * @brief Pop the next packet that should enter the replay pipeline.
@@ -212,11 +214,16 @@ class MshrFile : public sc_core::sc_module {
     kAcceptedSecondary,
   };
 
-  enum class ProbeStatus {
-    kRejected,
-    kAcceptablePrimary,
-    kAcceptableSecondary,
-  };
+  using ProbeStatus = MshrCore::ProbeResult::Status;
+
+  /** @brief Check whether a probe status admits the miss into the MSHR. */
+  static bool IsAcceptable(ProbeStatus status);
+
+  /** @brief Check whether a probe status found an entry for the miss's line. */
+  static bool HasLineEntry(ProbeStatus status);
+
+  /** @brief Name a probe status for logs and block reasons. */
+  static const char *ProbeStatusName(ProbeStatus status);
 
   sc_in<bool> SC_NAMED(clock);
   sc_port<tlm::tlm_fifo_put_if<Packet *>> SC_NAMED(mshr_mem_req);
@@ -227,17 +234,17 @@ class MshrFile : public sc_core::sc_module {
            PacketLifecycleIntf &packet_lifecycle);
   bool HasPendingWork() const;
   bool HasReplayWork() const;
-  bool CanAcceptReadMiss(uint64_t address) const;
+  bool CanAcceptMiss(uint64_t address) const;
 
   /**
-   * @brief Probe whether a read miss would allocate or merge an MSHR entry.
-   * @param packet Read-miss packet to inspect without changing state.
-   * @return Primary, secondary, or rejected admission status.
+   * @brief Probe whether a miss would allocate or merge an MSHR entry.
+   * @param packet Read or write miss packet to inspect without changing state.
+   * @return Primary, secondary, or the reason the miss would be rejected.
    */
-  ProbeStatus ProbeReadMiss(const Packet &packet);
+  ProbeStatus ProbeMiss(const Packet &packet);
 
   /**
-   * @brief Commit a previously probed read miss into MSHR state.
+   * @brief Commit a previously probed miss into MSHR state.
    *
    * Primary misses allocate an MSHR entry and emit a block read on
    * `mshr_mem_req`; secondary misses merge into an existing pending entry.
@@ -249,8 +256,8 @@ class MshrFile : public sc_core::sc_module {
    * misses. Ownership moves into the allocated MSHR entry on success.
    * @return The accepted miss kind, or `kRejected` when no state changed.
    */
-  AcceptStatus TryAcceptReadMiss(Packet *packet,
-                                 VictimReservation *reservation = nullptr);
+  AcceptStatus TryAcceptMiss(Packet *packet,
+                             VictimReservation *reservation = nullptr);
 
   /** @brief Transfer an entry's victim reservation to the refill path. */
   VictimReservation TakeVictimReservation(MshrId id);

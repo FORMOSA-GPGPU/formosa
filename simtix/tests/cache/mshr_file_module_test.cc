@@ -115,7 +115,7 @@ class MshrFileTester : public sc_core::sc_module {
     PutMemReq(mem_req_blocker);
     FlushDelta();
 
-    Expect(AcceptReadMiss(first_primary) == MshrFile::AcceptStatus::kRejected,
+    Expect(AcceptMiss(first_primary) == MshrFile::AcceptStatus::kRejected,
            "primary miss waits while memory request FIFO is full");
     Expect(GetMemReq() == mem_req_blocker,
            "memory request blocker remains at FIFO head");
@@ -123,9 +123,9 @@ class MshrFileTester : public sc_core::sc_module {
     ReleaseMemReq(mem_req_blocker);
 
     // Release the memory-request FIFO and let the first primary allocate.
-    Expect(AcceptReadMiss(first_primary) ==
-               MshrFile::AcceptStatus::kAcceptedPrimary,
-           "first primary miss is accepted once memory request FIFO has room");
+    Expect(
+        AcceptMiss(first_primary) == MshrFile::AcceptStatus::kAcceptedPrimary,
+        "first primary miss is accepted once memory request FIFO has room");
     FlushDelta();
 
     Packet *mem_req = GetMemReq();
@@ -134,16 +134,16 @@ class MshrFileTester : public sc_core::sc_module {
     ReleaseMemReq(mem_req);
 
     // Merge a secondary miss into the first pending MSHR entry.
-    Expect(AcceptReadMiss(first_secondary) ==
+    Expect(AcceptMiss(first_secondary) ==
                MshrFile::AcceptStatus::kAcceptedSecondary,
            "secondary miss is accepted by the pending MSHR entry");
 
     Expect(!HasMemReq(), "secondary miss does not emit memory request");
 
     // Allocate a second independent MSHR entry.
-    Expect(AcceptReadMiss(second_primary) ==
-               MshrFile::AcceptStatus::kAcceptedPrimary,
-           "second primary miss is accepted while a free MSHR entry exists");
+    Expect(
+        AcceptMiss(second_primary) == MshrFile::AcceptStatus::kAcceptedPrimary,
+        "second primary miss is accepted while a free MSHR entry exists");
     FlushDelta();
 
     mem_req = GetMemReq();
@@ -152,7 +152,7 @@ class MshrFileTester : public sc_core::sc_module {
     ReleaseMemReq(mem_req);
 
     // Merge a secondary miss into the second pending MSHR entry.
-    Expect(AcceptReadMiss(second_secondary) ==
+    Expect(AcceptMiss(second_secondary) ==
                MshrFile::AcceptStatus::kAcceptedSecondary,
            "second secondary miss is accepted by its pending MSHR entry");
 
@@ -176,7 +176,7 @@ class MshrFileTester : public sc_core::sc_module {
     Expect(first_primary->type == PacketType::kReplay,
            "first primary packet is marked as replay");
 
-    Expect(AcceptReadMiss(next_primary) == MshrFile::AcceptStatus::kRejected,
+    Expect(AcceptMiss(next_primary) == MshrFile::AcceptStatus::kRejected,
            "new primary miss waits while all MSHR entries are occupied");
 
     AdvanceCycle();
@@ -187,8 +187,7 @@ class MshrFileTester : public sc_core::sc_module {
            "first secondary packet is marked as replay");
 
     // Once the first entry drains, the new line can allocate a primary miss.
-    Expect(AcceptReadMiss(next_primary) ==
-               MshrFile::AcceptStatus::kAcceptedPrimary,
+    Expect(AcceptMiss(next_primary) == MshrFile::AcceptStatus::kAcceptedPrimary,
            "new primary miss allocates after a replay entry frees");
     FlushDelta();
     mem_req = GetMemReq();
@@ -258,14 +257,14 @@ class MshrFileTester : public sc_core::sc_module {
     Expect(mshr_refill_notify_.nb_put(notify), "refill notify is enqueued");
   }
 
-  MshrFile::AcceptStatus AcceptReadMiss(Packet *packet) {
-    if (dut_.ProbeReadMiss(*packet) !=
-        MshrFile::ProbeStatus::kAcceptablePrimary) {
-      return dut_.TryAcceptReadMiss(packet);
+  MshrFile::AcceptStatus AcceptMiss(Packet *packet) {
+    if (dut_.ProbeMiss(*packet) !=
+        MshrFile::ProbeStatus::kAcceptablePrimaryMiss) {
+      return dut_.TryAcceptMiss(packet);
     }
     VictimReservation reservation(
         {next_reservation_index_++, next_reservation_index_});
-    return dut_.TryAcceptReadMiss(packet, &reservation);
+    return dut_.TryAcceptMiss(packet, &reservation);
   }
 
   void PutMemReq(Packet *packet) {

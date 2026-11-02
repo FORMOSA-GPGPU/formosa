@@ -63,6 +63,9 @@ class Packet {
 
   PacketType type = PacketType::kUnused;
   bool is_atomic = false;
+  // Whether the address is in a non-cacheable region. A forwarded atomic to a
+  // cacheable address is bypassed but stays false, since its line may be local.
+  bool is_non_cacheable = false;
 
   // cache lookup metadata
   bool is_hit = false;
@@ -74,6 +77,8 @@ class Packet {
   Location location;
   // Correlates a cache-owned read/refill packet with its logical MSHR entry.
   std::optional<MshrId> mshr_id = std::nullopt;
+  // Whether no other packet of this MSHR entry follows this replay.
+  bool is_last_replay = false;
 
   /**
    * @brief Return which payload storage currently backs this packet.
@@ -173,6 +178,7 @@ class Packet {
     trace_parent_id = std::nullopt;
     type = PacketType::kUnused;
     is_atomic = false;
+    is_non_cacheable = false;
     payload_type_ = PayloadType::kNone;
     core_payload_ = nullptr;
     cache_owned_payload_ = nullptr;
@@ -182,6 +188,7 @@ class Packet {
     is_victim_dirty = false;
     victim_address = 0;
     mshr_id = std::nullopt;
+    is_last_replay = false;
   }
 
  private:

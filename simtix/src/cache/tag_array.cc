@@ -26,7 +26,7 @@ TagArray::AccessStatus TagArray::Process(Packet *packet) {
   switch (packet->type) {
     case PacketType::kCoreReq:
     case PacketType::kReplay:
-      return Probe(packet, false);
+      return Probe(packet);
     case PacketType::kRefill:
       return Refill(packet);
     default:
@@ -34,13 +34,6 @@ TagArray::AccessStatus TagArray::Process(Packet *packet) {
       break;
   }
   return AccessStatus::kMiss;
-}
-
-TagArray::AccessStatus TagArray::ProbeAtomic(Packet *packet) {
-  assert(packet != nullptr);
-  assert(packet->type == PacketType::kCoreReq ||
-         packet->type == PacketType::kReplay);
-  return Probe(packet, true);
 }
 
 void TagArray::LockEntry(Location location) {
@@ -73,6 +66,7 @@ std::optional<TagArray::DirtyLine> TagArray::ProbeDirtyEntry(size_t index) {
     return std::nullopt;
   }
   assert(!entry.locked);
+  assert(!entry.pending_replay);
 
   entry.dirty = false;
   if (config_.replacement_policy == ReplacementPolicy::kLRU) {
@@ -91,6 +85,7 @@ std::optional<TagArray::DirtyLine> TagArray::ProbeDirtyLine(uint64_t address) {
     return std::nullopt;
   }
   assert(!lookup->entry->locked);
+  assert(!lookup->entry->pending_replay);
 
   lookup->entry->dirty = false;
   if (config_.replacement_policy == ReplacementPolicy::kLRU) {
@@ -112,6 +107,7 @@ void TagArray::InvalidateEntry(size_t index) {
     return;
   }
   assert(!entry.locked);
+  assert(!entry.pending_replay);
   entry.valid = false;
   entry.dirty = false;
   entry.locked = false;
@@ -127,6 +123,7 @@ void TagArray::InvalidateLine(uint64_t address) {
   }
 
   assert(!lookup->entry->locked);
+  assert(!lookup->entry->pending_replay);
   lookup->entry->valid = false;
   lookup->entry->dirty = false;
   lookup->entry->locked = false;
@@ -139,10 +136,9 @@ void TagArray::InvalidateLine(uint64_t address) {
  * @brief Probe the tag array for a core or replay packet.
  *
  * @param packet Core or replay packet to probe.
- * @param respect_lock Whether to respect the lock status of the entry.
- * @return AccessStatus indicating hit, miss, or locked.
+ * @return AccessStatus indicating hit, miss, or pending replay.
  */
-TagArray::AccessStatus TagArray::Probe(Packet *packet, bool respect_lock) {
+TagArray::AccessStatus TagArray::Probe(Packet *packet) {
   const uint64_t address = packet->GetAddress();
   auto lookup = FindTagEntry(address);
 
@@ -157,8 +153,17 @@ TagArray::AccessStatus TagArray::Probe(Packet *packet, bool respect_lock) {
   // Hit
   auto [way, tag_entry] = lookup.value();
 
-  if (respect_lock && tag_entry->locked) {
-    return AccessStatus::kLocked;
+  // Older MSHR packets must observe the line before any younger core request.
+  if (packet->type == PacketType::kCoreReq && tag_entry->pending_replay) {
+    return AccessStatus::kPendingReplay;
+  }
+
+  if (packet->is_last_replay) {
+    assert(packet->type == PacketType::kReplay);
+    assert(tag_entry->pending_replay);
+    tag_entry->pending_replay = false;
+    assert(pending_replay_lines_ > 0);
+    --pending_replay_lines_;
   }
 
   if (config_.replacement_policy == ReplacementPolicy::kLRU) {
@@ -262,8 +267,8 @@ std::optional<TagArray::TagLookupResult> TagArray::FindInvalidEntry(
  * @brief Select a victim entry from a full set.
  *
  * @param set First entry of the full set.
- * @return Selected victim way and entry pointer, or std::nullopt when all
- * candidate ways are locked and the refill must retry later.
+ * @return Selected victim way and entry pointer, or std::nullopt when no way
+ * can be evicted yet and the refill must retry later.
  */
 std::optional<TagArray::TagLookupResult> TagArray::SelectVictim(TagEntry *set) {
   switch (config_.replacement_policy) {
@@ -273,7 +278,7 @@ std::optional<TagArray::TagLookupResult> TagArray::SelectVictim(TagEntry *set) {
       for (size_t way = 0; way < config_.ways; ++way) {
         assert(set[way].valid &&
                "All entries should be valid when selecting victim");
-        if (!set[way].locked) {
+        if (set[way].CanBeEvicted()) {
           candidate_ways.push_back(way);
         }
       }
@@ -293,7 +298,7 @@ std::optional<TagArray::TagLookupResult> TagArray::SelectVictim(TagEntry *set) {
   SC_TIME_DT min_timestamp = 0;
   for (TagEntry *tag = set, *end = set + config_.ways; tag != end; ++tag) {
     assert(tag->valid && "All entries should be valid when selecting victim");
-    if (tag->locked) {
+    if (!tag->CanBeEvicted()) {
       continue;
     }
     if (victim == nullptr || tag->access_timestamp < min_timestamp) {
@@ -318,6 +323,8 @@ void TagArray::FillTagEntry(TagEntry *tag_entry, uint64_t address) {
   tag_entry->valid = true;
   tag_entry->dirty = false;  // newly filled line is clean
   tag_entry->locked = false;
+  tag_entry->pending_replay = true;
+  ++pending_replay_lines_;
   tag_entry->tag = ToLineAddress(address);
   tag_entry->UpdateTimestamp();
 }
