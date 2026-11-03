@@ -25,9 +25,13 @@ void Frontend::PCGen() {
     goto FINALLY;
   }
 
-  // Make sure these warps are active
-  starving_warps_ &= core_->active_warps().val();
-  issuing_warps_ &= core_->active_warps().val();
+  for (uint32_t i = 0; i < num_warps_; ++i) {
+    capacious_warps_[i] = FetchGroupFits(i);
+  }
+
+  // Only active warps with room for their next fetch group can participate.
+  starving_warps_ &= core_->active_warps().val() & capacious_warps_;
+  issuing_warps_ &= core_->active_warps().val() & capacious_warps_;
 
   // Fetch request arbitration
   for (auto *warp_mask : eligible_warps_) {
@@ -228,8 +232,8 @@ void Frontend::UpdateFetchPC() {
     // fetches
     if (fg_addr <= fetch_pc_[i] && fetch_pc_[i] < next_fg_addr) {
       // The maximum allowed fetch PC bounded by the capacity
-      int num_free = ibuffer_[i].size() - ibuffer_[i].used();
-      uint64_t max_fetch_addr = next_pc_[i] + num_free * 4;
+      const int num_unoccupied = ibuffer_[i].num_unoccupied();
+      uint64_t max_fetch_addr = next_pc_[i] + num_unoccupied * 4;
 
       if (i == wid) {
         // If this is the fetching warp, it must not drop the fetched

@@ -60,6 +60,7 @@ class Frontend : public sc_module {
         next_pc_(num_warps_),
         starving_warps_(true, num_warps_),
         issuing_warps_(false, num_warps_),
+        capacious_warps_(false, num_warps_),
         pending_flush_mask_(false, num_warps_),
         pending_flush_reason_(num_warps_, FlushReason::kUnknown),
         pending_flush_wpc_(num_warps_, 0),
@@ -70,7 +71,7 @@ class Frontend : public sc_module {
         pending_edge_target_wpc_(num_warps_, 0),
         ibuffer_("ibuffer") {
     ibuffer_.init(param.num_warps, [this](const char *name, size_t id) {
-      return new tlm::tlm_fifo<Packet *>(name, fetch_width_ * 3);
+      return new IBuffer(name, fetch_width_ * 3);
     });
     to_backend.bind(ibuffer_);
 
@@ -180,9 +181,28 @@ class Frontend : public sc_module {
     uint32_t remaining;  // words in this fetch group not yet broadcast
   };
 
+  class IBuffer : public tlm::tlm_fifo<Packet *> {
+   public:
+    using tlm::tlm_fifo<Packet *>::tlm_fifo;
+
+    // Physical slots unoccupied after this delta's reads and writes; reserve
+    // later fetches with it, but admit writes via nb_can_put(). Recheck on
+    // SystemC upgrades: protected-state semantics can change and still build.
+    int num_unoccupied() const { return size() - buffer.used(); }
+  };
+
   // Convert (align/round) a fetch PC to the fetch group's base address.
   inline constexpr uint64_t ToFetchGroupAddress(uint64_t pc) const {
     return pc & ~(fetch_width_ * 4 - 1);
+  }
+
+  // Fetch only if the whole group fits in the I-buffer, so a warp stalled at
+  // issue cannot block Broadcast for the warps behind it.
+  bool FetchGroupFits(uint32_t wid) const {
+    const uint64_t fg_end =
+        ToFetchGroupAddress(fetch_pc_[wid]) + fetch_width_ * 4;
+    const uint64_t num_unoccupied = ibuffer_[wid].num_unoccupied();
+    return fg_end <= next_pc_[wid] + num_unoccupied * 4;
   }
 
   std::vector<FetchFilterEntry>::iterator FindFetchFilterEntry(
@@ -256,6 +276,7 @@ class Frontend : public sc_module {
 
   sc_bv_base starving_warps_;
   sc_bv_base issuing_warps_;
+  sc_bv_base capacious_warps_;
   std::vector<sc_bv_base *> eligible_warps_;
 
   // This sc_event + sc_bv_base is used to flush the ibuffer in the next delta
@@ -271,7 +292,7 @@ class Frontend : public sc_module {
   std::vector<uint64_t> pending_edge_producer_id_;
   std::vector<uint64_t> pending_edge_target_wpc_;
 
-  sc_vector<tlm::tlm_fifo<Packet *>> ibuffer_;
+  sc_vector<IBuffer> ibuffer_;
 };
 
 }  // namespace simtix::pipelined
