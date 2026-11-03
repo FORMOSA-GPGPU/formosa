@@ -20,7 +20,7 @@
     };
     formosa-pocl-src = {
       url =
-        "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=c2f88c86db12dda9bc0ce15452bca02db0556260&shallow=1&submodules=1";
+        "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=5ce003aebe8f0db5aad6fdc400f5d7f910a0b598&shallow=1&submodules=1";
       flake = false;
     };
 
@@ -306,8 +306,20 @@
       in {
         devShells = {
           default = defaultDevShell;
+          formosa-llvm = pkgs.mkShell {
+            name = "formosa-llvm";
+            inputsFrom = [ formosaToolchain.formosa-llvm-unwrapped ];
+            inherit (formosaToolchain.formosa-llvm-unwrapped) cmakeFlags;
+            shellHook = ''
+              export LLVM_INSTALL_PREFIX="''${LLVM_INSTALL_PREFIX:-$PWD/outputs/out}"
+              export cmakeFlags="$cmakeFlags -DCMAKE_INSTALL_PREFIX=$LLVM_INSTALL_PREFIX"
+            '';
+          };
           formosa-pocl = formosaPoclDevShell;
-        } // projectDevShells;
+        } // projectDevShells // (import ./formosa-llvm/runtime-shells.nix {
+          inherit pkgs;
+          toolchain = formosaToolchain;
+        });
 
         packages = {
           formosa-sdk-xmake = import ./hal/default.nix {

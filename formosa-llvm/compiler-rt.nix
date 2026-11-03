@@ -2,36 +2,41 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-{ stdenv, cmake, ninja, python3, pkg-config, zlib, formosa-llvm, src }:
+{ stdenv, lib, cmake, ninja, python3, pkg-config, zlib, formosa-llvm, src }:
 
-stdenv.mkDerivation {
+stdenv.mkDerivation (finalAttrs: {
   name = "compiler-rt";
   inherit src;
 
+  cmakeFlags = [
+    "-DCMAKE_SYSTEM_NAME=Linux"
+    "-DCMAKE_C_COMPILER_TARGET=riscv64-unknown-elf"
+    "-DCMAKE_ASM_COMPILER_TARGET=riscv64-unknown-elf"
+    "-DCOMPILER_RT_DEFAULT_TARGET_ONLY=ON"
+    "-DCOMPILER_RT_BAREMETAL_BUILD=ON"
+    "-DCOMPILER_RT_BUILD_BUILTINS=ON"
+    "-DCOMPILER_RT_BUILD_LIBFUZZER=OFF"
+    "-DCOMPILER_RT_BUILD_MEMPROF=OFF"
+    "-DCOMPILER_RT_BUILD_PROFILE=OFF"
+    "-DCOMPILER_RT_BUILD_CTX_PROFILE=OFF"
+    "-DCOMPILER_RT_BUILD_ORC=OFF"
+    "-DCOMPILER_RT_BUILD_SANITIZERS=OFF"
+    "-DCOMPILER_RT_BUILD_XRAY=OFF"
+    "-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY"
+    "-DCMAKE_C_COMPILER=${formosa-llvm}/bin/clang"
+    "-DCMAKE_ASM_COMPILER=${formosa-llvm}/bin/clang"
+    "-DCMAKE_C_FLAGS=-march=rv64im_zicsr_zicond -mabi=lp64 -mno-relax -mcmodel=medany"
+    "-DCMAKE_ASM_FLAGS=-march=rv64im_zicsr_zicond -mabi=lp64 -mno-relax -mcmodel=medany"
+    "-DCMAKE_AR=${formosa-llvm}/bin/llvm-ar"
+    "-DCMAKE_NM=${formosa-llvm}/bin/llvm-nm"
+    "-DCMAKE_RANLIB=${formosa-llvm}/bin/llvm-ranlib"
+    "-DLLVM_CONFIG_PATH=${formosa-llvm}/bin/llvm-config"
+    "-DLLVM_ENABLE_PER_TARGET_RUNTIME_DIR=OFF"
+  ];
+
   configurePhase = ''
-    cmake -B build -G Ninja -S compiler-rt \
-    	    -D CMAKE_INSTALL_PREFIX=$out \
-    	    -D CMAKE_SYSTEM_NAME=Linux \
-    	    -D CMAKE_C_COMPILER_TARGET="riscv64-unknown-elf" \
-    	    -D CMAKE_ASM_COMPILER_TARGET="riscv64-unknown-elf" \
-    	    -D COMPILER_RT_DEFAULT_TARGET_ONLY=ON \
-    	    -D COMPILER_RT_BAREMETAL_BUILD=ON \
-    	    -D COMPILER_RT_BUILD_BUILTINS=ON \
-    	    -D COMPILER_RT_BUILD_LIBFUZZER=OFF \
-    	    -D COMPILER_RT_BUILD_MEMPROF=OFF \
-    	    -D COMPILER_RT_BUILD_PROFILE=OFF \
-    	    -D COMPILER_RT_BUILD_SANITIZERS=OFF \
-    	    -D COMPILER_RT_BUILD_XRAY=OFF \
-    	    -D CMAKE_C_COMPILER_WORKS=1 \
-    	    -D CMAKE_CXX_COMPILER_WORKS=1 \
-    	    -D CMAKE_SIZEOF_VOID_P=4 \
-    	    -D CMAKE_C_COMPILER="${formosa-llvm}/bin/clang" \
-    	    -D CMAKE_C_FLAGS="-march="rv64im_zicsr_zicond" -mabi=lp64 -mno-relax -mcmodel=medany" \
-    	    -D CMAKE_ASM_FLAGS="-march="rv64im_zicsr_zicond" -mabi=lp64 -mno-relax -mcmodel=medany" \
-    	    -D CMAKE_AR=${formosa-llvm}/bin/llvm-ar \
-    	    -D CMAKE_NM=${formosa-llvm}/bin/llvm-nm \
-    	    -D CMAKE_RANLIB=${formosa-llvm}/bin/llvm-ranlib \
-    	    -D LLVM_CONFIG_PATH=${formosa-llvm}/bin/llvm-config
+    cmake -B build -G Ninja -S compiler-rt -DCMAKE_INSTALL_PREFIX="$out" \
+      ${lib.escapeShellArgs finalAttrs.cmakeFlags}
   '';
 
   buildPhase = ''
@@ -58,4 +63,4 @@ stdenv.mkDerivation {
   nativeBuildInputs = [ cmake ninja python3 pkg-config ];
 
   buildInputs = [ zlib ];
-}
+})

@@ -2,9 +2,9 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-{ stdenv, formosa-llvm, texinfo, fetchFromGitHub }:
+{ stdenv, lib, formosa-llvm, texinfo, fetchFromGitHub }:
 
-stdenv.mkDerivation {
+stdenv.mkDerivation (finalAttrs: {
   name = "newlib";
   src = fetchFromGitHub {
     owner = "cygwin";
@@ -15,20 +15,18 @@ stdenv.mkDerivation {
 
   enableParallelBuilding = true;
 
+  configureFlags = [
+    "--target=riscv64-unknown-elf"
+    "CC_FOR_TARGET=${formosa-llvm}/bin/clang --target=riscv64-unknown-elf -mcpu=formosa-gpgpu -mabi=lp64 -mno-relax -mcmodel=medany -Wno-error-implicit-function-declaration -Wno-unused-command-line-argument -Wno-error=int-conversion"
+    "AS_FOR_TARGET=${formosa-llvm}/bin/clang --target=riscv64-unknown-elf -mcpu=formosa-gpgpu -mabi=lp64 -mno-relax -mcmodel=medany -c"
+    "AR_FOR_TARGET=${formosa-llvm}/bin/llvm-ar"
+    "LD_FOR_TARGET=${formosa-llvm}/bin/ld.lld"
+    "RANLIB_FOR_TARGET=${formosa-llvm}/bin/llvm-ranlib"
+  ];
+
   configurePhase = ''
-    ./configure --prefix=$out \
-    --target=riscv64-unknown-elf \
-    CC_FOR_TARGET="${formosa-llvm}/bin/clang --target=riscv64-unknown-elf \
-    -mcpu=formosa-gpgpu -mabi=lp64 \
-    -mno-relax -mcmodel=medany \
-    -Wno-error-implicit-function-declaration \
-    -Wno-unused-command-line-argument \
-    -Wno-error=int-conversion" \
-    AS_FOR_TARGET="${formosa-llvm}/bin/llvm-as -march="rv64im_zicsr_zicond_zdinx" -mabi=lp64" \
-    AR_FOR_TARGET=${formosa-llvm}/bin/llvm-ar \
-    LD_FOR_TARGET=${formosa-llvm}/bin/llvm-ld \
-    RANLIB_FOR_TARGET=${formosa-llvm}/bin/llvm-ranlib
+    ./configure --prefix="$out" ${lib.escapeShellArgs finalAttrs.configureFlags}
   '';
 
   buildInputs = [ formosa-llvm texinfo ];
-}
+})

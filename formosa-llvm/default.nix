@@ -57,44 +57,45 @@ let
   };
 
   formosa-sysroot = "${llvm}/riscv64-unknown-elf";
-  # `${llvm}/bin/clang` is a symlink into the unwrapped LLVM tree (the assemble
-  # derivation above mirrors LLVM as a symlink forest). Without
-  # -no-canonical-prefixes, clang resolves that symlink to find its install dir,
-  # which lands in the unwrapped tree where no `riscv64-unknown-elf/` sysroot is
-  # adjacent. clang picks its RISC-V bare-metal driver by probing for an adjacent
-  # `<triple>/lib/crt0.o` (--sysroot does not affect this choice), so it would
-  # fall back to the BareMetal toolchain that links only -lc and drops -lgloss,
-  # leaving newlib's reent syscall stubs (_write/_sbrk/...) undefined. Keeping the
-  # prefix uncanonicalized pins the install dir to ${llvm}/bin, where the stowed
-  # sysroot is adjacent, so clang selects the gcc-compatible RISCVToolChain and
-  # auto-links --start-group -lc -lgloss --end-group as before the symlink merge.
+  # A local compiler can reuse the packaged newlib/compiler-rt. Explicitly
+  # select the GNU-compatible RISC-V driver: a local clang has no adjacent
+  # sysroot to discover, and the BareMetal driver omits newlib's -lgloss.
   formosa-clang-cross = pkgs.symlinkJoin {
     name = "formosa-clang-cross";
-    paths = [
-      (pkgs.writeShellScriptBin "formosa-clang" ''
-        exec ${llvm}/bin/clang \
+    paths = map (compiler:
+      pkgs.writeShellScriptBin "formosa-${compiler}" ''
+        llvm_prefix="''${FORMOSA_LLVM_PREFIX:-${llvm}}"
+        runtime_prefix="''${FORMOSA_RUNTIME_PREFIX:-${llvm}}"
+        if [[ -n ''${FORMOSA_RUNTIME_PREFIX:-} ]]; then
+          for runtime_file in \
+            riscv64-unknown-elf/include/stdio.h \
+            riscv64-unknown-elf/lib/libc.a \
+            riscv64-unknown-elf/lib/libm.a \
+            riscv64-unknown-elf/lib/libgloss.a \
+            lib/clang/current/include/stddef.h \
+            lib/clang/current/include/opencl-c.h \
+            lib/clang/current/include/opencl-c-base.h \
+            lib/clang/current/lib/riscv64-unknown-unknown-elf/libclang_rt.builtins.a; do
+            if [[ ! -f $runtime_prefix/$runtime_file || ! -r $runtime_prefix/$runtime_file ]]; then
+              echo "FORMOSA runtime is missing a readable $runtime_file: $runtime_prefix" >&2
+              exit 1
+            fi
+          done
+        fi
+        exec "$llvm_prefix/bin/${compiler}" \
           -no-canonical-prefixes \
           --target=riscv64-unknown-elf \
-          --sysroot=${formosa-sysroot} \
-          -resource-dir=${llvm}/lib/clang/current \
+          --gcc-toolchain="$runtime_prefix" \
+          --sysroot="$runtime_prefix/riscv64-unknown-elf" \
+          -resource-dir="$runtime_prefix/lib/clang/current" \
           --rtlib=compiler-rt \
           -fuse-ld=lld \
-          --ld-path=${llvm}/bin/ld.lld \
-          -B${llvm}/bin \
+          --ld-path="$llvm_prefix/bin/ld.lld" \
+          -B"$llvm_prefix/bin" \
           "$@"
-      '')
-      (pkgs.writeShellScriptBin "formosa-clang++" ''
-        exec ${llvm}/bin/clang++ \
-          -no-canonical-prefixes \
-          --target=riscv64-unknown-elf \
-          --sysroot=${formosa-sysroot} \
-          -resource-dir=${llvm}/lib/clang/current \
-          --rtlib=compiler-rt \
-          -fuse-ld=lld \
-          --ld-path=${llvm}/bin/ld.lld \
-          -B${llvm}/bin \
-          "$@"
-      '')
-    ];
+      '') [ "clang" "clang++" ];
   };
-in { inherit llvm compiler-rt newlib formosa-sysroot formosa-clang-cross; }
+in {
+  inherit llvm formosa-llvm-unwrapped compiler-rt newlib formosa-sysroot
+    formosa-clang-cross;
+}

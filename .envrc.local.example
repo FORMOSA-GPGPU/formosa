@@ -6,3 +6,8 @@
 # FORMOSA_POCL_PREFIX is required whenever FORMOSA_LLVM_PREFIX is set.
 # export FORMOSA_POCL_PREFIX=/absolute/path/to/pocl-install
 # export FORMOSA_LLVM_PREFIX=/absolute/path/to/llvm-install
+
+# Optional newlib/compiler-rt for direct formosa-clang and bare-metal builds.
+# Independent of the LLVM and PoCL overrides. For PoCL kernels, select this
+# in PoCL's .envrc.local before configuring/building/installing PoCL instead.
+# export FORMOSA_RUNTIME_PREFIX=/absolute/path/to/runtime-install

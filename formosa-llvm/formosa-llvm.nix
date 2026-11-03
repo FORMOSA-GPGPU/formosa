@@ -5,22 +5,25 @@
 { stdenv, lib, cmake, ninja, python3, pkg-config, zlib, libedit, src, swig
 , fixDarwinDylibNames, }:
 
-stdenv.mkDerivation {
+stdenv.mkDerivation (finalAttrs: {
   pname = "formosa-llvm-unwrapped";
   version = "20.1.8";
   src = src;
 
+  cmakeFlags = [
+    "-DLLVM_ENABLE_PROJECTS=clang;lld;lldb"
+    "-DCMAKE_BUILD_TYPE=Release"
+    "-DLLDB_INCLUDE_TESTS=OFF"
+    "-DLLVM_TARGETS_TO_BUILD=X86;Native;RISCV;NVPTX"
+    "-DBUILD_SHARED_LIBS=ON"
+    "-DLLDB_ENABLE_LIBEDIT=ON"
+    "-DLLDB_ENABLE_PYTHON=ON"
+    "-DLLDB_USE_SYSTEM_DEBUGSERVER=ON"
+  ];
+
   configurePhase = ''
-    cmake -B build -G Ninja -S llvm \
-          -D CMAKE_INSTALL_PREFIX=$out \
-          -D LLVM_ENABLE_PROJECTS="clang;lld;lldb" \
-          -D CMAKE_BUILD_TYPE=Release \
-          -D LLDB_INCLUDE_TESTS=OFF \
-          -D LLVM_TARGETS_TO_BUILD="X86;Native;RISCV;NVPTX" \
-          -D BUILD_SHARED_LIBS=ON \
-          -D LLDB_ENABLE_LIBEDIT=ON \
-          -D LLDB_ENABLE_PYTHON=ON \
-          -D LLDB_USE_SYSTEM_DEBUGSERVER=ON
+    cmake -B build -G Ninja -S llvm -DCMAKE_INSTALL_PREFIX=$out \
+      ${lib.escapeShellArgs finalAttrs.cmakeFlags}
   '';
 
   buildPhase = ''
@@ -43,4 +46,4 @@ stdenv.mkDerivation {
     ++ lib.optional stdenv.isDarwin fixDarwinDylibNames;
 
   buildInputs = [ zlib libedit swig ];
-}
+})

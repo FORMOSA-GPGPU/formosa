@@ -6,23 +6,23 @@ rule("baremetal.riscv", function()
   add_deps("freestanding")
   on_load(function(target)
     import("lib.detect.find_tool")
-    -- Sysroot lookup needs the full path, even without `which` or with a
-    -- cached bare compiler name from another toolchain check.
+    -- A local clang can use the Nix runtime through the compiler wrapper;
+    -- its install prefix need not contain a RISC-V sysroot.
     local clang = assert(
-      find_tool("clang", { paths = { "$(env PATH)" }, force = true }),
-      "FORMOSA LLVM clang is required"
+      find_tool("clang", { program = "formosa-clang", paths = { "$(env PATH)" }, force = true }),
+      "FORMOSA LLVM formosa-clang wrapper is required"
     )
-    local sysroot = path.join(path.directory(path.directory(clang.program)), "riscv64-unknown-elf")
-    assert(os.isdir(sysroot), "FORMOSA LLVM RISC-V sysroot is missing: " .. sysroot)
     local flags = {
       "--target=riscv64-unknown-elf",
       "-march=rv64im",
       "-mcmodel=medany",
-      "--sysroot=" .. sysroot,
     }
     target:set("plat", "cross")
     target:set("arch", "riscv64")
     target:set("toolchains", "formosa-clang")
+    for _, kind in ipairs({ "cc", "as", "ld" }) do
+      target:set("toolset", kind, "clang@" .. clang.program)
+    end
     target:set("cxflags", table.join(flags, { "-ffreestanding" }), { force = true })
     target:set("asflags", flags, { force = true })
     target:set(

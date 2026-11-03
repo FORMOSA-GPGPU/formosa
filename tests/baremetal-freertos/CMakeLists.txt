@@ -3,22 +3,16 @@ cmake_minimum_required(VERSION 3.22)
 project(baremetal-freertos)
 enable_language(ASM)
 
-# Using FORMOSA LLVM's clang in the nix shell for now.
-set(CMAKE_C_COMPILER ${CLANG})
+# The wrapper selects the compiler and runtime independently, including when
+# a local clang install has no adjacent RISC-V sysroot.
+find_program(FORMOSA_CLANG NAMES formosa-clang REQUIRED)
+set(CMAKE_C_COMPILER ${FORMOSA_CLANG})
 set(CMAKE_ASM_COMPILER ${CMAKE_C_COMPILER})
-
-get_filename_component(CLANG_BIN_DIR ${CLANG} DIRECTORY)
-get_filename_component(CLANG_ROOT_DIR ${CLANG_BIN_DIR} DIRECTORY)
-
-if (NOT EXISTS "${CLANG_ROOT_DIR}/riscv64-unknown-elf")
-  message(FATAL_ERROR "Clang root directory ${CLANG_ROOT_DIR} does not contain riscv64-unknown-elf sysroot.")
-endif()
 
 set(RISCV_ARCH_FLAGS
   --target=riscv64-unknown-elf
   -march=rv64im
   -mcmodel=medany
-  --sysroot=${CLANG_ROOT_DIR}/riscv64-unknown-elf
 )
 
 # set compilation flags
