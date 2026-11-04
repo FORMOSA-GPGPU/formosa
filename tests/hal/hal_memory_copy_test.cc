@@ -434,6 +434,10 @@ int main() {
     return 1;
   }
 
+  if (fsa_hal_cleanup() != 0) {
+    std::cerr << "HAL cleanup failed\n";
+    return 1;
+  }
   std::cout << "HAL memory copy passed\n";
   return 0;
 }

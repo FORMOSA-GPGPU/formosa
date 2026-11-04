@@ -32,9 +32,11 @@ DAEMON_PID=$!
 
 # Cleanup on exit
 cleanup() {
-  echo "Cleaning up daemon (PID: ${DAEMON_PID})..."
-  kill "${DAEMON_PID}" 2>/dev/null || true
-  wait "${DAEMON_PID}" 2>/dev/null || true
+  if [ -n "${DAEMON_PID}" ]; then
+    echo "Cleaning up daemon (PID: ${DAEMON_PID})..."
+    kill "${DAEMON_PID}" 2>/dev/null || true
+    wait "${DAEMON_PID}" 2>/dev/null || true
+  fi
   rm -f "$AGENT_SOCKET_PATH"
   rmdir "$DAEMON_SOCKET_DIR"
 }
@@ -60,6 +62,9 @@ fi
 
 # Run the test
 "${TEST_EXEC}" "${@:4}"
-TEST_EXIT_CODE=$?
-
-exit "${TEST_EXIT_CODE}"
+# Successful clients request Terminate through HAL cleanup. Do not interrupt
+# the daemon's finalizers with SIGTERM or hide a failed daemon exit.
+DAEMON_EXIT_CODE=0
+wait "${DAEMON_PID}" || DAEMON_EXIT_CODE=$?
+DAEMON_PID=""
+exit "${DAEMON_EXIT_CODE}"
