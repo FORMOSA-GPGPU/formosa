@@ -6,6 +6,12 @@
 
 let
   python = pkgs.python313;
+  # Darwin's OpenCL/opencl.hpp spelling needs the C header alias and C++ headers
+  # in the same include tree.
+  openclHeaders = pkgs.symlinkJoin {
+    name = "dlprim-opencl-headers";
+    paths = [ pkgs.opencl-headers pkgs.opencl-clhpp ];
+  };
   dlprimitives = pkgs.fetchFromGitHub {
     owner = "artyom-beilis";
     repo = "dlprimitives";
@@ -31,8 +37,7 @@ in python.pkgs.buildPythonPackage {
 
   nativeBuildInputs = [ pkgs.cmake pkgs.ninja python.pkgs.pybind11 ];
   buildInputs = [
-    pkgs.opencl-headers
-    pkgs.opencl-clhpp
+    openclHeaders
     pkgs.ocl-icd
     pkgs.sqlite
     (pkgs.lib.getDev python.pkgs.torch)
@@ -44,7 +49,13 @@ in python.pkgs.buildPythonPackage {
   preConfigure = ''
     cmakeFlagsArray+=("-DPYTORCH_DLPRIM_SOURCE_DIR=$PWD")
   '';
-  cmakeFlags = [ "-DCMAKE_POLICY_VERSION_MINIMUM=3.5" ];
+  cmakeFlags = [
+    "-DCMAKE_POLICY_VERSION_MINIMUM=3.5"
+    "-DOCL_PATH=${openclHeaders}/include"
+    "-DOCL_LIB=${
+      pkgs.lib.getLib pkgs.ocl-icd
+    }/lib/libOpenCL${pkgs.stdenv.hostPlatform.extensions.sharedLibrary}"
+  ];
   postInstall = ''
     mkdir -p "$out/${python.sitePackages}"
     mv "$out/python/pytorch_ocl" "$out/${python.sitePackages}/"
