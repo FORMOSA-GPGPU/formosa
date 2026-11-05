@@ -49,6 +49,7 @@ def case_identity(case):
 
     inputs = {}
     cwd = Path(case["rundir"])
+    outputs = {str(Path(path).resolve()) for path in case.get("outputs", {})}
 
     def argument(arg, role):
         values = []
@@ -56,7 +57,7 @@ def case_identity(case):
             path = Path(value)
             if not path.is_absolute():
                 path = cwd / path
-            if path.is_file() and str(path.resolve()) not in case.get("outputs", {}):
+            if path.is_file() and str(path.resolve()) not in outputs:
                 key = f"{role}/{index}:{path.name}"
                 inputs[key] = digest(path)
                 value = f"<input:{key}>"

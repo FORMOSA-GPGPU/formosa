@@ -2,9 +2,10 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
-rule("baremetal.riscv", function()
-  add_deps("freestanding")
-  on_load(function(target)
+toolchain("baremetal-clang", function()
+  set_kind("standalone")
+  set_toolset("ar", "llvm-ar")
+  on_load(function(toolchain)
     import("lib.detect.find_tool")
     -- A local clang can use the Nix runtime through the compiler wrapper;
     -- its install prefix need not contain a RISC-V sysroot.
@@ -12,6 +13,17 @@ rule("baremetal.riscv", function()
       find_tool("clang", { program = "formosa-clang", paths = { "$(env PATH)" }, force = true }),
       "FORMOSA LLVM formosa-clang wrapper is required"
     )
+    -- Keep the cross platform attached to the tool. A per-target toolset loses
+    -- that context and maps Release stripping to Darwin linker flags.
+    for _, kind in ipairs({ "cc", "as", "ld" }) do
+      toolchain:set("toolset", kind, "clang@" .. clang.program)
+    end
+  end)
+end)
+
+rule("baremetal.riscv", function()
+  add_deps("freestanding")
+  on_load(function(target)
     local flags = {
       "--target=riscv64-unknown-elf",
       "-march=rv64im",
@@ -19,10 +31,7 @@ rule("baremetal.riscv", function()
     }
     target:set("plat", "cross")
     target:set("arch", "riscv64")
-    target:set("toolchains", "formosa-clang")
-    for _, kind in ipairs({ "cc", "as", "ld" }) do
-      target:set("toolset", kind, "clang@" .. clang.program)
-    end
+    target:set("toolchains", "baremetal-clang")
     target:set("cxflags", table.join(flags, { "-ffreestanding" }), { force = true })
     target:set("asflags", flags, { force = true })
     target:set(
