@@ -159,6 +159,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Record regression environment
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          {
+            printf 'Commit: %s\n' "$(git rev-parse HEAD)"
+            printf 'Image: %s\n' "$FORMOSA_CI_IMAGE"
+            printf 'Run: %s/%s/actions/runs/%s (attempt %s)\n' \
+              "$GITHUB_SERVER_URL" "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+            printf 'Started at: %s\n' "$(date --utc --iso-8601=seconds)"
+            lscpu
+            free -h
+            df -h /
+          } | tee build/regression-environment.log
+
       - name: Pull FORMOSA environment
         run: docker pull "$FORMOSA_CI_IMAGE"
 
@@ -192,6 +207,13 @@ jobs:
               source "${rc[0]}"
               set -euo pipefail
 
+              # Match the four-vCPU GitHub-hosted runner.
+              jobs=4
+              {
+                xmake --version
+                printf "Configured build/test jobs: %s\n" "$jobs"
+              } | tee -a build/regression-environment.log
+
               xmake lua xmake/tests/workflow.lua
               use_all=$3
               if [[ "$use_all" != true ]] && git diff --name-only "$1" "$2" -- \
@@ -200,14 +222,34 @@ jobs:
                 echo "Workflow definition changed; running full regression."
                 use_all=true
               fi
-              args=(workflow regression --profile=debug --execute)
+              args=(workflow regression --profile=debug --execute --jobs="$jobs")
               if [[ "$use_all" == true ]]; then
                 args+=(--all)
               else
                 args+=(--base "$1" --head "$2")
               fi
+              {
+                printf "Command:"
+                printf " %q" xmake "${args[@]}"
+                printf "\n"
+              } >> build/regression-environment.log
               xmake "${args[@]}"
             ' bash "$REGRESSION_BASE" "$REGRESSION_HEAD" "$REGRESSION_USE_ALL"
+
+      - name: Upload regression diagnostics
+        if: ${{ always() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: regression-debug-diagnostics-${{ github.run_attempt }}
+          retention-days: 7
+          # Xmake stores test logs under the hidden .gens directory.
+          include-hidden-files: true
+          if-no-files-found: warn
+          path: |
+            build/regression-environment.log
+            build/.gens/**/tests/**/*.stdout.log
+            build/.gens/**/tests/**/*.stderr.log
+            build/.gens/**/tests/**/*.errors.log
 
   public-ci:
     name: Public CI
