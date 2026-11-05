@@ -11,7 +11,6 @@ local execution_options = {
 }
 local build_options = table.join({
   { nil, "profile", "kv", "debug", "Build profile; see xmake workflow list." },
-  { nil, "adapter", "kv", "xmake", "Build adapter; execution supports Xmake only." },
 }, execution_options)
 
 local commands = {
@@ -42,13 +41,6 @@ local commands = {
       { nil, "profile", "kv", nil, "Build profile (required; see xmake workflow list)." },
       {
         nil,
-        "adapter",
-        "kv",
-        nil,
-        "Build adapter (default: xmake; --generate defaults to cmake).",
-      },
-      {
-        nil,
         "base",
         "kv",
         nil,
@@ -64,14 +56,11 @@ local commands = {
       },
       { nil, "all", "k", nil, "Select every suite; cannot combine with diff selection options." },
       { nil, "execute", "k", nil, "Configure, build, and test the selected suites using Xmake." },
-      { nil, "generate", "k", nil, "Write CMakeUserPresets.json for the retained CMake fallback." },
     }, execution_options),
     configure = true,
-    notes = "--generate and --execute are mutually exclusive. CMake execution remains explicit.",
     examples = [[
   xmake workflow regression --profile=debug --base=main --working-tree
-  xmake workflow regression --profile=coverage --all --execute
-  xmake workflow regression --profile=debug --all --generate]],
+  xmake workflow regression --profile=coverage --all --execute]],
   },
   list = {
     usage = "list",
@@ -83,14 +72,9 @@ local commands = {
     description = "Print the component, suite and workflow impact graph as Mermaid.",
     examples = "  xmake workflow graph > workflow.mmd",
   },
-  generate = {
-    usage = "generate",
-    description = "Regenerate CMakePresets.json from workflows.lua for the retained CMake fallback.",
-    examples = "  xmake workflow generate",
-  },
   check = {
     usage = "check",
-    description = "Check CMakePresets.json against workflows.lua; exit unsuccessfully if stale.",
+    description = "Validate workflow definitions, references and build-option unions without configuring or building.",
     examples = "  xmake workflow check",
   },
 }

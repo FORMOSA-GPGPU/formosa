@@ -28,8 +28,7 @@ target("opencl.shoc-common", function()
     target:set("configdir", configdir)
     target:add("includedirs", configdir, { public = true })
   end)
-  -- Both producers consume the same four platform checks and header template.
-  add_configfiles("config.h.in", { pattern = "#cmake(define [A-Z_]+) 1" })
+  add_configfiles("config.h.in")
   configvar_check_cfuncs("HAVE_CLOCK_GETTIME", "clock_gettime", { includes = "time.h" })
   configvar_check_csnippets(
     "HAVE_CLOCK_PROCESS_CPUTIME_ID",
@@ -240,7 +239,8 @@ local workloads = {
     cases = {
       {
         config = "large_sm",
-        timeout = 1200000,
+        -- Atomic simulation exceeds 20 minutes on shared public debug runners.
+        timeout = 3600000,
         args = { "--passes", "1", "--dimension", "8", "--dump" },
       },
     },

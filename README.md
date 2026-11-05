@@ -27,7 +27,6 @@ formosa/
 │                    (opencl, kernel-sim, baremetal-freertos, cp, hal, ipc, ...)
 ├── scripts/       Helper and code-generation scripts
 ├── xmake/         Native build rules and workflow tools
-├── cmake/         Transitional CMake fallback and SDK consumer support
 ├── third-party/   Vendored dependencies
 ├── flake.nix      Nix dev environment and packages
 └── xmake.lua      Top-level build entry

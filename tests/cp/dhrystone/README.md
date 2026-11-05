@@ -14,8 +14,7 @@ xmake build cp-dhrystone
 xmake test 'cp-dhrystone/**'
 ```
 
-See the [CPU test guide](../README.md) for the temporary CMake fallback and
-custom build directories.
+See the [CPU test guide](../README.md) for custom build directories and core adapters.
 
 This ports the Dhrystone C 2.2 implementation in the existing
 [`riscv-tests` submodule](../../../third-party/riscv-tests/benchmarks/dhrystone),

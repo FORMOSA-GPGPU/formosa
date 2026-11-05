@@ -20,7 +20,6 @@ local md = dbg.MemoryDebugger("md")
 local xbar = simple.XBar("xbar", 2, {
   { addr = 0x02000000, size = 0xC000 }, -- CLINT
   { addr = 0x10000000, size = 0x4 }, -- PRINTBUF
-  { addr = 0x20000000, size = 0x38 }, -- DUMMY address for cpu.csr_slave
   { addr = 0x80000000, size = mem_size }, -- MEMORY
 })
 
@@ -36,8 +35,7 @@ clint.clock = clock
 
 xbar.mem_side[1].target = clint.port
 xbar.mem_side[2].target = printbuf.port
-xbar.mem_side[3].target = cpu.csr_slave
-xbar.mem_side[4].target = mem.port
+xbar.mem_side[3].target = mem.port
 cpu.target = xbar.core_side[1].port
 md.target = xbar.core_side[2].port
 

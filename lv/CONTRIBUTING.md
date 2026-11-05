@@ -28,9 +28,6 @@ gcovr --root . --filter lv/ --html-details -o build-lv-coverage/coverage.html bu
 
 This measures the lv workflow; the complete product regression is documented
 in the [contributor guide](../CONTRIBUTING.md#development-workflows).
-FORMOSA's CMake source build is deprecated. Use the
-[temporary fallback policy](../CONTRIBUTING.md#internal-cmake-fallback-during-the-transition)
-if the native build/test path fails.
 
 Xmake's docgen target updates `.cache/lv_meta/lv_api.lua` for LuaLS. The root
 `.luarc.json` includes these generated definitions.

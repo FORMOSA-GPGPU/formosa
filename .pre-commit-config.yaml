@@ -7,7 +7,7 @@
 # Preserve imported benchmark sources and notices without formatting changes.
 exclude: >-
   (?x)^(
-    third-party/(?!riscv-opcodes$|[^/]+\.cmake$|xmake\.lua$|stb/(?:CMakeLists\.txt|libstb\.c)$).*
+    third-party/(?!riscv-opcodes$|xmake\.lua$|stb/libstb\.c$).*
     | build/
     | tests/cp/coremark/upstream/
     | tests/cp/dhrystone/(?:main\.c$|LICENSE$)
@@ -36,12 +36,12 @@ repos:
         # Submodule pointers are directories, not regular files.
         types: []
         files: '^(\.pre-commit-config\.yaml|scripts/gen-encoding\.sh|simtix/src/cores/(encoding\.h|xformosa\.txt)|third-party/riscv-opcodes)$'
-      - id: generate-presets
-        name: Generate Presets
-        entry: xmake workflow generate
+      - id: check-workflows
+        name: Validate workflows
+        entry: xmake workflow check
         language: system
         pass_filenames: false
-        files: ^(CMakePresets\.json|workflows\.lua|xmake\.lua|xmake/(tasks|modules)/workflow/.*\.lua)$
+        files: ^(workflows\.lua|xmake\.lua|xmake/(tasks|modules)/workflow/.*\.lua)$
       - id: clang-format
         name: clang-format
         entry: clang-format -i

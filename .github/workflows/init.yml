@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   init:
-    name: Validate exported presets
+    name: Validate exported workflows
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -24,8 +24,7 @@ jobs:
           enable_kvm: false
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate CMake presets
+      - name: Validate workflow definitions
         run: |
           set -euo pipefail
-          test -s CMakePresets.json
           nix shell --inputs-from . nixpkgs#xmake --command xmake workflow check

@@ -26,9 +26,8 @@ request or ask a maintainer for guidance.
 
 ## Development workflows
 
-Xmake is the primary configuration, build and test entry. FORMOSA's CMake
-source build is deprecated; use it under the
-[temporary fallback policy](#internal-cmake-fallback-during-the-transition).
+Use Xmake to configure, build and test FORMOSA. The CMake source build has been
+removed; SDK consumer exports and external dependency builds remain supported.
 
 `workflows.lua` owns workflows, profiles, suite membership and impact selection.
 Modules register native Xmake cases; suites select their full names with globs.
@@ -108,14 +107,13 @@ for concurrent configurations. `xmake workflow graph` prints the dependency
 graph as Mermaid. The isolated workflow configuration/union/failure checks can
 be run with `xmake lua xmake/tests/workflow.lua`.
 
-After changing `workflows.lua`, regenerate and check the retained CMake presets:
+After changing `workflows.lua`, validate its definitions, references and build-option unions:
 
 ```sh
-xmake workflow generate
 xmake workflow check
 ```
 
-### Commands for CMake users
+### Command reference
 
 Run these from the repository root in the development environment:
 
@@ -143,75 +141,24 @@ xmake build -P .
 xmake workflow -P . run simtix.pipelined_sm --profile=debug
 ```
 
-## Internal CMake fallback during the transition
+## SDK consumers and external builds
 
-Xmake became the primary entry on 2026-10-20. Public PRs use Xmake CI. During
-the approximately one-to-two-week observation period, keep new targets,
-generated inputs and tests working in both build systems. Maintainers decide
-when to remove CMake in a separate reviewed MR after real workflow use and
-platform verification; the date alone does not trigger removal.
+FORMOSA source builds and both internal and public CI use Xmake. Add new targets,
+generated inputs and tests to their owning Xmake definitions; keep suite selectors
+in `workflows.lua`.
 
-CMake is a temporary fallback for native build/test failures; its generators
-continue to require Xmake. A CMake configure prints a non-blocking migration
-warning. Keep build and installation directories separate when comparing
-backends. For a single workflow:
+The shared Nix/Docker runtime uses the Xmake-built SDK from `nix build .#hal`.
+`nix build .#formosa-sdk-xmake` is an alias of that same package. SDK consumer
+exports and external PoCL, LLVM/compiler-rt and PyTorch-DLPrim CMake builds remain
+supported. CMake and Ninja remain in the root development environment for those
+consumers and external builds. Local SDK/PoCL overrides remain explicit; build
+tooling does not change the runtime environment.
 
-```sh
-cmake --preset simtix.pipelined_sm.debug -B build-cmake -DCMAKE_INSTALL_PREFIX=outputs/cmake-sdk
-cmake --build build-cmake
-ctest --preset simtix.pipelined_sm.debug --test-dir build-cmake
-```
-
-Installation workflows such as `opencl` also require
-`cmake --install build-cmake`. To generate presets for an affected or complete
-regression:
-
-```sh
-xmake workflow regression --profile=debug --adapter=cmake --generate
-xmake workflow regression --profile=coverage --all --adapter=cmake --generate
-```
-
-These commands write `CMakeUserPresets.json`. For the complete coverage
-regression generated above:
-
-```sh
-cmake --preset regression.coverage -B build-cmake -DCMAKE_INSTALL_PREFIX=outputs/cmake-sdk
-cmake --build build-cmake
-cmake --install build-cmake
-ctest --preset regression.coverage --test-dir build-cmake
-```
-
-The shared Nix/Docker runtime continues to use a CMake-built SDK. The independent
-`nix build .#formosa-sdk-xmake` package exercises the native SDK producer.
-Component development shells retain CMake and Ninja alongside Xmake.
-
-If an MR's Xmake build/test fails, keep its logs and let the reviewer decide
-whether CMake fallback is appropriate. In the MR Pipelines tab, select **Run
-pipeline with modified values** and set the `regression-backend` input to
-`cmake`. Verify the pipeline uses the same MR head revision. It runs complete
-product regression for the profile and must pass the other required checks.
-Retrying a job does not change its backend. The next ordinary push uses Xmake
-again; GitHub PRs do not have this fallback path. Native Xmake infrastructure
-checks are explicitly skipped on fallback and are not claimed as validated.
-
-Local SDK/PoCL overrides remain explicit for either producer.
-
-### Reporting a migration failure
+## Reporting a build or test failure
 
 The contributor or agent should record the commit, platform, command, workflow,
 build directory, relevant local overrides and failing logs. Reproduce in a
-separate build directory before attributing the failure to the backend. Keep
-functional failures visible even when CMake passes. The reviewer decides
-whether the evidence justifies fallback; maintainers track unresolved migration
-issues through the observation period.
-
-### Follow-up before removing CMake
-
-| Area | Maintainer follow-up |
-| --- | --- |
-| Developer workflows | Confirm actual use of the main workflows and resolve blockers that still require fallback. |
-| Validation | Recheck complete regression and coverage parity, Linux x86_64, macOS arm64 and SDK/PoCL consumption on the removal candidate. |
-| Shared Nix/Docker SDK | Switch the SDK producer to Xmake after its independent validation; retain the CMake producer until then. |
-| Source build and tooling | In the removal MR, remove FORMOSA's CMake source recipes, presets, CTest path, workflow adapter and GitLab backend selection together. Update guides and component shells. |
-| Consumers and dependencies | Preserve SDK `find_package(Formosa)` metadata and external projects' CMake builds, including PoCL and LLVM. |
-| Notifications | Remove the configure warning and temporary fallback instructions when source-build removal lands. |
+separate build directory and retain the failing test's stdout/stderr paths
+reported by `xmake test -D`. Authors fix the underlying problem; reviewers check
+the evidence and successful rerun. Native build/test failures must be resolved
+before merging; there is no alternative source-build backend in CI.

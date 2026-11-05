@@ -9,7 +9,7 @@ let
   # the top-level flake's ciPackages.
   packages = with pkgs; [ gdb ];
 
-  nativeBuildInputs = with pkgs; [ git xmake cmake ninja ];
+  nativeBuildInputs = with pkgs; [ git xmake ];
 
   buildInputs = with pkgs; [
     luajit

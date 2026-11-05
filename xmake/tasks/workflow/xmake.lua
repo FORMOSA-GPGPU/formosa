@@ -5,8 +5,8 @@
 task("workflow", function()
   set_category("plugin")
   set_menu({
-    usage = "xmake workflow <run|build|regression|list|graph|generate|check> [options]",
-    description = [[Select, build and test workflows, or generate CMake presets.
+    usage = "xmake workflow <run|build|regression|list|graph|check> [options]",
+    description = [[Select, build, test and validate native Xmake workflows.
 
 Commands:
   run NAME     Configure, build, install when required, and test a workflow.
@@ -14,8 +14,7 @@ Commands:
   regression   Plan affected suites; add --execute to run or --all for all suites.
   list         List workflows, test suites and build profiles from workflows.lua.
   graph        Print the component, suite, and workflow impact graph as Mermaid.
-  generate     Regenerate CMakePresets.json from workflows.lua.
-  check        Check that CMakePresets.json matches workflows.lua.
+  check        Validate workflow definitions, references and build-option unions.
 
 Run xmake workflow COMMAND --help for command options, defaults and examples.
 Run xmake workflow list to discover available names.]],

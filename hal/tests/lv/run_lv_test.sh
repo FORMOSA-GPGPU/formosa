@@ -11,7 +11,7 @@ SERVER_EXEC=${1:?Server executable not provided}
 # Get the test executable from the second argument
 TEST_EXEC=${2:?Test executable not provided}
 
-# Per-run socket so ctest -j does not collide on a shared path.
+# Per-run socket so parallel tests do not collide on a shared path.
 AGENT_SOCKET_PATH="$(mktemp "${TMPDIR:-/tmp}/formosa_lv_test.XXXXXX.sock")"
 rm -f "${AGENT_SOCKET_PATH}"
 export AGENT_SOCKET_PATH

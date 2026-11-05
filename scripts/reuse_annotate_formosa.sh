@@ -63,15 +63,12 @@ repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
 owned_roots=(
-  CMakeLists.txt
-  FormosaConfig.cmake.in
   README.md
   THIRD_PARTY_NOTICES.md
   flake.nix
   workflows.lua
   xmake.lua
   xmake
-  cmake
   formosa-llvm
   formosa-pocl
   fw
@@ -81,15 +78,12 @@ owned_roots=(
   lv
   scripts
   simtix
-  tests/CMakeLists.txt
   tests/cp
   tests/hal
   tests/ipc
   tests/kernel-sim
-  tests/opencl/CMakeLists.txt
   tests/opencl/README.md
   tests/opencl/run_opencl.lua
-  tests/opencl/formosa/CMakeLists.txt
   tests/opencl/formosa/activation
   tests/opencl/formosa/attention
   tests/opencl/formosa/batched_gemm
@@ -110,16 +104,7 @@ owned_roots=(
   tests/opencl/formosa/transformer_block
   tests/opencl/formosa/vecmul
   tests/pfreader
-  third-party/DRAMSys.cmake
-  third-party/FreeRTOS-Kernel.cmake
-  third-party/fmt.cmake
-  third-party/perfetto.cmake
-  third-party/quill.cmake
-  third-party/riscv-tests.cmake
-  third-party/softfloat.cmake
-  third-party/stb/CMakeLists.txt
   third-party/stb/libstb.c
-  third-party/systemc.cmake
   third-party/xmake.lua
   tools
 )

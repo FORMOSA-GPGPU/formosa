@@ -50,6 +50,17 @@ permission to bind a local Unix socket for host/simulator communication.
 For performance runs and comparisons, use
 [`xmake perf`](../../scripts/perf/README.md).
 
+The PyTorch-DLPrim smoke test is opt-in and is not part of the default regression:
+
+```sh
+xmake f -m release --workflow=opencl --dlprim-tests=y
+xmake test 'opencl-smoke-pytorch_dlprim/**'
+```
+
+It checks forward, backward and SGD execution without CPU fallback. Its external
+PyTorch-DLPrim package still uses CMake; removing FORMOSA's source recipes does
+not remove that dependency.
+
 ## Imported benchmarks
 
 | Suite | Benchmarks |
@@ -73,7 +84,7 @@ are not part of this OpenCL integration suite.
 
 The tests use small inputs and bounded iteration counts suitable for simulation,
 not the suites' full performance datasets. Hosts retain the upstream size and
-iteration defaults when adding runtime options; CTest supplies the smaller
+iteration defaults when adding runtime options; Xmake regression supplies the smaller
 values explicitly. The LBM and CFD integration executables instead use local
 compile-time bounds. No benchmark options are added to the generic OpenCL runner.
 
@@ -85,15 +96,15 @@ runs, including when comparing host I/O time.
 
 | Benchmark | Pinned upstream | FORMOSA integration | Reason |
 | --- | --- | --- | --- |
-| SHOC Sort input | Keys are `i % 16`. | Same default; CTest enables `--validation-input` for deterministic mixed 32-bit keys. Both modes compare the full result with `std::sort`. | Exercise higher radix digits without changing the default input distribution. |
-| SHOC Sort / Scan / Reduction launch geometry | 64 work groups for the local-memory kernels. | Cap groups at `min(64, elements / 512)`: CTest uses 2 / 8 / 8 groups respectively. All original size classes still use 64 groups; Reduction's no-local-memory path remains one work item. | Bound small-input simulation cost. |
-| SHOC QueueDelay | Hard-coded 3 passes; ignores the shared `--passes` option. | The executable defaults to 3 and honors `--passes` / `-n`. CTest checks both explicit 1 pass and the default 3, with reduced groups and iterations. | Preserve the standalone repetition default and allow bounded regression runs. |
+| SHOC Sort input | Keys are `i % 16`. | Same default; Xmake regression enables `--validation-input` for deterministic mixed 32-bit keys. Both modes compare the full result with `std::sort`. | Exercise higher radix digits without changing the default input distribution. |
+| SHOC Sort / Scan / Reduction launch geometry | 64 work groups for the local-memory kernels. | Cap groups at `min(64, elements / 512)`: Xmake regression uses 2 / 8 / 8 groups respectively. All original size classes still use 64 groups; Reduction's no-local-memory path remains one work item. | Bound small-input simulation cost. |
+| SHOC QueueDelay | Hard-coded 3 passes; ignores the shared `--passes` option. | The executable defaults to 3 and honors `--passes` / `-n`. Xmake regression checks both explicit 1 pass and the default 3, with reduced groups and iterations. | Preserve the standalone repetition default and allow bounded regression runs. |
 | Parboil Histo output | BMP visualization. | Width and height followed by all saturated 8-bit histogram bins. | Compare numerical bins directly without image conversion. |
 | Parboil MRI-Gridding output | A pass/fail flag. | Element count, full complex grid, and sample-density arrays. | Validate both complex values and densities against the CPU reference. |
 | Parboil SAD output | Six sampled macroblock rows. | All macroblock rows and their sub-block/search-position values. | Check complete output and avoid negative sampled-row indices for tiny images. |
-| Rodinia CFD workload | 2000 iterations; input mesh determines the cell count. | Integration executables use 2 iterations; CTest supplies 5 real cells padded to 192. | Bound simulation while retaining the 192-lane kernels and testing padding. |
-| Parboil LBM workload | A 120x120x150 grid. | Integration executables use 8x8x8; CTest requests 3 steps. | Bound simulation while retaining a nontrivial cavity. |
-| SHOC MaxFlops workload | Runtime calibration chooses the repetition factor. | Default execution still calibrates; CTest uses `--repeat-factor 0.15 --elements 2048 --unroll 1 --passes 1 --verify`. | Bound arithmetic work and validate finite results against CPU calculations. |
+| Rodinia CFD workload | 2000 iterations; input mesh determines the cell count. | Integration executables use 2 iterations; Xmake regression supplies 5 real cells padded to 192. | Bound simulation while retaining the 192-lane kernels and testing padding. |
+| Parboil LBM workload | A 120x120x150 grid. | Integration executables use 8x8x8; Xmake regression requests 3 steps. | Bound simulation while retaining a nontrivial cavity. |
+| SHOC MaxFlops workload | Runtime calibration chooses the repetition factor. | Default execution still calibrates; Xmake regression uses `--repeat-factor 0.15 --elements 2048 --unroll 1 --passes 1 --verify`. | Bound arithmetic work and validate finite results against CPU calculations. |
 
 Numerical checks cover complete output arrays or independent CPU references;
 successful process exit alone is insufficient. Rodinia Particlefilter covers

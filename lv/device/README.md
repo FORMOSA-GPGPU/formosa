@@ -1,10 +1,10 @@
 <!-- SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University -->
 <!-- SPDX-License-Identifier: Apache-2.0 -->
 
-# LV device interfaces
+# lv device interfaces
 
 This standalone, header-only library holds the register contracts and guest
-operations for devices exposed by LV bindings:
+operations for devices exposed by lv bindings:
 
 ```
 lv/device/
@@ -18,11 +18,11 @@ The public include paths do not depend on the source directory name.
 
 ## Usage
 
-Inside Formosa, link the interface target:
+Inside FORMOSA, depend on the header-only target:
 
-```cmake
-target_link_libraries(my_program PRIVATE lv::device)
+```lua
+add_deps("lv.device")
 ```
 
-Without CMake, add `lv/device/include` to the include path. No simulation
+For a standalone consumer, add `lv/device/include` to the include path. No simulation
 libraries or separately compiled driver objects are required.

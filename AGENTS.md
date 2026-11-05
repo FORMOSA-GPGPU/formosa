@@ -19,19 +19,17 @@
 
 ## Always-on rules
 
-- Use Xmake for FORMOSA configuration, builds and tests. For CMake fallback,
-  reporting failures or planning removal, read the transition policy in
-  [CONTRIBUTING.md](CONTRIBUTING.md#internal-cmake-fallback-during-the-transition).
-- During the transition, keep targets, generated inputs and tests working in
-  both source builds. SDK consumer exports and external PoCL/LLVM CMake builds
-  remain supported.
+- Use Xmake for FORMOSA configuration, builds and tests. For failure reports,
+  follow [CONTRIBUTING.md](CONTRIBUTING.md#reporting-a-build-or-test-failure).
+- Preserve SDK CMake consumer exports and external PoCL, LLVM/compiler-rt and
+  PyTorch-DLPrim CMake builds.
 - Compose existing Lunaverse modules in Lua before adding native code.
 - Existing SystemC/C++ gets a thin binding. A new native SystemC is last.
 - `LV_SCHEMA` for Lua configuration; `LV_BINDING` for the useful public surface.
 - Add a test only when existing tests cannot catch the regression.
 - Every test MUST fail when its protected behavior regresses. Tautological tests
   MUST be discarded.
-- Edit `workflows.lua`, not generated `CMakePresets.json`.
+- Keep workflow definitions and suite selectors in `workflows.lua`.
 
 ## Architecture before convenience
 

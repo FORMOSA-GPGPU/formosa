@@ -7,29 +7,8 @@ local frontend = import("workflow.frontend")
 local graph = import("workflow.graph")
 local impact = import("workflow.impact")
 local resolve = import("workflow.resolve")
-local serializer = import("workflow.serializer")
-local cmake = import("workflow.backends.cmake")
 local execute = import("workflow.execute")
 local commands = import("workflow.commands")
-
-local OUTPUT = "CMakePresets.json"
-local USER_OUTPUT = "CMakeUserPresets.json"
-local function read_file(filename)
-  local file = io.open(filename, "rb")
-  if not file then return nil end
-  local contents = file:read("*a")
-  file:close()
-  return contents
-end
-
-local function write_atomic(filename, contents)
-  local temporary = filename .. ".tmp"
-  local file, message = io.open(temporary, "wb")
-  if not file then raise("Cannot write %s: %s", temporary, message) end
-  file:write(contents)
-  file:close()
-  os.mv(temporary, filename)
-end
 
 local function usage_error(command, message, ...)
   raise("%s\nRun: xmake workflow %s --help", string.format(message, ...), command)
@@ -88,20 +67,11 @@ end
 local function run_regression(config, rootdir, options)
   local profile = options.profile
   if not profile then usage_error("regression", "regression requires --profile") end
-  if options.generate and options.adapter and options.adapter ~= "cmake" then
-    usage_error("regression", "--generate supports only the CMake adapter")
-  end
-  if options.generate and options.execute then
-    usage_error("regression", "--generate and --execute are mutually exclusive")
-  end
-  local adapter = options.generate and "cmake" or options.adapter or "xmake"
   local result = regression_result(config, rootdir, options)
   local run
-  if #result.test_suites > 0 then
-    run = resolve.run(config, profile, result.test_suites, adapter)
-  end
+  if #result.test_suites > 0 then run = resolve.run(config, profile, result.test_suites) end
 
-  print("Regression: %s / %s", profile, adapter)
+  print("Regression: %s", profile)
   if options.all then
     print("Selection: all suites requested by --all")
   else
@@ -137,25 +107,14 @@ local function run_regression(config, rootdir, options)
       #result.unmatched_files
     )
   end
-  if not options.execute and not options.generate then
-    print("Plan only; add --execute to build and test.")
-  end
-  if options.generate then
-    local contents = serializer.json(cmake.run_presets(run, "regression." .. profile, "build"))
-      .. "\n"
-    write_atomic(path.join(rootdir, USER_OUTPUT), contents)
-    print("Generated %s", USER_OUTPUT)
-  elseif options.execute then
+  if not options.execute then print("Plan only; add --execute to build and test.") end
+  if options.execute then
     if run then
       execute.run(run, options)
     else
       print("No affected test suites; nothing to run.")
     end
   end
-end
-
-local function generated_contents(config)
-  return serializer.json(cmake.generate(resolve.workflow_runs(config, "cmake"))) .. "\n"
 end
 
 function run()
@@ -198,7 +157,6 @@ function run()
       config,
       options.profile or "debug",
       workflow.test_suites,
-      options.adapter or "xmake",
       { workflow = name, install = workflow.install }
     )
     options.build_only = command == "build"
@@ -209,15 +167,12 @@ function run()
     io.write(graph.render(config))
   elseif command == "regression" then
     run_regression(config, rootdir, options)
-  elseif command == "generate" then
-    write_atomic(path.join(rootdir, OUTPUT), generated_contents(config))
-    print("Generated %s", OUTPUT)
   elseif command == "check" then
-    local expected = generated_contents(config)
-    if read_file(path.join(rootdir, OUTPUT)) ~= expected then
-      io.stderr:write(OUTPUT .. " is stale.\nRun: xmake workflow generate\n")
-      os.exit(1)
+    -- Validate definitions and option unions without configuring product targets.
+    -- Native configure separately checks that selected suites match real cases.
+    for _, profile in ipairs(frontend.keys(config.build_profiles)) do
+      resolve.run(config, profile, frontend.keys(config.test_suites))
     end
-    print("%s is up to date.", OUTPUT)
+    print("Workflow definitions and build-option unions are valid.")
   end
 end

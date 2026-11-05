@@ -147,7 +147,7 @@ local workloads = {
       {
         "",
         config = "large_sm",
-        -- Allow the same 900-second budget as the CMake fallback in Debug CI.
+        -- Allow 900 seconds for the larger SM workload in unoptimized CI builds.
         timeout = 900000,
         output = "centers.txt",
         args = { "2", "3", "2", "256", "256", "4", "none", "centers.txt", "1", "-p", "0" },
@@ -477,7 +477,7 @@ for name, workload in pairs(workloads) do
     if name == "btree" then add_cflags("-Wno-implicit-int", { force = true }) end
     on_config(function(target)
       if name == "kmeans" then
-        -- Preserve upstream allocate()'s missing-return workaround from CMake.
+        -- Upstream allocate() falls through without returning a value.
         if target:has_tool("cxx", "gcc", "gxx") then
           target:set("optimize", "none")
           target:add("cxxflags", "-fno-unreachable-traps")

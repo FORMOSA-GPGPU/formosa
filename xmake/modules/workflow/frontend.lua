@@ -123,41 +123,6 @@ local function validate_options(value, location, errors)
   return true
 end
 
-local function validate_adapters(value, location, errors, suites)
-  if not is_map(value) or is_empty(value) then
-    add_error(errors, location, "must be a non-empty adapter table")
-    return false
-  end
-  local valid = true
-  for _, adapter_name in ipairs(sorted_keys(value)) do
-    validate_id(adapter_name, location .. "." .. tostring(adapter_name), errors)
-    local adapter = value[adapter_name]
-    local adapter_location = location .. "." .. adapter_name
-    if not is_map(adapter) then
-      add_error(errors, adapter_location, "must be a table")
-      valid = false
-    elseif suites then
-      check_fields(adapter, { build_options = true, selectors = true }, adapter_location, errors)
-      if adapter.build_options ~= nil then
-        valid = validate_options(
-          adapter.build_options,
-          adapter_location .. ".build_options",
-          errors
-        ) and valid
-      end
-      valid = validate_string_array(
-        adapter.selectors,
-        adapter_location .. ".selectors",
-        errors,
-        false
-      ) and valid
-    else
-      valid = validate_options(adapter, adapter_location, errors) and valid
-    end
-  end
-  return valid
-end
-
 local function validate_map(value, location, errors)
   if not is_map(value) or is_empty(value) then
     add_error(errors, location, "must be a non-empty string-keyed table")
@@ -192,7 +157,7 @@ local function validate_profiles(config, errors)
   if not validate_map(config.build_profiles, "build_profiles", errors) then return end
   for _, name in ipairs(sorted_keys(config.build_profiles)) do
     validate_id(name, "build_profiles." .. tostring(name), errors)
-    validate_adapters(config.build_profiles[name], "build_profiles." .. name, errors, false)
+    validate_options(config.build_profiles[name], "build_profiles." .. name, errors)
   end
 end
 
@@ -205,9 +170,17 @@ local function validate_suites(config, errors)
     if not is_map(suite) then
       add_error(errors, location, "must be a table")
     else
-      check_fields(suite, { depends = true, adapters = true }, location, errors)
+      check_fields(
+        suite,
+        { depends = true, build_options = true, selectors = true },
+        location,
+        errors
+      )
       validate_string_array(suite.depends, location .. ".depends", errors, false)
-      validate_adapters(suite.adapters, location .. ".adapters", errors, true)
+      if suite.build_options ~= nil then
+        validate_options(suite.build_options, location .. ".build_options", errors)
+      end
+      validate_string_array(suite.selectors, location .. ".selectors", errors, false)
     end
   end
 end
@@ -326,66 +299,12 @@ local function validate_component_cycles(config, errors)
   end
 end
 
-function common_adapters(config, profile_name, suite_names)
-  local profile = config.build_profiles[profile_name]
-  if not profile then raise("Unknown build profile: %s", profile_name) end
-  local common = {}
-  for adapter_name in pairs(profile) do
-    common[adapter_name] = true
-  end
-  for _, suite_name in ipairs(suite_names) do
-    local suite = config.test_suites[suite_name]
-    if not suite then raise("Unknown test suite: %s", suite_name) end
-    for adapter_name in pairs(common) do
-      if not suite.adapters[adapter_name] then common[adapter_name] = nil end
-    end
-  end
-  return sorted_keys(common)
-end
-
-local function validate_adapter_intersections(config, errors)
-  if
-    not is_map(config.build_profiles)
-    or not is_map(config.workflows)
-    or not is_map(config.test_suites)
-  then
-    return
-  end
-  for _, workflow_name in ipairs(sorted_keys(config.workflows)) do
-    local workflow = config.workflows[workflow_name]
-    if is_map(workflow) and is_array(workflow.test_suites) then
-      for _, profile_name in ipairs(sorted_keys(config.build_profiles)) do
-        local profile = config.build_profiles[profile_name]
-        if is_map(profile) then
-          local complete = true
-          for _, suite_name in ipairs(workflow.test_suites) do
-            local suite = config.test_suites[suite_name]
-            if not is_map(suite) or not is_map(suite.adapters) then
-              complete = false
-              break
-            end
-          end
-          if complete and #common_adapters(config, profile_name, workflow.test_suites) == 0 then
-            add_error(
-              errors,
-              "workflows." .. workflow_name,
-              "has no adapter in common with build profile " .. profile_name
-            )
-          end
-        end
-      end
-    end
-  end
-end
-
 local function normalize(config)
   for _, component in pairs(config.components) do
     component.depends = component.depends or {}
   end
   for _, suite in pairs(config.test_suites) do
-    for _, adapter in pairs(suite.adapters) do
-      adapter.build_options = adapter.build_options or {}
-    end
+    suite.build_options = suite.build_options or {}
   end
   for _, workflow in pairs(config.workflows) do
     workflow.install = workflow.install or false
@@ -414,7 +333,6 @@ function load(rootdir)
     validate_workflows(config, errors)
     validate_references(config, errors)
     validate_component_cycles(config, errors)
-    validate_adapter_intersections(config, errors)
   end
 
   if #errors > 0 then

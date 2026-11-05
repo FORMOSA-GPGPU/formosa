@@ -4,8 +4,6 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Compile the public-header consumer using only an installed libcomm prefix.
-# This is intentionally build-system neutral and is shared by the CMake and
-# install gates.
 
 set -euo pipefail
 

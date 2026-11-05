@@ -33,7 +33,7 @@ xmake test
 
 ## Install a local SDK
 
-The standalone entry builds firmware and the host SDK without building LV:
+The standalone entry builds firmware and the host SDK without building lv:
 
 ```sh
 xmake f -F formosa-sdk-xmake.lua -m release -o build-sdk --fw-enable-log=y
@@ -42,9 +42,9 @@ xmake install -F formosa-sdk-xmake.lua -o "$PWD/outputs/sdk" formosa-sdk
 ```
 
 Use an independent `XMAKE_CONFIGDIR` when keeping the full project configured
-at the same time. `nix build .#formosa-sdk-xmake` builds the same native recipe
-as a Nix package. The default shared runtime still uses the CMake SDK during
-the transition.
+at the same time. `nix build .#hal` builds the SDK as a Nix package using this
+native recipe. The shared PoCL, development shell and Docker environment use
+that package; `nix build .#formosa-sdk-xmake` remains an alias of it.
 
 The installed prefix supplies `lib/cmake/Formosa/FormosaConfig.cmake` for CMake
 consumers, including PoCL. This is a consumer export; native Xmake targets build
@@ -82,5 +82,3 @@ programs then use the new runtime without being recompiled:
 
 Changing firmware requires rebuilding/installing the SDK and relinking/installing
 PoCL before running again. Xmake does not edit either `.envrc.local` file.
-For CMake SDK production and the full transition policy, see
-[the internal fallback guide](../CONTRIBUTING.md#internal-cmake-fallback-during-the-transition).

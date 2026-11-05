@@ -22,7 +22,7 @@ function selected()
   local workflow = name ~= "" and assert(definition.workflows[name], "Unknown workflow: " .. name)
   local names = workflow and workflow.test_suites or suites:split(",", { plain = true })
   assert(#names > 0, "--test-suites requires at least one test suite")
-  active = resolve.run(definition, config.mode(), names, "xmake", {
+  active = resolve.run(definition, config.mode(), names, {
     workflow = workflow and name,
     install = workflow and workflow.install,
   })
@@ -88,7 +88,7 @@ function validate_tests()
   local definition = frontend.load(os.projectdir())
   for _, suite in ipairs(active.test_suites) do
     local matched = false
-    for _, selector in ipairs(definition.test_suites[suite].adapters.xmake.selectors) do
+    for _, selector in ipairs(definition.test_suites[suite].selectors) do
       local pattern = "^" .. path.pattern(selector) .. "$"
       for _, target in pairs(project.targets()) do
         for _, name in ipairs(table.wrap(target:get("tests"))) do

@@ -21,8 +21,6 @@ path = [
   ".agents/skills/run-experiment/SKILL.md",
   ".agents/skills/spec-to-rtl/SKILL.md",
   "AGENTS.md",
-  "CMakePresets.json",
-  "FormosaConfig.cmake.in",
   "flake.lock",
   "hal/.clang-format",
   "hal/.gitignore",

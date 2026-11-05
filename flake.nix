@@ -90,7 +90,7 @@
           libcomm = import ./libcomm/shell.nix { inherit pkgs; };
           simtix = import ./simtix/shell.nix { inherit pkgs; };
           lv = import ./lv/shell.nix { inherit pkgs; };
-          sw = import ./hal/default.nix { inherit pkgs; };
+          sw = projectPackages.hal;
         };
 
         formosaPoclDevShell = import ./formosa-pocl/shell.nix {
@@ -116,6 +116,9 @@
           black
           lua-language-server
           xmakeWithCurses
+          # SDK consumer checks and external PoCL/LLVM/DLPrim builds.
+          cmake
+          ninja
           pkg-config
           opencl-headers
           opencl-clhpp
@@ -322,10 +325,8 @@
         });
 
         packages = {
-          formosa-sdk-xmake = import ./hal/default.nix {
-            inherit pkgs;
-            buildSystem = "xmake";
-          };
+          # Retain the explicit native SDK entry as an alias of the shared SDK.
+          formosa-sdk-xmake = projectPackages.hal;
           dev-shell = defaultDevShell;
           formosa-docker-env-fingerprint = formosaDockerEnvFingerprint;
           formosa-docker-env-content = formosaDockerImageContent;

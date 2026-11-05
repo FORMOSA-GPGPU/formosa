@@ -2,8 +2,8 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
--- Match the same simulator reports as the CMake cases. Deadlock deliberately
--- exits with failure; neither a timeout nor an unrelated failure is success.
+-- Check the simulator's barrier diagnostics. Deadlock deliberately exits with
+-- failure; neither a timeout nor an unrelated failure is success.
 local cases = {
   ["deadlock"] = {
     "barrier deadlock in WG slot 0 .*: 1 of %d+ warps exited .*warp@pc: 1@0x11008",

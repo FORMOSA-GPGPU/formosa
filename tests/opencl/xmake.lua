@@ -161,8 +161,8 @@ program("spmv", "formosa/spmv", function(target)
   local data = path.absolute(target:dep("opencl.spmv-data"):autogendir(), os.projectdir())
   return {
     { "regular", path.join(data, "msc00726/msc00726.mtx") },
-    -- Coverage runs approach ten minutes for this dataset on shared CI runners.
-    { "irregular", path.join(data, "dc2/dc2.mtx"), run_timeout = 1200000 },
+    -- Shared public runners exceed 20 minutes in debug; retain the full dataset.
+    { "irregular", path.join(data, "dc2/dc2.mtx"), run_timeout = 3600000 },
   }
 end)
 target("opencl-spmv", function() add_deps("opencl.spmv-data") end)

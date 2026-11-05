@@ -95,9 +95,8 @@ xmake build opencl-verify_layer_e2e
 xmake build opencl-verify_full
 ```
 
-These tools remain manual checks. For the temporary CMake fallback, see the
-[contributor guide](../../../CONTRIBUTING.md#internal-cmake-fallback-during-the-transition);
-its executable names omit the `opencl-` prefix.
+These tools remain manual checks; their executables use the `opencl-` prefix
+under `<builddir>/bin`.
 
 ## Verification
 

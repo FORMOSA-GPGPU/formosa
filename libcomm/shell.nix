@@ -5,7 +5,7 @@
 { pkgs ? import <nixpkgs> { } }:
 
 let
-  nativeBuildInputs = with pkgs; [ git xmake cmake ninja ];
+  nativeBuildInputs = with pkgs; [ git xmake ];
 
   # CI/lint tooling (pre-commit, clang-format, gcovr, ...) lives in the
   # top-level flake's ciPackages.

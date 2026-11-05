@@ -16,14 +16,14 @@ function main()
         [[
 local config = {
   components = { source = { paths = { "source/**" } } },
-  build_profiles = { debug = { xmake = { mode = "debug" } } },
+  build_profiles = { debug = { mode = "debug" } },
   test_suites = {
-    first = { depends = { "source" }, adapters = { xmake = { build_options = { probe = true }, selectors = { "sample/first", "sample/shared" } } } },
-    second = { depends = { "source" }, adapters = { xmake = { selectors = { "sample/second", "sample/shared" } } } },
-    missing = { depends = { "source" }, adapters = { xmake = { selectors = { "sample/absent" } } } },
-    failing = { depends = { "source" }, adapters = { xmake = { selectors = { "failure/test" } } } },
-    build_failure = { depends = { "source" }, adapters = { xmake = { selectors = { "build-failure/test" } } } },
-    install_failure = { depends = { "source" }, adapters = { xmake = { build_options = { ["install-targets"] = { "package" } }, selectors = { "sample/first" } } } },
+    first = { depends = { "source" }, build_options = { probe = true }, selectors = { "sample/first", "sample/shared" } },
+    second = { depends = { "source" }, selectors = { "sample/second", "sample/shared" } },
+    missing = { depends = { "source" }, selectors = { "sample/absent" } },
+    failing = { depends = { "source" }, selectors = { "failure/test" } },
+    build_failure = { depends = { "source" }, selectors = { "build-failure/test" } },
+    install_failure = { depends = { "source" }, build_options = { ["install-targets"] = { "package" } }, selectors = { "sample/first" } },
   },
   workflows = {
     good = { description = "Overlapping suites", test_suites = { "first", "second" } },
@@ -143,7 +143,6 @@ end)
         "regression",
         "list",
         "graph",
-        "generate",
         "check",
       }) do
         for _, flag in ipairs({ "--help", "-h" }) do
@@ -155,16 +154,36 @@ end)
       invoke({ "workflow", "run", "good", "--help" }, true, "-- configure-options")
       assert(not os.isfile(path.join(fixture, "probe.txt")), "help built a target")
       assert(not os.isfile(path.join(fixture, "executed.txt")), "help ran tests")
-      assert(not os.isfile(path.join(fixture, "CMakePresets.json")), "help generated presets")
-      assert(
-        not os.isfile(path.join(fixture, "CMakeUserPresets.json")),
-        "help generated user presets"
-      )
       assert(
         not os.isfile(path.join(fixture, ".xmake/.xmake", os.host(), os.arch(), "xmake.conf")),
         "help configured the project"
       )
       io.writefile(definition, contents)
+      invoke(
+        { "workflow", "check" },
+        true,
+        "Workflow definitions and build-option unions are valid."
+      )
+      assert(
+        not os.isfile(path.join(fixture, "configure-flags.txt")),
+        "check configured the project"
+      )
+      for _, invalid in ipairs({
+        { 'config.test_suites.first.depends = { "unknown" }', "unknown component" },
+        { 'config.components.source.depends = { "source" }', "cycle" },
+        { 'config.workflows.good.test_suites = { "unknown" }', "unknown test suite" },
+        { "config.test_suites.first.selectors = {}", "must not be empty" },
+        {
+          'config.test_suites.first.build_options = { mode = "release" }',
+          "Conflicting build option 'mode'",
+        },
+      }) do
+        io.writefile(definition, contents .. "\n" .. invalid[1])
+        invoke({ "workflow", "check" }, false, invalid[2])
+      end
+      io.writefile(definition, contents)
+      invoke({ "workflow", "generate" }, false, "Unknown workflow command")
+      invoke({ "workflow", "regression", "--profile=debug", "--adapter=cmake" }, false)
       local listing = invoke({ "workflow", "list" }, true, "Workflows:")
       assert(listing:find("good%s+%- Overlapping suites"), listing)
       assert(listing:find("Test suites:", 1, true), listing)
@@ -189,7 +208,7 @@ end)
       invoke({ "workflow", "run", "good", "--jobs=1", "--jobs=2" }, false, "only once")
       invoke({ "workflow", "list", "--", "--help" }, false, "configure options are not valid")
       local plan = invoke({ "workflow", "regression", "--profile=debug", "--all" }, true)
-      assert(plan:find("Regression: debug / xmake", 1, true), plan)
+      assert(plan:find("Regression: debug", 1, true), plan)
       assert(plan:find("Selection: all suites requested", 1, true), plan)
       assert(plan:find("Selected test suites:", 1, true), plan)
       assert(plan:find("Plan only", 1, true), plan)

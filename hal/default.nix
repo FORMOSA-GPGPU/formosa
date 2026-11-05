@@ -2,7 +2,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-{ pkgs ? import <nixpkgs> { }, buildSystem ? "cmake" }:
+{ pkgs ? import <nixpkgs> { } }:
 
 let
   inherit (pkgs) lib;
@@ -11,11 +11,11 @@ let
     lib.fileset.fileFilter (file: lib.any file.hasExt [ "c" "cc" "h" "S" "ld" ])
     directory;
 
-  # Keep the SDK's source identity independent of CI/tasks, documentation and
-  # the other build backend. Both producers use the same code and generators.
+  # Keep the SDK's source identity limited to its native build inputs and
+  # consumer exports; CI/tasks, documentation and source CMake recipes stay out.
   src = lib.fileset.toSource {
     inherit root;
-    fileset = lib.fileset.unions ([
+    fileset = lib.fileset.unions [
       (root + "/hal/include")
       (sourceFiles (root + "/hal/src"))
       (lib.fileset.difference (sourceFiles (root + "/fw")) (root + "/fw/tests"))
@@ -25,20 +25,6 @@ let
       (root + "/ilha/lua/addr_map.lua")
       (root + "/ilha/scripts/generate_header.lua")
       (root + "/ilha/scripts/generate_linker.lua")
-    ] ++ (if buildSystem == "cmake" then [
-      # Temporary producer inputs: remove with the CMake build branch in #49.
-      (root + "/CMakeLists.txt")
-      (root + "/FormosaConfig.cmake.in")
-      # The root CMake entry includes these helpers even for ENABLE_PROJECTS=hal.
-      (lib.fileset.fileFilter (file: file.hasExt "cmake") (root + "/cmake"))
-      (root + "/hal/CMakeLists.txt")
-      (lib.fileset.fileFilter (file: file.name == "CMakeLists.txt")
-        (root + "/hal/src"))
-      (root + "/fw/CMakeLists.txt")
-      (root + "/libcomm/CMakeLists.txt")
-      (root + "/lv/device/CMakeLists.txt")
-      (root + "/third-party/FreeRTOS-Kernel.cmake")
-    ] else [
       (root + "/formosa-sdk-xmake.lua")
       (root + "/workflows.lua")
       (root + "/hal/xmake.lua")
@@ -67,7 +53,7 @@ let
       (sourceFiles (root + "/libcomm/tests"))
       (root + "/libcomm/tests/unit/install_consumer.sh")
       (root + "/xmake/modules/testing.lua")
-    ]));
+    ];
   };
 
   # Fixed-output archive fetches keep evaluation offline.  The rev remains
@@ -80,20 +66,14 @@ let
   };
 
   crossPkgs = pkgs.pkgsCross.riscv64-embedded;
-in assert builtins.elem buildSystem [ "cmake" "xmake" ];
-pkgs.stdenv.mkDerivation ({
+in pkgs.stdenv.mkDerivation {
   pname = "hal";
   version = "0.1";
   inherit src;
 
-  nativeBuildInputs = with pkgs;
-    [ xmake tinyxxd llvmPackages.lld ]
-    ++ lib.optionals (buildSystem == "cmake") [ cmake ninja ];
-  buildInputs = [ crossPkgs.stdenv.cc ]
-    ++ lib.optionals (buildSystem == "cmake") [ crossPkgs.buildPackages.gdb ];
-} // (if buildSystem == "cmake" then {
-  cmakeFlags = [ "-DENABLE_PROJECTS=hal" "-DFREERTOS_PATH=${freeRTOSKernel}" ];
-} else {
+  nativeBuildInputs = with pkgs; [ xmake tinyxxd llvmPackages.lld ];
+  buildInputs = [ crossPkgs.stdenv.cc ];
+
   postUnpack = ''
     mkdir -p "$sourceRoot/third-party"
     ln -s ${freeRTOSKernel} "$sourceRoot/third-party/FreeRTOS-Kernel"
@@ -110,4 +90,4 @@ pkgs.stdenv.mkDerivation ({
     xmake install -F formosa-sdk-xmake.lua -o "$out" formosa-sdk
     runHook postInstall
   '';
-}))
+}

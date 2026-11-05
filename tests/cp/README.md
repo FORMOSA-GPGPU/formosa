@@ -13,15 +13,6 @@ xmake f -m release
 xmake test -j8 'cp-*/**' 'scalar-riscv-test*/**' 'lv/cp/**'
 ```
 
-For the temporary CMake fallback, use an independent output directory:
-
-```sh
-cmake -S . -B build-cp -G Ninja -DCMAKE_BUILD_TYPE=Release \
-  '-DENABLE_PROJECTS=simtix;tests' -DTESTS_ENABLE_TESTS=cp -DCP_TEST_CORES=all
-cmake --build build-cp -j8
-ctest --test-dir build-cp -L cp --output-on-failure
-```
-
 Run individual programs using the lv executable from the same build:
 
 ```sh
@@ -37,10 +28,10 @@ Run individual programs using the lv executable from the same build:
 
 `--core` is a Lua module name, passed directly to `require`. The runner finds
 its ELF automatically. Use `--elf` for another ELF; the ISA test also needs a
-matching `.tests` file beside it. Xmake and CTest run these same scripts.
+matching `.tests` file beside it. Xmake runs these same scripts.
 Xmake stages the default ELF/manifest runfiles during build, so direct lv execution
 does not require `--elf` or an Xmake launcher. If using `xmake f -o <builddir>`,
-use `<builddir>/bin/lv`; the CMake example above uses `build-cp/bin/lv`.
+use `<builddir>/bin/lv`.
 
 `prog0` compares 45 memory words against the golden file passed with `--golden`.
 Choose `rv32.golden` or `rv64.golden` to match the core. Its fixed
@@ -82,8 +73,7 @@ golden file when using a custom ELF.
    adapter. Keep this directory limited to `cp.core` adapters; put helpers outside
    it. Each program's `accepts` predicate owns its ISA/capability requirements;
    discovery does not add support for a new ELF architecture automatically.
-   During the transition, also add `<namespace>.<name>` to CMake's available cores
-   when its model is enabled. Rebuild and run with `--core <namespace>.<name>`.
+   Rebuild and run with `--core <namespace>.<name>`.
 
 ## Add a test program
 
@@ -96,13 +86,11 @@ golden file when using a custom ELF.
 3. Add the ELF build and test registration in `<program>/xmake.lua`, and include
    it from [xmake.lua](xmake.lua). Stage the default ELF runfile after build;
    [CoreMark](coremark/xmake.lua) provides an example. Its `accepts` predicate
-   selects adapters compatible with this program's image and runner. Keep the
-   CMake definition synchronized during the transition, using `CP_SELECTED_CORES`.
+   selects adapters compatible with this program's image and runner.
 
 C programs use the `cp.runtime-image` rule to reuse startup, platform layout,
 standard headers, and console/string support. See
 [the standalone runtime test](runtime/xmake.lua) for a complete example.
-The CMake fallback uses `add_cp_runtime(rv64im)` and `cp-runtime-rv64im`.
 The runtime initializes `gp`, `sp`, and BSS, calls `main`, then halts if it returns.
 It supplies unsigned 64-bit division for printf on RV32.
 It imposes no program completion or benchmark protocol; the program and its Lua

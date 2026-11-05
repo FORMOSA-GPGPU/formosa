@@ -2,8 +2,8 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
--- Runs one barrier kernel over a full work-group. Each case's ctest regex
--- checks what the simulator reports (see CMakeLists.txt).
+-- Runs one barrier kernel over a full work-group. Each case's output checks
+-- validate what the simulator reports (see xmake.lua).
 
 ---@type kernel-sim.runtime
 local ksim = require("kernel-sim.runtime")

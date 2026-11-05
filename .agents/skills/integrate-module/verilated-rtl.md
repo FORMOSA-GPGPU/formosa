@@ -6,9 +6,8 @@ Follow `vclint` (`lv/src/lv/bindings/simple/vclint.sv`, `vclint.cc`, `lv/tests/u
 
 ## Rules
 
-- New Verilated RTL uses Xmake's `verilator.static` rule and `verilator` toolchain; follow `Vvclint` in `lv/xmake.lua`. Keep the CMake `verilate()` recipe in sync during the transition.
-- In the CMake fallback, a second `verilate()` target must mark the shared runtime copy `HEADER_FILE_ONLY`, or `verilated.cpp` links twice (duplicate symbols).
-- Keep `OPT_GLOBAL -DVL_TIME_STAMP64` and define `vl_time_stamp64()` once in a TU including only `systemc.h` (verilated headers carry their own inline copy).
+- New Verilated RTL uses Xmake's `verilator.static` rule and `verilator` toolchain; follow `Vvclint` in `lv/xmake.lua`.
+- Keep `add_defines("VL_TIME_STAMP64", { public = true })` and define `vl_time_stamp64()` once in a TU including only `systemc.h` (verilated headers carry their own inline copy).
 - Own an explicit `VerilatedContext` declared before the model so teardown order is deterministic.
 - The first `eval()` only settles; hold `rst_n` across later clock pulses or reset never takes.
 - Signal outputs need one `SC_METHOD` driver; funneling bus-op and clock updates through one helper double-drives (E115).

@@ -154,7 +154,7 @@ those complete compositions require the ILHA plugin to be linked.
 [`lua/addr_map.lua`](lua/addr_map.lua) owns the fixed platform address map and
 platform ABI. Component register contracts live in lv's shared C headers.
 Xmake's `ilha-platform-data` target invokes two Lua generators, including for
-HAL/firmware-only builds. The temporary CMake fallback reuses these generators:
+HAL/firmware-only builds:
 
 ```text
 ilha/lua/addr_map.lua
@@ -163,9 +163,8 @@ ilha/lua/addr_map.lua
 ```
 
 Xmake places the generated files in the target's autogen directory and supplies
-that include path through its dependency. The CMake fallback uses
-`<builddir>/generated/ilha`. Changing an experimental configuration does not
-change the fixed address-map ABI.
+that include path through its dependency. Changing an experimental configuration
+does not change the fixed address-map ABI.
 
 Runtime capabilities come from the same settings that construct the hardware:
 
@@ -186,6 +185,5 @@ DMA offsets/status and CLINT offsets come from the headers under
 `lv/device/include/lv/mmio/`. Software driver APIs live separately under
 `lv/device/include/lv/drivers/`.
 `formosa_addr_map.h` includes these contracts and retains the `FSA_DMA_*` and
-`FSA_CLINT_*` compatibility names. The software-only CMake path stages copies
-of the maintained headers next to the generated platform data and tracks their
-changes; HAL/firmware builds need no lv executable or SystemC dependency.
+`FSA_CLINT_*` compatibility names. The `lv.device` dependency supplies the
+maintained headers; HAL/firmware builds need no lv executable or SystemC dependency.

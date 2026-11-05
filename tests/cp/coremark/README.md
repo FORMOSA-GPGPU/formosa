@@ -4,7 +4,7 @@
 # CoreMark simulation port
 
 From the repository root in the development shell, build the desired profiles
-and run them directly with LV:
+and run them directly with lv:
 
 ```sh
 xmake build cp-coremark
@@ -13,7 +13,7 @@ xmake build cp-coremark-validation
 ./build/bin/lv tests/cp/coremark/run.lua --core simtix.scalar_core --profile validation
 ```
 
-The build also supplies LV and stages each ELF under its logical runfile path.
+The build also supplies lv and stages each ELF under its logical runfile path.
 The manual commands need neither `--elf` nor an Xmake launcher. With a custom
 output directory, use `<builddir>/bin/lv`. To run all four profile/core pairs:
 
@@ -21,7 +21,7 @@ output directory, use `<builddir>/bin/lv`. To run all four profile/core pairs:
 xmake test 'cp-coremark/**' 'cp-coremark-validation/**'
 ```
 
-See the [CPU tests](../README.md) for the temporary CMake fallback.
+See the [CPU tests](../README.md) for adapter and test-program contracts.
 
 `--profile` defaults to `performance`. Both profiles run 10 iterations.
 The reported iterations/s/MHz is `iterations * 1e6 / measured_cycles`.

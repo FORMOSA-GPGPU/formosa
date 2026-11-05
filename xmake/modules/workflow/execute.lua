@@ -4,7 +4,6 @@
 
 -- Orchestration only: target dependencies and test execution stay native.
 function run(resolved, options)
-  assert(resolved.adapter == "xmake", "Workflow execution supports the Xmake adapter")
   local option = import("core.base.option")
   local output_flags = {}
   for _, name in ipairs({ "quiet", "verbose", "diagnosis" }) do

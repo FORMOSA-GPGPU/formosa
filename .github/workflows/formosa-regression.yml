@@ -91,10 +91,9 @@ jobs:
           enable_kvm: false
           github_access_token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Validate generated presets
+      - name: Validate workflow definitions
         run: |
           set -euo pipefail
-          test -s CMakePresets.json
           nix shell --inputs-from . nixpkgs#xmake --command xmake workflow check
 
       - name: Resolve FORMOSA environment
@@ -197,11 +196,11 @@ jobs:
               use_all=$3
               if [[ "$use_all" != true ]] && git diff --name-only "$1" "$2" -- \
                   workflows.lua xmake/ xmake.lua formosa-sdk-xmake.lua \
-                  CMakePresets.json CMakeUserPresets.json .github/ | grep -q .; then
+                  .github/ | grep -q .; then
                 echo "Workflow definition changed; running full regression."
                 use_all=true
               fi
-              args=(workflow regression --profile=debug --adapter=xmake --execute)
+              args=(workflow regression --profile=debug --execute)
               if [[ "$use_all" == true ]]; then
                 args+=(--all)
               else

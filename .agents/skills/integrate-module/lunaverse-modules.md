@@ -41,7 +41,6 @@ Inspect these files for conventions and patterns:
   when another C++ translation unit consumes the type.
 - New `.cc` must belong to the owning Xmake target, including through its existing source glob.
 - A new binding object target must be an explicit dependency of `lv`.
-- During the transition, update the CMake fallback too; its binding libraries still use `lv_register_binding()`.
 - Lua classes that own a SystemC hierarchy use `require("lv.sc_module").wrap`
 - Constructors are name-first
 
