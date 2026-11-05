@@ -2,8 +2,11 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-add_lv_test_script(ilha.wg_lifecycle "${CMAKE_CURRENT_SOURCE_DIR}/wg_lifecycle.lua"
-  LABELS integration ilha WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+foreach(_core atomic pipelined)
+  add_lv_test_script(ilha.wg_lifecycle.${_core} "${CMAKE_CURRENT_SOURCE_DIR}/wg_lifecycle.lua"
+    ARGS ${_core} LABELS integration ilha
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/../..")
+endforeach()
 
 # A standalone idle ROM exercises the real system without runtime firmware or
 # software platform data from another subproject.

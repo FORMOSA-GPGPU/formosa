@@ -30,6 +30,8 @@ class AtomicCore : public BaseCore {
       : BaseCore(name, p),
         tmask_(false, num_lanes_),
         wmask_(false, num_warps_),
+        executing_mask_(false, num_warps_),
+        aborting_warps_(false, num_warps_),
         lane_state_(num_warps_, num_lanes_),
         mem_port_("mem_port"),
         csr_buf_(num_lanes_),
@@ -87,6 +89,8 @@ class AtomicCore : public BaseCore {
   uint64_t ArbitratePC(uint32_t wid);
   void UpdateThreadMask(uint32_t wid, uint64_t wpc);
   uint32_t Fetch(uint64_t pc);
+  // Returns an aborted warp to idle after its fetch or memory access finishes.
+  void CompleteAbort(uint32_t wid);
 
   void SetupTrans(uint32_t lane_id, tlm::tlm_command command, uint32_t len);
   void SetupTrans(tlm::tlm_command command, uint32_t len);
@@ -148,8 +152,10 @@ class AtomicCore : public BaseCore {
 
   sc_bv_base tmask_;
   sc_bv_base wmask_;
+  // Aborting the executing warp retains A until its instruction is discarded.
+  sc_bv_base executing_mask_;
+  sc_bv_base aborting_warps_;
   WarpLaneState lane_state_;
-  sc_signal<bool> cmd_ready_;
   uint64_t current_pc_ = 0;
 
   lv::TlmSource mem_port_;

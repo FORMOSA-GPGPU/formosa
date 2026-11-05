@@ -37,6 +37,8 @@ class WarpCtrlCommand {
     return WarpCtrlCommand(Op::kRelease, cwm);
   }
 
+  // An aborted warp is idle again only once nothing it did before the abort
+  // can still change its state.
   static WarpCtrlCommand Abort(const sc_dt::sc_bv_base &cwm) {
     return WarpCtrlCommand(Op::kAbort, cwm);
   }
@@ -63,11 +65,13 @@ class WarpCtrl {
  public:
   virtual ~WarpCtrl() = default;
 
-  sc_core::sc_port<tlm::tlm_get_if<WarpCtrlCommand>, 1,
-                   sc_core::SC_ZERO_OR_MORE_BOUND>
-      SC_NAMED(warp_cmd);
+  // A core accepts a command by applying it, never by queueing it. While it
+  // cannot, nb_put() returns false with no effect and ok_to_put() fires once
+  // it can. Abort and Release complete when the warp is idle.
+  sc_core::sc_export<tlm::tlm_put_if<WarpCtrlCommand>> SC_NAMED(warp_cmd);
 
-  // Warp masks to indicate the state of each warp
+  // Exactly one of I/A/B/E is set per warp. An aborting warp keeps A/B, but
+  // no longer executes, until it has drained.
   virtual const sc_dt::sc_bv_base &idle_mask() = 0;
   virtual const sc_dt::sc_bv_base &active_mask() = 0;
   virtual const sc_dt::sc_bv_base &barrier_mask() = 0;

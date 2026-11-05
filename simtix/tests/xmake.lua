@@ -2,6 +2,14 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
+target("simtix-pipelined-abort-test", function()
+  set_kind("binary")
+  add_files("pipelined_core/abort_test.cc")
+  add_deps("simtix")
+  add_tests("normal", { run_timeout = 10000 })
+  add_tests("ghost", { runargs = { "ghost" }, run_timeout = 10000 })
+end)
+
 target("lv", function()
   local function case(name, script, args)
     add_tests("simtix/" .. name, {
@@ -16,6 +24,7 @@ target("lv", function()
   core("stack_remap_table", "stack_remap_table")
   core("ghost_scheduler_ooo", "ghost_scheduler")
   core("coalescing_lsu_outstanding", "lsu_outstanding")
+  core("frontend_restart", "frontend_restart")
   for _, nw in ipairs({ 8, 16, 32 }) do
     for _, ns in ipairs({ 1, 2, 4 }) do
       local args = { "--num-warps", tostring(nw), "--num-subcores", tostring(ns) }

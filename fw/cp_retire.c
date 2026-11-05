@@ -187,17 +187,24 @@ void cp_retire_sm(void *args) {
     kstate->wg_left--;
     DPRINTF("[R]left_after:%d\r\n", kstate->wg_left);
 
+    /* Work-groups retire in any order; keep the first failure. */
+    if (result != FSA_COMPLETION_RESULT_SUCCESS &&
+        kstate->result == FSA_COMPLETION_RESULT_SUCCESS) {
+      kstate->result = result;
+      kstate->status = kstatus;
+    }
+
     if (kstate->wg_left == 0) {
       DPRINTF("[R]KDone:%d\r\n", kid);
 
       const FsaCompletionToken completion_token = kstate->completion_token;
 
       if (kstatus_ptr != 0) {
-        memcpy((void *)kstatus_ptr, &kstatus, sizeof(kstatus));
+        memcpy((void *)kstatus_ptr, &kstate->status, sizeof(kstate->status));
       }
-      cp_publish_completion(completion_token, result);
+      cp_publish_completion(completion_token, kstate->result);
       DPRINTF("[R]WriteCompletion token=0x%lx result=%u\r\n",
-              (unsigned long)completion_token, (unsigned)result);
+              (unsigned long)completion_token, (unsigned)kstate->result);
       cp_kernel_state_buf_free(kid);
     }
   }

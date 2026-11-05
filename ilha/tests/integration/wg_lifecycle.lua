@@ -3,13 +3,14 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 -- Exercise concurrent work-group dispatch, barrier release, and completion
--- backpressure through the real WG initializer and pipelined core.
+-- backpressure through the real WG initializer and the core named by the
+-- first argument.
+local core_kind = ...
 local lanes_per_warp = 32
 local arch = { num_warps = 32, num_lanes = lanes_per_warp }
 local clock = sc.clock("clock", sc.time(1, sc.time_unit.NS))
-local core = simtix.PipelinedCore("core", arch, { num_subcores = 1 })
-local imem = simple.Memory("imem", { size = 0x4000, latency = 0 })
-local dmem = simple.Memory("dmem", { size = 64, latency = 0 })
+-- Fetches take long enough to be in flight when a work-group is aborted.
+local imem = simple.Memory("imem", { size = 0x4000, latency = 2 })
 local initiator = simple.Initiator("initiator")
 local wgi = ilha.WGInitializer("wgi", {
   warps_per_core = arch.num_warps,
@@ -18,16 +19,31 @@ local wgi = ilha.WGInitializer("wgi", {
   enable_trace = false,
 })
 
+local cores = {
+  atomic = function()
+    local core = simtix.AtomicCore("core", arch)
+    core.target = imem.port
+    core:sched_init(function() return simtix.Lrr(arch) end)
+    return core
+  end,
+  pipelined = function()
+    local core = simtix.PipelinedCore("core", arch, { num_subcores = 1 })
+    local dmem = simple.Memory("dmem", { size = 64, latency = 0 })
+    dmem.clock = clock
+    core.imem = imem.port
+    local subcore = core.subcores[1]
+    subcore:sched_init(function() return simtix.Lrr(arch) end)
+    subcore:lsu_init(function(name) return simtix.SimpleLsu(name, arch) end)
+    subcore:arbitrator_init(function(name) return simtix.SimpleArbitrator(name, arch) end)
+    subcore.dmem = dmem.port
+    return core
+  end,
+}
+local core = assert(cores[core_kind], "unknown core kind: " .. tostring(core_kind))()
+
 core.clock = clock
 imem.clock = clock
-dmem.clock = clock
 initiator.clock = clock
-core.imem = imem.port
-local subcore = core.subcores[1]
-subcore:sched_init(function() return simtix.Lrr(arch) end)
-subcore:lsu_init(function(name) return simtix.SimpleLsu(name, arch) end)
-subcore:arbitrator_init(function(name) return simtix.SimpleArbitrator(name, arch) end)
-subcore.dmem = dmem.port
 wgi.warp_ctrl_target = core.warp_ctrl
 initiator.target = wgi.port
 
@@ -40,7 +56,7 @@ local function bytes_le(value, size)
   return bytes
 end
 
-local function load_program(pc, work_instructions, barrier_count)
+local function load_program(pc, work_instructions, barrier_count, trap)
   local instructions = {}
   local function emit(word)
     for _, byte in ipairs(bytes_le(word, 4)) do
@@ -53,14 +69,18 @@ local function load_program(pc, work_instructions, barrier_count)
   for _ = 1, barrier_count do
     emit(0x0000102b) -- fsa.bar 0, 0
   end
+  if trap then
+    emit(0x000020a3) -- sw zero, 1(zero): a misaligned store traps the warp
+  end
   emit(0x00000073) -- ecall
   imem:write_bytes(pc, instructions)
 end
 
-local fast_pc, work_pc, barrier_pc = 0x1000, 0x2000, 0x3000
+local fast_pc, work_pc, barrier_pc, trap_pc = 0x1000, 0x2000, 0x3000, 0x3800
 load_program(fast_pc, 0, 0)
 load_program(work_pc, 128, 0)
 load_program(barrier_pc, 256, 2)
+load_program(trap_pc, 128, 0, true)
 
 local function run(ns) sc.start(sc.time(ns, sc.time_unit.NS)) end
 
@@ -132,4 +152,18 @@ drain(1, 7)
 launch(barrier_pc, 8, 2 * lanes_per_warp)
 launch(barrier_pc, 9, 3 * lanes_per_warp)
 drain(8, 9)
+
+-- A trap aborts its work-group while the other warps' fetches are in flight.
+-- The work-group waiting for those warps must not inherit them: it completes
+-- by ecall after the trap is reported once.
+local whole_core = arch.num_warps * lanes_per_warp
+launch(trap_pc, 10, whole_core)
+launch(work_pc, 11, whole_core)
+wait_csr(0x20, 1)
+assert(read_csr(0x38) == 10, "the trapping work-group did not complete first")
+assert(read_csr(0x28) == 1, "work-group 10 did not report its trap")
+assert(read_csr(0x40) == 6, "work-group 10 did not report the misaligned store")
+write_csr(0x20, 0)
+run(1000)
+drain(11, 11)
 print("Pass: concurrent work-groups completed exactly once")

@@ -38,6 +38,7 @@ class ToBackendIntf : public ToArbitratorIntf {
   virtual void NotifyEcall(uint32_t wid, uint64_t wpc) = 0;
   virtual void NotifyException(uint32_t wid, uint64_t wpc, uint64_t cause,
                                uint64_t tval) = 0;
+  virtual void NotifyAborted(uint32_t wid) = 0;
   virtual void NoteFlush(uint32_t wid, FlushReason reason, uint64_t wpc,
                          uint64_t producer_id) = 0;
   virtual void NotifyControlResolved(uint32_t wid, uint64_t unique_id) = 0;
@@ -85,6 +86,7 @@ class Backend : public sc_module {
         pending_ecall_wpc_(num_local_warps_),
         pending_barrier_wpc_(num_local_warps_),
         pending_exceptions_(num_local_warps_),
+        pending_aborts_(false, num_local_warps_),
         alu_delay_q_("alu_delay_q_", pp.alu_latency, pp.alu_ticks_per_output),
         mdu_delay_q_("mdu_delay_q_", pp.mdu_latency, pp.mdu_ticks_per_output),
         fpu_delay_q_("fpu_delay_q_", pp.fpu_latency, pp.fpu_ticks_per_output),
@@ -168,9 +170,14 @@ class Backend : public sc_module {
     return lane_state_.LaneRunnable(get_local_wid(wid), lane);
   }
 
+  // Reports the aborted warp through NotifyAborted once the instructions it
+  // issued have retired, dropping any trap they raised.
+  void Abort(uint32_t wid) { pending_aborts_[get_local_wid(wid)] = 1; }
+
  private:
   void Tick() {
     issue_suppressed_warps_ = 0;
+    ProcessPendingAborts();
     ProcessPendingExceptions();
     ProcessWarpStates();
     KonataRetire();
@@ -187,6 +194,7 @@ class Backend : public sc_module {
   void Writeback();
   void Retire();
   void ProcessWarpStates();
+  void ProcessPendingAborts();
   void ProcessPendingExceptions();
   void KonataRetire();
 
@@ -261,6 +269,8 @@ class Backend : public sc_module {
 
   // Deferred non-ECALL trap state for each warp.
   std::vector<PendingException> pending_exceptions_;
+  // Aborted warps whose issued instructions have not all retired yet.
+  sc_bv_base pending_aborts_;
 
   struct RetireEntry {
     bool is_flush = false;

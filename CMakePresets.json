@@ -455,7 +455,7 @@
       },
       "filter": {
         "include": {
-          "name": "ilha\\..*|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "ilha\\..*|^ilha\\.wg_lifecycle\\.(atomic|pipelined)$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "ilha.platform.coverage",
@@ -470,7 +470,7 @@
       },
       "filter": {
         "include": {
-          "name": "ilha\\..*|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "ilha\\..*|^ilha\\.wg_lifecycle\\.(atomic|pipelined)$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "ilha.platform.debug",
@@ -485,7 +485,7 @@
       },
       "filter": {
         "include": {
-          "name": "ilha\\..*|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "ilha\\..*|^ilha\\.wg_lifecycle\\.(atomic|pipelined)$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "ilha.platform.release",
@@ -680,7 +680,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_abort|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle\\.(atomic|pipelined)$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.coverage",
@@ -695,7 +695,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_abort|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle\\.(atomic|pipelined)$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.debug",
@@ -710,7 +710,7 @@
       },
       "filter": {
         "include": {
-          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
+          "name": "opencl\\..*\\.simtix\\.pipelined_sm|^opencl\\..*\\.validation$|kernel-sim\\..*\\.simtix\\.pipelined_sm|simtix\\.stack_remap_table|simtix\\.pipelined_frontend|simtix\\.pipelined_abort|simtix\\.pipelined_scoreboard|simtix\\.pipelined_ghost_scheduler_ooo|simtix\\.simple_arbitrator|simtix\\.pipelined_arbitrator|simtix\\.pipelined_.*_lsu|simtix\\.pipelined_coalescing_lsu_deterministic|^ilha\\.wg_lifecycle\\.(atomic|pipelined)$|^ilha\\.system\\.(atomic|pipelined)$|^simtix\\.sm-map\\.(atomic|pipelined)$|^simtix\\.sm-config\\.pipelined\\.(default|core|four)$"
         }
       },
       "name": "simtix.pipelined_sm.release",

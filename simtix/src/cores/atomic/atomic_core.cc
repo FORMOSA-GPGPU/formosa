@@ -76,6 +76,7 @@ void AtomicCore::MainProc() {
     // Warp scheduling, wpc arbitration and tmask generation
     uint32_t wid = sched_->SelectWarp(active_mask_);
     wmask_ = 1 << wid;
+    executing_mask_ = wmask_;
 
     uint64_t wpc = ArbitratePC(wid);
     current_pc_ = wpc;
@@ -107,10 +108,10 @@ void AtomicCore::MainProc() {
     // Execute
     ExecFlag flag = Execute(&ctx, instr);
 
-    // WGI may abort this warp while the atomic instruction is in flight.
-    // Consume the result without committing architectural state or performing
-    // a stale warp-state transition after the warp is no longer active.
-    if (active_mask_.val()[wid] == 0) {
+    // An abort during the fetch drops the instruction before it accesses
+    // memory.
+    if (aborting_warps_[wid].to_bool()) {
+      CompleteAbort(wid);
       continue;
     }
 
@@ -132,6 +133,10 @@ void AtomicCore::MainProc() {
       start_issuing_mem_req_.notify();
       start_collecting_mem_resp_.notify();
       wait(done_issuing_mem_req_ & done_collecting_mem_resp_);
+      if (aborting_warps_[wid].to_bool()) {
+        CompleteAbort(wid);
+        continue;
+      }
       SignExtension(GetMemSize(flag), IsSigned(flag));
       WriteRegfile(wid, instr.rd());
       stats_.committed_load_instr[wid]++;
@@ -145,6 +150,10 @@ void AtomicCore::MainProc() {
       }
       ExecuteAtomicInstr(GetMemSize(flag), IsSigned(flag),
                          DecodeAtomicOp(flag));
+      if (aborting_warps_[wid].to_bool()) {
+        CompleteAbort(wid);
+        continue;
+      }
       WriteRegfile(wid, instr.rd());
       stats_.committed_amo_instr[wid]++;
     }
@@ -154,8 +163,15 @@ void AtomicCore::MainProc() {
       start_issuing_mem_req_.notify();
       start_collecting_mem_resp_.notify();
       wait(done_issuing_mem_req_ & done_collecting_mem_resp_);
+      if (aborting_warps_[wid].to_bool()) {
+        CompleteAbort(wid);
+        continue;
+      }
       stats_.committed_store_instr[wid]++;
     }
+
+    // Nothing below waits, so an Abort from here on idles the warp at once.
+    executing_mask_ = 0;
 
     if (HasFlag(flag, ExecFlag::CSR)) {
       ExecuteCsrOp(wid, GetCsrOp(flag));
@@ -220,6 +236,16 @@ void AtomicCore::MainProc() {
       }
     }
   }
+}
+
+void AtomicCore::CompleteAbort(uint32_t wid) {
+  // Abort keeps the warp in A while MainProc waits for its fetch or memory
+  // access, so the instruction commits on neither the aborted work-group nor
+  // the next one placed on the warp.
+  assert(aborting_warps_[wid].to_bool());
+  aborting_warps_[wid] = 0;
+  executing_mask_ = 0;
+  WarpStateTransition(&idle_mask_, &active_mask_, wmask_);
 }
 
 void AtomicCore::IssueMemReq() {
@@ -306,9 +332,15 @@ void AtomicCore::Release(const sc_dt::sc_bv_base &cwm) {
 
 void AtomicCore::Abort(const sc_dt::sc_bv_base &cwm) {
   assert(cmd_ready_);
-  active_mask_ = active_mask_.val() & ~cwm;
-  barrier_mask_ = barrier_mask_.val() & ~cwm;
-  idle_mask_ = idle_mask_.val() | cwm;
+  // A warp in exception stays there for Release.
+  sc_dt::sc_bv_base aborted = cwm & (active_mask_.val() | barrier_mask_.val());
+  aborting_warps_ |= aborted & executing_mask_;
+  // The executing warp stays in A until MainProc drops its instruction; the
+  // others are idle at once.
+  const sc_bv_base stopped = aborted & ~executing_mask_;
+  active_mask_ = active_mask_.val() & ~stopped;
+  barrier_mask_ = barrier_mask_.val() & ~stopped;
+  idle_mask_ = idle_mask_.val() | stopped;
 }
 
 uint64_t AtomicCore::ArbitratePC(uint32_t wid) {

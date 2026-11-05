@@ -16,6 +16,7 @@ foreach(SMOKE_CHECK IN ITEMS
   memory_ops
   subgroup_info
   kernel_args
+  kernel_trap
 )
   add_subdirectory(${SMOKE_CHECK})
   get_property(SUITE_TESTS DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${SMOKE_CHECK}"

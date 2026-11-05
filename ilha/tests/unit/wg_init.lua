@@ -259,4 +259,166 @@ for _ = 1, group_count do
   sc.start(sc.time(20, sc.time_unit.NS))
 end
 assert(read_csr(0x20) == 0, "unexpected extra completion")
+
+-- The stub keeps aborted warps out of idle for 500 ns, as a draining core
+-- does. The trapping work-group must not retire before then.
+core:set_scenario("SlowAbort")
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x2000))
+initiator:add_payload(create_write_payload(0x18, 256))
+initiator:add_payload(create_write_payload(0x0, 1))
+sc.start(sc.time(200, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "work-group retired before its aborted warps stopped")
+local retired = false
+for _ = 1, 100 do
+  if read_csr(0x20) == 1 then
+    retired = true
+    break
+  end
+end
+assert(retired, "work-group did not retire after its aborted warps stopped")
+assert(read_csr(0x28) == 1, "work-group did not report its trap")
+assert(read_csr(0x40) == 2, "work-group did not report the illegal instruction")
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "unexpected extra completion")
+
+-- Released warps likewise reach I 500 ns after acceptance, and a normally
+-- completing work-group must not retire before then.
+core:set_scenario("SlowRelease")
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x3000))
+initiator:add_payload(create_write_payload(0x18, 256))
+initiator:add_payload(create_write_payload(0x0, 1))
+sc.start(sc.time(200, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "work-group retired before Release completed")
+retired = false
+for _ = 1, 100 do
+  if read_csr(0x20) == 1 then
+    retired = true
+    break
+  end
+end
+assert(retired, "work-group did not retire after Release completed")
+assert(read_csr(0x28) == 0, "normal work-group reported failure")
+assert(read_csr(0x40) == 11, "normal work-group lost its ecall")
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "unexpected extra completion")
+
+-- A refused command must not hold up work that needs none. After accepting a
+-- Release, the stub refuses commands for 1000 ns while the released warps
+-- reach I after 500 ns. The first work-group must retire meanwhile.
+core:set_scenario("RefuseAfterRelease")
+local start = sc.time_stamp()
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x4000))
+initiator:add_payload(create_write_payload(0x18, 256))
+initiator:add_payload(create_write_payload(0x0, 1))
+-- Its warps exit by ecall after 100 ns, and the stub then accepts the Release.
+sc.start(sc.time(200, sc.time_unit.NS))
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x5000))
+initiator:add_payload(create_write_payload(0x18, 256))
+initiator:add_payload(create_write_payload(0x0, 1))
+local function wait_retired(id)
+  for _ = 1, 150 do
+    if read_csr(0x20) == 1 then
+      assert(read_csr(0x38) == id, "work-groups retired out of order")
+      assert(read_csr(0x28) == 0, "normal work-group reported failure")
+      return
+    end
+  end
+  error("work-group did not retire")
+end
+wait_retired(0x4000)
+assert(
+  sc.time_stamp() - start < sc.time(1000, sc.time_unit.NS),
+  "work-group retired only once the core accepted commands again"
+)
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+wait_retired(0x5000)
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "unexpected extra completion")
+
+-- Each stop lasts 500 ns from its own Release. The two warps exit about
+-- 100 ns apart, so they reach I at about 600 and 700 ns, and the work-group
+-- must wait for the second.
+core:set_scenario("StaggeredSlowRelease")
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x6000))
+initiator:add_payload(create_write_payload(0x18, 2 * threads_per_warp))
+initiator:add_payload(create_write_payload(0x0, 1))
+sc.start(sc.time(640, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "work-group retired before its later-released warp stopped")
+wait_retired(0x6000)
+assert(read_csr(0x40) == 11, "normal work-group lost its ecall")
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "unexpected extra completion")
+
+-- A work-group that traps while only some of its warps are activated retires
+-- once those stop, and its other warps are never activated. The first
+-- work-group holds 24 of the 32 warps, so the second gets 8 of its 16 before
+-- one of them traps. The first then exits while the aborted warps drain.
+core:set_scenario("PartialTrap")
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x7000))
+initiator:add_payload(create_write_payload(0x18, 24 * threads_per_warp))
+initiator:add_payload(create_write_payload(0x0, 1))
+sc.start(sc.time(30, sc.time_unit.NS))
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x8000))
+initiator:add_payload(create_write_payload(0x18, 16 * threads_per_warp))
+initiator:add_payload(create_write_payload(0x0, 1))
+wait_retired(0x7000)
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+retired = false
+for _ = 1, 100 do
+  if read_csr(0x20) == 1 then
+    retired = true
+    break
+  end
+end
+assert(retired, "partly activated work-group did not retire after its trap")
+assert(read_csr(0x38) == 0x8000, "work-groups retired out of order")
+assert(read_csr(0x28) == 1, "partly activated work-group did not report its trap")
+assert(read_csr(0x40) == 2, "partly activated work-group did not report the illegal instruction")
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+-- No warp may still belong to the trapped work-group.
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0x9000))
+initiator:add_payload(create_write_payload(0x18, warps_per_core * threads_per_warp))
+initiator:add_payload(create_write_payload(0x0, 1))
+wait_retired(0x9000)
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "unexpected extra completion")
+
+-- The stub refuses the Release and Abort that a trap calls for, and another
+-- warp of the work-group traps meanwhile. That warp must be released instead
+-- of aborted, and the work-group must report the earlier trap.
+core:set_scenario("CannotAbort")
+initiator:add_payload(create_write_payload(0x8, 0x1000))
+initiator:add_payload(create_write_payload(0x10, 0xa000))
+initiator:add_payload(create_write_payload(0x18, 256))
+initiator:add_payload(create_write_payload(0x0, 1))
+retired = false
+for _ = 1, 100 do
+  if read_csr(0x20) == 1 then
+    retired = true
+    break
+  end
+end
+assert(retired, "work-group did not retire after its refused commands")
+assert(read_csr(0x38) == 0xa000, "unexpected work-group retired")
+assert(read_csr(0x28) == 1, "work-group did not report its trap")
+assert(read_csr(0x40) == 2, "work-group did not report its first trap")
+initiator:add_payload(create_write_payload(0x20, 0))
+sc.start(sc.time(20, sc.time_unit.NS))
+assert(read_csr(0x20) == 0, "unexpected extra completion")
 print("Pass!")

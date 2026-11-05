@@ -529,7 +529,7 @@ local config = {
       adapters = {
         xmake = {
           build_options = {},
-          selectors = { "lv/simtix/pipelined_core/**" },
+          selectors = { "lv/simtix/pipelined_core/**", "simtix-pipelined-abort-test/*" },
         },
         cmake = {
           build_options = {
@@ -539,6 +539,7 @@ local config = {
           selectors = {
             "simtix\\.stack_remap_table",
             "simtix\\.pipelined_frontend",
+            "simtix\\.pipelined_abort",
             "simtix\\.pipelined_scoreboard",
             "simtix\\.pipelined_ghost_scheduler_ooo",
             "simtix\\.simple_arbitrator",
@@ -736,7 +737,7 @@ local config = {
             BUILD_TESTING = true,
           },
           selectors = {
-            "^ilha\\.wg_lifecycle$",
+            "^ilha\\.wg_lifecycle\\.(atomic|pipelined)$",
             "^ilha\\.system\\.(atomic|pipelined)$",
           },
         },

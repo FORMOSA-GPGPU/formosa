@@ -98,6 +98,7 @@ void PipelinedCore::Activate(const sc_dt::sc_bv_base &cwm, uint64_t pc,
                              uint64_t wg_info, uint64_t cwid_base) {
   assert(cmd_ready_);
   WarpStateTransition(&active_mask_, &idle_mask_, cwm);
+  UpdateExecutableWarps();
   uint32_t active_warp_cnt = 0;
   for (int w = 0; w < num_warps_; ++w) {
     if (cwm[w].to_bool()) {
@@ -115,8 +116,9 @@ void PipelinedCore::Activate(const sc_dt::sc_bv_base &cwm, uint64_t pc,
       cwid_[w] = cwid_base + active_warp_cnt;
 
       ++active_warp_cnt;
+      // An aborted warp may have lost its fetches for this same PC.
       NoteFlush(w, FlushReason::kMisc, pc, 0);
-      Redirect(w, pc);
+      frontend_.Restart(w, pc);
     }
   }
 }
@@ -124,6 +126,7 @@ void PipelinedCore::Activate(const sc_dt::sc_bv_base &cwm, uint64_t pc,
 void PipelinedCore::Resume(const sc_dt::sc_bv_base &cwm) {
   assert(cmd_ready_);
   WarpStateTransition(&active_mask_, &barrier_mask_, cwm);
+  UpdateExecutableWarps();
 
   // Release waiting lanes without reactivating exited lanes, and fetch from the
   // PC arbitrated among them.
@@ -156,17 +159,23 @@ void PipelinedCore::Release(const sc_dt::sc_bv_base &cwm) {
 void PipelinedCore::Abort(const sc_dt::sc_bv_base &cwm) {
   assert(cmd_ready_);
 
+  // A warp in exception stays there for Release.
+  sc_dt::sc_bv_base aborted = cwm & (active_mask_.val() | barrier_mask_.val());
+  aborting_warps_ |= aborted;
+  UpdateExecutableWarps();
+
+  // Drop fetched instructions now. Issued ones still retire, and the warp
+  // keeps A/B until the backend reports it drained.
   for (uint32_t wid = 0; wid < num_warps_; ++wid) {
-    if (!cwm[wid].to_bool()) {
+    if (!aborted[wid].to_bool()) {
       continue;
     }
 
     RequestSchedulerFlush(wid);
+    frontend_.NoteFlush(wid, FlushReason::kMisc, 0, 0);
+    frontend_.Flush(wid);
+    backends_[get_backend_id(wid)].Abort(wid);
   }
-
-  active_mask_ = active_mask_.val() & ~cwm;
-  barrier_mask_ = barrier_mask_.val() & ~cwm;
-  idle_mask_ = idle_mask_.val() | cwm;
 }
 
 LV_BINDING(simtix, PipelinedCore)

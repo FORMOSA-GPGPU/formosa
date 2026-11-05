@@ -31,6 +31,8 @@ class PipelinedCore : public BaseCore,
         enable_ghost_scheduler_(pipe_param.enable_ghost_scheduler),
         frontend_("frontend", param, pipe_param, this),
         wmask_(false, num_warps_),
+        aborting_warps_(false, num_warps_),
+        executable_warps_(false, num_warps_),
         packet_pool_(param, 10),
         stats_(name, param),
         heartbeat_frequency_(pipe_param.heartbeat_frequency) {
@@ -106,7 +108,7 @@ class PipelinedCore : public BaseCore,
 
  protected:
   // Implementation of ToFrontendIntf
-  const WarpMask &active_warps() const override { return active_mask_; }
+  const WarpMask &active_warps() const override { return executable_warps_; }
   Packet *AllocatePacket() override { return packet_pool_.Acquire(); }
   void FreePacket(Packet *packet) override { packet_pool_.Release(packet); }
   konata::KonataTracer<Packet> *tracer() override { return tracer_.get(); }
@@ -131,6 +133,7 @@ class PipelinedCore : public BaseCore,
     wmask_ = 1 << wid;
     barrier_pc_[wid] = wpc;
     WarpStateTransition(&barrier_mask_, &active_mask_, wmask_);
+    UpdateExecutableWarps();
   }
 
   void NotifyEcall(uint32_t wid, uint64_t wpc) override {
@@ -141,6 +144,7 @@ class PipelinedCore : public BaseCore,
     frontend_.NoteFlush(wid, FlushReason::kMisc, wpc, 0);
     frontend_.Flush(wid);
     WarpStateTransition(&exception_mask_, &active_mask_, wmask_);
+    UpdateExecutableWarps();
   }
 
   void NotifyException(uint32_t wid, uint64_t wpc, uint64_t cause,
@@ -152,8 +156,22 @@ class PipelinedCore : public BaseCore,
     frontend_.NoteFlush(wid, FlushReason::kMisc, wpc, 0);
     frontend_.Flush(wid);
     WarpStateTransition(&exception_mask_, &active_mask_, wmask_);
+    UpdateExecutableWarps();
 
     RequestSchedulerFlush(wid);
+  }
+
+  void NotifyAborted(uint32_t wid) override {
+    assert(aborting_warps_[wid].to_bool());
+    wmask_ = 0;
+    wmask_[wid] = 1;
+    if (active_mask_.val()[wid].to_bool()) {
+      WarpStateTransition(&idle_mask_, &active_mask_, wmask_);
+    } else {
+      WarpStateTransition(&idle_mask_, &barrier_mask_, wmask_);
+    }
+    aborting_warps_[wid] = 0;
+    UpdateExecutableWarps();
   }
 
   void NotifyControlResolved(uint32_t wid, uint64_t unique_id) override {
@@ -229,12 +247,19 @@ class PipelinedCore : public BaseCore,
   void EmitHeartbeat(uint64_t instret_now, uint64_t active_cycles_now);
   void ExecuteWarpCtrlCommand(const ilha::WarpCtrlCommand &cmd) override;
 
+  void UpdateExecutableWarps() {
+    executable_warps_ = active_mask_.val() & ~aborting_warps_;
+  }
+
   bool enable_ghost_scheduler_;
   Frontend frontend_;
   sc_vector<GhostScheduler> SC_NAMED(ghost_schedulers_);
   sc_vector<Backend> SC_NAMED(backends_);
 
   sc_bv_base wmask_;
+  sc_bv_base aborting_warps_;
+  WarpMask executable_warps_;
+
   PacketPool packet_pool_;
 
   std::unique_ptr<konata::KonataTracer<Packet>> tracer_;
@@ -251,8 +276,6 @@ class PipelinedCore : public BaseCore,
   uint64_t next_heartbeat_instret_ = 0;
   uint64_t last_heartbeat_instret_ = 0;
   uint64_t last_heartbeat_active_cycles_ = 0;
-
-  sc_signal<bool> cmd_ready_;
 };
 
 }  // namespace simtix::pipelined

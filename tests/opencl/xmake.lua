@@ -114,6 +114,7 @@ for _, name in ipairs({
   "inactive_lanes",
   "kernel_clock",
   "kernel_args",
+  "kernel_trap",
   "lmem_allocate",
   "lmem_layout",
   "lmem_size",

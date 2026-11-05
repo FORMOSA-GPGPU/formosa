@@ -83,7 +83,8 @@ class WGInitializer : public sc_module {
     }
   };
   sc_fifo<WGDispatchInfo> dispatch_fifo_;
-  tlm::tlm_fifo<WarpCtrlCommand> warp_cmd_fifo_;
+  sc_port<tlm::tlm_put_if<WarpCtrlCommand>, 1, sc_core::SC_ZERO_OR_MORE_BOUND>
+      SC_NAMED(warp_cmd_);
 
   enum WGStatus : uint32_t {
     kWGOkay = 0,
@@ -143,6 +144,10 @@ class WGInitializer : public sc_module {
     uint64_t activated_warps;
     uint64_t completed_warps;
     bool barrier_divergence_reported = false;
+    // Set by the first trap. The work-group retires with completion_info, the
+    // trap or its last ecall, once every warp is idle.
+    bool aborting = false;
+    WGDequeueInfo completion_info;
   };
   std::vector<ProcessingWGInfo> processing_wg_info_;
   uint32_t processing_wg_count_ = 0;
@@ -172,8 +177,8 @@ class WGInitializer : public sc_module {
  private:
   sc_dt::sc_bv_base cwm_;
   sc_dt::sc_bv_base release_cwm_;
-  sc_dt::sc_bv_base pending_resume_mask_;
-  std::vector<uint32_t> completed_warps_scratch_;
+  // Warps with an accepted Abort or Release, owned until they are idle.
+  sc_dt::sc_bv_base pending_termination_mask_;
   std::vector<int> wg_scratch_;
   std::vector<std::pair<int, WGDequeueInfo>> retire_infos_scratch_;
   std::vector<lv::trace::Track> pf_packets_;
@@ -185,13 +190,17 @@ class WGInitializer : public sc_module {
   std::optional<sol::safe_function> on_wg_retire_;
 
   void HandleExceptionWarps();
+  void IssueTerminations();
+  void HandleStoppedWarps();
+  void RetireWG(int wg_idx, const WGDequeueInfo &dequeue_info);
   void HandleBarrierWarps();
   [[noreturn]] void ReportBarrierDeadlock(int wg_idx);
   bool BarrierPCsDiffer(int wg_idx);
   std::string FormatBarrierWarps(int wg_idx);
   void DispatchRemainingWarps();
   void DispatchNewWG();
-  void EmitWarpCtrlCommand(const WarpCtrlCommand &cmd);
+  // Whether the core accepted, and so applied, the command.
+  bool TryWarpCtrlCommand(const WarpCtrlCommand &cmd);
   void TraceWGSlotActiveBegin(int slot_idx);
   void TraceWGSlotInstant(int slot_idx, std::string_view name);
 };

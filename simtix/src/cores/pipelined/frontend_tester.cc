@@ -72,6 +72,11 @@ class FrontendTester : public sc_module, private ToFrontendIntf {
     frontend.Redirect(wid, wpc);
   }
 
+  void restart(uint32_t wid, uint64_t wpc) {
+    frontend.NoteFlush(wid, FlushReason::kMisc, wpc, 0);
+    frontend.Restart(wid, wpc);
+  }
+
   void set_target(Frontend::Target *target) { frontend.set_target(target); }
 
   Stats *stats() override { return &stats_; }
@@ -111,6 +116,8 @@ LV_BINDING(simtix, FrontendTester)
             lv::doc("Issue one packet from a warp"))
     .method("redirect", &FrontendTester::redirect, lv::params("wid", "wpc"),
             lv::doc("Redirect a warp program counter"))
+    .method("restart", &FrontendTester::restart, lv::params("wid", "wpc"),
+            lv::doc("Start a warp afresh at a program counter"))
     .property("target", &FrontendTester::set_target,
               lv::doc("Instruction memory target"))
     .property("stats", &FrontendTester::stats_group,

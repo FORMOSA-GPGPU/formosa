@@ -320,6 +320,22 @@ void Backend::Retire() {
   }
 }
 
+void Backend::ProcessPendingAborts() {
+  // Report an aborted warp once nothing it issued is in flight, dropping any
+  // trap still pending for it.
+  for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
+    if (!pending_aborts_[local_wid].to_bool() ||
+        inflight_counter_[local_wid] != 0) {
+      continue;
+    }
+
+    pending_aborts_[local_wid] = 0;
+    pending_exceptions_[local_wid].valid = false;
+    lane_state_.Reset(local_wid);
+    core_->NotifyAborted(get_wid(local_wid));
+  }
+}
+
 void Backend::ProcessPendingExceptions() {
   // Notify exceptions only when
   // 1. Any thread in this warp reaches the exception state

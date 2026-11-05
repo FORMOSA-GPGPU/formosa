@@ -17,7 +17,9 @@
 
 namespace simtix {
 
-class BaseCore : public sc_module, public ilha::WarpCtrl {
+class BaseCore : public sc_module,
+                 public ilha::WarpCtrl,
+                 public tlm::tlm_put_if<ilha::WarpCtrlCommand> {
  public:
   sc_in<bool> SC_NAMED(clock);
 
@@ -44,7 +46,7 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
         barrier_pc_(num_warps_) {
     SC_METHOD(McycleIncrement);
     sensitive << clock.pos();
-    SC_THREAD(WarpCtrlCommandThread);
+    warp_cmd.bind(*this);
   }
 
   virtual ~BaseCore() = default;
@@ -72,6 +74,30 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
 
   const sc_core::sc_event &exception_mask_changed_event() override {
     return exception_mask_.value_changed_event();
+  }
+
+  bool nb_put(const ilha::WarpCtrlCommand &cmd) override {
+    if (!cmd_ready_.read()) {
+      return false;
+    }
+    ExecuteWarpCtrlCommand(cmd);
+    return true;
+  }
+
+  bool nb_can_put(
+      tlm::tlm_tag<ilha::WarpCtrlCommand> * /*t*/ = nullptr) const override {
+    return cmd_ready_.read();
+  }
+
+  const sc_core::sc_event &ok_to_put(
+      tlm::tlm_tag<ilha::WarpCtrlCommand> * /*t*/ = nullptr) const override {
+    return cmd_ready_.posedge_event();
+  }
+
+  void put(const ilha::WarpCtrlCommand &cmd) override {
+    while (!nb_put(cmd)) {
+      wait(ok_to_put());
+    }
   }
 
   const std::vector<uint64_t> &mcause() override { return mcause_; }
@@ -310,17 +336,11 @@ class BaseCore : public sc_module, public ilha::WarpCtrl {
 
   void McycleIncrement() { mcycle_ = mcycle_.read() + 1; }
 
-  virtual void ExecuteWarpCtrlCommand(const ilha::WarpCtrlCommand &cmd) = 0;
+  // Whether the core accepts WarpCtrl commands, raised by each core.
+  sc_signal<bool> cmd_ready_;
 
-  void WarpCtrlCommandThread() {
-    wait(SC_ZERO_TIME);
-    if (warp_cmd.size() == 0) {
-      return;
-    }
-    while (true) {
-      ExecuteWarpCtrlCommand(warp_cmd->get());
-    }
-  }
+  // Applies the command's control effects without waiting.
+  virtual void ExecuteWarpCtrlCommand(const ilha::WarpCtrlCommand &cmd) = 0;
 };
 
 }  // namespace simtix

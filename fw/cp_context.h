@@ -15,6 +15,10 @@ struct cp_kernel_state {
   FsaCompletionToken completion_token;
   volatile uint32_t in_use;
   uint32_t wg_left;
+  /* The first failure's result and trap CSRs, or success and zeros,
+   * published when the last work-group retires. */
+  FsaCompletionResult result;
+  FsaKernelStatus status;
 };
 
 struct cp_cache_state {

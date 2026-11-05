@@ -39,16 +39,15 @@ target("ilha-platform-data-test", function()
   )
 end)
 
-target(
-  "lv",
-  function()
-    add_tests("ilha/integration/wg_lifecycle", {
-      runargs = { path.join(os.scriptdir(), "integration/wg_lifecycle.lua") },
+target("lv", function()
+  for _, core in ipairs({ "atomic", "pipelined" }) do
+    add_tests("ilha/integration/wg_lifecycle/" .. core, {
+      runargs = { path.join(os.scriptdir(), "integration/wg_lifecycle.lua"), core },
       rundir = path.directory(os.scriptdir()),
       run_timeout = 30000,
     })
   end
-)
+end)
 
 target("ilha-system-test", function()
   set_kind("binary")

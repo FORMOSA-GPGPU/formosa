@@ -144,6 +144,8 @@ void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
   kernel_state_buf[kid].in_use = 1;
   kernel_state_buf[kid].completion_token = packet->completion_token;
   kernel_state_buf[kid].wg_left = num_x * num_y * num_z;
+  kernel_state_buf[kid].result = FSA_COMPLETION_RESULT_SUCCESS;
+  kernel_state_buf[kid].status = (FsaKernelStatus){0};
 
   if (kernel_state_buf[kid].wg_left == 0) {
     signal_kernel_failure(packet, kFsaKernelCompletionBadDimension);

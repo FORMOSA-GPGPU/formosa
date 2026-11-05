@@ -143,10 +143,17 @@ class Frontend : public sc_module {
         return;
       }
 
-      next_pc_[wid] = wpc;
-      fetch_pc_[wid] = wpc;
-      Flush(wid);
+      Restart(wid, wpc);
     }
+  }
+
+  // Fetch the warp from wpc afresh, dropping its I-Buffer. Unlike Redirect,
+  // it does not wait for a next PC that may have been dropped while the warp
+  // was inactive.
+  void Restart(uint32_t wid, uint64_t wpc) {
+    next_pc_[wid] = wpc;
+    fetch_pc_[wid] = wpc;
+    Flush(wid);
   }
 
   void set_target(lv::TlmSource::Target *target) {

@@ -68,20 +68,17 @@ WGInitializer::WGInitializer(const sc_module_name &name, const Param &param)
           param.sink_fifo_size),
       core_(nullptr),
       dispatch_fifo_("dispatch_fifo", param.fifo_size),
-      warp_cmd_fifo_("warp_cmd_fifo", param.fifo_size),
       dequeue_fifo_("dequeue_fifo", param.fifo_size),
       processing_wg_info_(param.wg_resident_limit),
       processing_wg_ids_(param.warps_per_core, -1),
       cwm_(static_cast<int>(kWarpsPerCore)),
       release_cwm_(static_cast<int>(kWarpsPerCore)),
-      pending_resume_mask_(static_cast<int>(kWarpsPerCore)),
-      completed_warps_scratch_(param.wg_resident_limit, 0),
+      pending_termination_mask_(false, static_cast<int>(kWarpsPerCore)),
       pf_packets_(),
       on_wg_dispatch_(param.on_wg_dispatch),
       on_wg_retire_(param.on_wg_retire) {
   // Initialize the hardware info CSR
   csr_.wg_resident_limit = param.wg_resident_limit;
-  pending_resume_mask_ = 0;
   wg_scratch_.reserve(param.wg_resident_limit);
   retire_infos_scratch_.reserve(param.wg_resident_limit);
 
@@ -104,7 +101,7 @@ WGInitializer::~WGInitializer() = default;
 void WGInitializer::set_core(WarpCtrl *core) {
   core_ = core;
   if (core_ != nullptr) {
-    core_->warp_cmd.bind(warp_cmd_fifo_);
+    warp_cmd_.bind(core_->warp_cmd);
   }
 }
 
@@ -214,12 +211,9 @@ void WGInitializer::StateChangeThread() {
     wait(core_->idle_mask_changed_event() | core_->active_mask_changed_event() |
          core_->barrier_mask_changed_event() |
          core_->exception_mask_changed_event() |
-         dispatch_fifo_.data_written_event());
-    // A queued Resume is no longer pending once its warps leave the barrier.
-    // Keep observing the core while ProcessThread is blocked.
-    pending_resume_mask_ = pending_resume_mask_ & core_->barrier_mask();
-    // ProcessThread can block on full command/dequeue FIFOs. Preserve state
-    // changes during those waits so completed warps are not left unhandled.
+         dispatch_fifo_.data_written_event() | warp_cmd_->ok_to_put());
+    // Keep changes made while ProcessThread waits for dequeue capacity, and
+    // retry refused commands once the core can accept them.
     process_pending_ = true;
     process_event_.notify();
   }
@@ -230,20 +224,23 @@ void WGInitializer::ProcessThread() {
     if (!process_pending_) wait(process_event_);
     process_pending_ = false;
     HandleExceptionWarps();
+    IssueTerminations();
+    HandleStoppedWarps();
     HandleBarrierWarps();
     DispatchRemainingWarps();
     DispatchNewWG();
   }
 }
 
-void WGInitializer::EmitWarpCtrlCommand(const WarpCtrlCommand &cmd) {
-  warp_cmd_fifo_.put(cmd);
+bool WGInitializer::TryWarpCtrlCommand(const WarpCtrlCommand &cmd) {
+  // Callers derive commands from the current state, so the next pass retries
+  // a refused one.
+  return warp_cmd_->nb_put(cmd);
 }
 
 void WGInitializer::HandleExceptionWarps() {
-  const sc_dt::sc_bv_base &active_mask = core_->active_mask();
-  const sc_dt::sc_bv_base &barrier_mask = core_->barrier_mask();
-  const sc_dt::sc_bv_base &exception_mask = core_->exception_mask();
+  const sc_dt::sc_bv_base exception_mask =
+      core_->exception_mask() & ~pending_termination_mask_;
   const auto &mcause = core_->mcause();
   const auto &mepc = core_->mepc();
   const auto &mtval = core_->mtval();
@@ -252,16 +249,12 @@ void WGInitializer::HandleExceptionWarps() {
     return;
   }
 
-  std::fill(completed_warps_scratch_.begin(), completed_warps_scratch_.end(),
-            0);
-  wg_scratch_.clear();
-  retire_infos_scratch_.clear();
-
-  cwm_ = 0;
-  release_cwm_ = 0;
+  // IssueTerminations releases these warps, and aborts the rest of a
+  // work-group that trapped.
   for (int wg_idx = 0; wg_idx < static_cast<int>(processing_wg_info_.size());
        ++wg_idx) {
-    if (!processing_wg_info_[wg_idx].busy) {
+    ProcessingWGInfo &info = processing_wg_info_[wg_idx];
+    if (!info.busy) {
       continue;
     }
 
@@ -272,87 +265,112 @@ void WGInitializer::HandleExceptionWarps() {
       continue;
     }
 
-    bool has_error_exception = CheckForErrorException(
-        exception_mask, mcause, processing_wg_ids_, wg_idx);
-    if (has_error_exception) {
-      wg_scratch_.push_back(wg_idx);
-      for (int i = 0; i < cwm_.length(); ++i) {
-        if ((active_mask[i].to_bool() || barrier_mask[i].to_bool()) &&
-            processing_wg_ids_[i] == wg_idx) {
-          cwm_[i] = 1;
-        }
-      }
+    // The first trap stops the rest of the work-group. Later traps and exits
+    // of its warps only complete them.
+    if (!info.aborting && CheckForErrorException(exception_mask, mcause,
+                                                 processing_wg_ids_, wg_idx)) {
+      int report_warp_index =
+          FindFirstExceptionWarp(exception_mask, mcause, processing_wg_ids_,
+                                 wg_idx, /*prefer_error=*/true);
+      info.aborting = true;
+      info.completion_info =
+          WGDequeueInfo(info.kernel_pc, info.info_ptr, WGStatus::kWGException,
+                        mcause[report_warp_index], mepc[report_warp_index],
+                        mtval[report_warp_index]);
+
+      // Its warps that are not activated yet never run.
+      info.completed_warps += info.warp_count - info.activated_warps;
+      info.activated_warps = info.warp_count;
+      TraceWGSlotInstant(wg_idx, "Abort warps on exception");
     }
 
-    for (int i = 0; i < exception_mask.length(); ++i) {
-      if (exception_mask[i].to_bool() && processing_wg_ids_[i] == wg_idx) {
-        release_cwm_[i] = 1;
-        completed_warps_scratch_[wg_idx]++;
-      }
+    if (!info.aborting) {
+      info.completion_info =
+          WGDequeueInfo(info.kernel_pc, info.info_ptr, WGStatus::kWGOkay,
+                        mcause[first_warp_index], mepc[first_warp_index],
+                        mtval[first_warp_index]);
     }
+  }
+}
 
-    uint64_t next_completed_warps =
-        processing_wg_info_[wg_idx].completed_warps +
-        completed_warps_scratch_[wg_idx];
-    if (!has_error_exception &&
-        processing_wg_info_[wg_idx].warp_count != next_completed_warps) {
+void WGInitializer::IssueTerminations() {
+  const sc_dt::sc_bv_base &active_mask = core_->active_mask();
+  const sc_dt::sc_bv_base &barrier_mask = core_->barrier_mask();
+  const sc_dt::sc_bv_base &exception_mask = core_->exception_mask();
+
+  // Derived from the current state on every pass, so a refused command is
+  // retried, and a warp that traps while its Abort is refused is released.
+  // An owned warp outside E is in A or B, since an accepted Activate applied.
+  cwm_ = 0;
+  release_cwm_ = 0;
+  for (int i = 0; i < cwm_.length(); ++i) {
+    const int wg_idx = processing_wg_ids_[i];
+    if (wg_idx < 0 || pending_termination_mask_[i].to_bool()) {
+      continue;
+    }
+    if (exception_mask[i].to_bool()) {
+      release_cwm_[i] = 1;
+    } else if (processing_wg_info_[wg_idx].aborting &&
+               (active_mask[i].to_bool() || barrier_mask[i].to_bool())) {
+      cwm_[i] = 1;
+    }
+  }
+
+  if (cwm_ != 0 && TryWarpCtrlCommand(WarpCtrlCommand::Abort(cwm_))) {
+    pending_termination_mask_ |= cwm_;
+  }
+  if (release_cwm_ != 0 &&
+      TryWarpCtrlCommand(WarpCtrlCommand::Release(release_cwm_))) {
+    pending_termination_mask_ |= release_cwm_;
+  }
+}
+
+void WGInitializer::HandleStoppedWarps() {
+  const sc_dt::sc_bv_base &idle_mask = core_->idle_mask();
+
+  retire_infos_scratch_.clear();
+  for (int wg_idx = 0; wg_idx < static_cast<int>(processing_wg_info_.size());
+       ++wg_idx) {
+    ProcessingWGInfo &info = processing_wg_info_[wg_idx];
+    if (!info.busy) {
       continue;
     }
 
-    int report_warp_index =
-        FindFirstExceptionWarp(exception_mask, mcause, processing_wg_ids_,
-                               wg_idx, has_error_exception);
-    WGDequeueInfo dequeue_info;
-    dequeue_info.status =
-        has_error_exception ? WGStatus::kWGException : WGStatus::kWGOkay;
-    dequeue_info.kernel_pc = processing_wg_info_[wg_idx].kernel_pc;
-    dequeue_info.info_ptr = processing_wg_info_[wg_idx].info_ptr;
-    dequeue_info.mcause = mcause[report_warp_index];
-    dequeue_info.mepc = mepc[report_warp_index];
-    dequeue_info.mtval = mtval[report_warp_index];
-    retire_infos_scratch_.emplace_back(wg_idx, dequeue_info);
-  }
-
-  if (cwm_ != 0) {
-    EmitWarpCtrlCommand(WarpCtrlCommand::Abort(cwm_));
-    for (int wg_idx : wg_scratch_) {
-      TraceWGSlotInstant(wg_idx, "Abort warps on exception");
+    // Abort and Release complete, and ownership ends, once the warp is idle.
+    for (int i = 0; i < idle_mask.length(); ++i) {
+      if (processing_wg_ids_[i] == wg_idx && idle_mask[i].to_bool() &&
+          pending_termination_mask_[i].to_bool()) {
+        pending_termination_mask_[i] = 0;
+        processing_wg_ids_[i] = -1;
+        info.completed_warps++;
+      }
     }
-  }
 
-  if (release_cwm_ != 0) {
-    EmitWarpCtrlCommand(WarpCtrlCommand::Release(release_cwm_));
-  }
-
-  for (int i = 0; i < cwm_.length(); ++i) {
-    if (cwm_[i].to_bool() || release_cwm_[i].to_bool()) {
-      processing_wg_ids_[i] = -1;
-      pending_resume_mask_[i] = 0;
+    if (info.completed_warps == info.warp_count) {
+      retire_infos_scratch_.emplace_back(wg_idx, info.completion_info);
     }
-  }
-
-  for (int wg_idx = 0;
-       wg_idx < static_cast<int>(completed_warps_scratch_.size()); ++wg_idx) {
-    processing_wg_info_[wg_idx].completed_warps +=
-        completed_warps_scratch_[wg_idx];
   }
 
   for (const auto &[wg_idx, dequeue_info] : retire_infos_scratch_) {
-    dequeue_fifo_.write(dequeue_info);
-    TraceWGSlotInstant(wg_idx, dequeue_info.status == WGStatus::kWGException
-                                   ? "WG exception complete"
-                                   : "WG complete");
-    LV_TRACE_END(pf_packets_[wg_idx]);
-    processing_wg_info_[wg_idx].busy = false;
-    processing_wg_count_--;
-    processing_wg_order_.erase(std::remove(processing_wg_order_.begin(),
-                                           processing_wg_order_.end(), wg_idx),
-                               processing_wg_order_.end());
-    if (on_wg_retire_) {
-      (*on_wg_retire_)(dequeue_info.kernel_pc, dequeue_info.info_ptr,
-                       dequeue_info.mcause, dequeue_info.mepc,
-                       dequeue_info.mtval);
-    }
+    RetireWG(wg_idx, dequeue_info);
+  }
+}
+
+void WGInitializer::RetireWG(int wg_idx, const WGDequeueInfo &dequeue_info) {
+  dequeue_fifo_.write(dequeue_info);
+  TraceWGSlotInstant(wg_idx, dequeue_info.status == WGStatus::kWGException
+                                 ? "WG exception complete"
+                                 : "WG complete");
+  LV_TRACE_END(pf_packets_[wg_idx]);
+  processing_wg_info_[wg_idx].busy = false;
+  processing_wg_count_--;
+  processing_wg_order_.erase(std::remove(processing_wg_order_.begin(),
+                                         processing_wg_order_.end(), wg_idx),
+                             processing_wg_order_.end());
+  if (on_wg_retire_) {
+    (*on_wg_retire_)(dequeue_info.kernel_pc, dequeue_info.info_ptr,
+                     dequeue_info.mcause, dequeue_info.mepc,
+                     dequeue_info.mtval);
   }
 }
 
@@ -367,22 +385,18 @@ void WGInitializer::HandleBarrierWarps() {
   wg_scratch_.clear();
   for (int wg_idx = 0; wg_idx < static_cast<int>(processing_wg_info_.size());
        ++wg_idx) {
-    if (!processing_wg_info_[wg_idx].busy) {
+    // An aborting WG's barrier warps are being aborted, not resumed.
+    if (!processing_wg_info_[wg_idx].busy ||
+        processing_wg_info_[wg_idx].aborting) {
       continue;
     }
 
     // The number of warps reaching this WG's barrier.
     uint32_t barrier_count = 0;
-    bool has_pending_resume = false;
     for (int i = 0; i < barrier_mask.length(); ++i) {
       if (processing_wg_ids_[i] == wg_idx) {
         barrier_count += barrier_mask[i].to_bool();
-        has_pending_resume |= pending_resume_mask_[i].to_bool();
       }
-    }
-
-    if (has_pending_resume) {
-      continue;
     }
 
     ProcessingWGInfo &info = processing_wg_info_[wg_idx];
@@ -418,9 +432,9 @@ void WGInitializer::HandleBarrierWarps() {
     return;
   }
 
-  // Reserve before put(), which can wait for command FIFO capacity.
-  pending_resume_mask_ |= cwm_;
-  EmitWarpCtrlCommand(WarpCtrlCommand::Resume(cwm_));
+  if (!TryWarpCtrlCommand(WarpCtrlCommand::Resume(cwm_))) {
+    return;
+  }
   for (int wg_idx : wg_scratch_) {
     TraceWGSlotInstant(wg_idx, "Barrier resume");
   }
@@ -505,8 +519,10 @@ void WGInitializer::DispatchRemainingWarps() {
   }
 
   auto &info = processing_wg_info_[current_wg_idx];
-  EmitWarpCtrlCommand(WarpCtrlCommand::Activate(
-      cwm_, info.kernel_pc, info.info_ptr, info.activated_warps));
+  if (!TryWarpCtrlCommand(WarpCtrlCommand::Activate(
+          cwm_, info.kernel_pc, info.info_ptr, info.activated_warps))) {
+    return;
+  }
 
   processing_wg_info_[current_wg_idx].activated_warps += warps_to_activate;
   for (int i = 0; i < cwm_.length(); ++i) {
@@ -538,6 +554,11 @@ void WGInitializer::DispatchNewWG() {
       return;
     }
 
+    // Dequeue the work-group only if its Activate will be accepted.
+    if (!warp_cmd_->nb_can_put()) {
+      return;
+    }
+
     WGDispatchInfo info;
     dispatch_fifo_.nb_read(info);
 
@@ -559,8 +580,11 @@ void WGInitializer::DispatchNewWG() {
     }
 
     // Activate warps
-    EmitWarpCtrlCommand(
-        WarpCtrlCommand::Activate(cwm_, info.kernel_pc, info.info_ptr, 0));
+    if (!TryWarpCtrlCommand(WarpCtrlCommand::Activate(cwm_, info.kernel_pc,
+                                                      info.info_ptr, 0))) {
+      LV_FATAL("{}: the core refused an Activate after it could accept one",
+               name());
+    }
 
     ProcessingWGInfo wg_info;
     wg_info.busy = 1;

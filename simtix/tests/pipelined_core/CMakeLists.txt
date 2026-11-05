@@ -8,6 +8,15 @@ set(WIDTHS_LIST 1 2 4)
 set(IWIS_LIST OFF ON)
 
 add_simtix_unit_test(stack_remap_table stack_remap_table.lua)
+add_simtix_unit_test(pipelined_frontend_restart frontend_restart.lua)
+
+add_executable(simtix_pipelined_abort_test abort_test.cc)
+target_include_directories(simtix_pipelined_abort_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(simtix_pipelined_abort_test PRIVATE simtix)
+add_test(NAME simtix.pipelined_abort COMMAND simtix_pipelined_abort_test)
+add_test(NAME simtix.pipelined_abort.ghost COMMAND simtix_pipelined_abort_test ghost)
+set_tests_properties(simtix.pipelined_abort simtix.pipelined_abort.ghost
+  PROPERTIES LABELS "simtix;unit" TIMEOUT 10)
 
 foreach(nw ${WARPS_LIST})
   foreach(ns ${SUBCORES_LIST})
