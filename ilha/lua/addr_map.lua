@@ -118,7 +118,7 @@ local AddressMap = {
   global_alloc_size = 0x7e000000,
   noncache_region_base = 0x80000000,
   noncache_region_size = 0x1000000,
-  per_thread_stack_size = 0x400,
+  per_thread_stack_size = 0x800,
 
   max_size = 0xFFFFFFFFFFFFF,
 }
