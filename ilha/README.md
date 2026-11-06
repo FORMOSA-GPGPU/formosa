@@ -97,7 +97,9 @@ system through the `ilha.config` singleton.
 I-cache fields use `simtix.Cache.Param`; D-cache fields use
 `simtix.banked_cache.param`. Unspecified component fields use `LV_SCHEMA`
 defaults or the owning Lua composition's defaults. APCCAS2026 explicitly
-selects its D-cache capacity, WriteBack policy, and MSHR count in `ilha.config`.
+selects its D-cache capacity, WriteThrough policy, and MSHR count in
+`ilha.config`. L1 D-caches are not coherent with each other, so
+`simtix.pipelined_sm` rejects a WriteBack D-cache when `num_sm` is above 1.
 Parameter annotations provide LuaLS completion and navigation; system fields
 are inferred from the defaults table. CacheController is wired inside the SM
 and is not an `sm.param` field.
@@ -176,10 +178,18 @@ Config.system.num_sm = 2
 
 SystemInfo is a `simple.ConstantTable` on `fab_agent` at `0x60000`, accessible
 to both the host and CP. ABI v1 contains version, length, SM count, warp/lane
-counts, local-memory size, shared-cache size, and cache-block size. Its valid
-length is `0x40`; each field is read individually as an unsigned 64-bit
-little-endian value using generated offsets. HAL validates version and length
-on connection; there is no hardware-configuration environment dump.
+counts, local-memory size, shared-cache size, cache-block size, and the
+global-allocation base. Its valid length is `0x48`; each field is read
+individually as an unsigned 64-bit little-endian value using generated offsets.
+HAL validates version and length on connection; there is no
+hardware-configuration environment dump.
+
+Work-group stacks start at the fixed `stack_base`. Firmware gives every
+resident work-group slot a stack for `threads_per_core` threads, so the system
+reserves `num_sm × wg_resident_limit × threads_per_core × per_thread_stack_size`
+bytes and starts global allocations at the next multiple of
+`global_alloc_align` (`SystemConfig:global_alloc_base()`). SystemInfo reports
+that base, so a larger configuration needs no address-map or SDK rebuild.
 
 DMA offsets/status and CLINT offsets come from the headers under
 `lv/device/include/lv/mmio/`. Software driver APIs live separately under

@@ -127,7 +127,10 @@ void test_fsa_hal_init() {
       description.local_mem_size_per_core != FSA_LMEM_SIZE ||
       description.cache_size != 0x20000 || description.cache_line_size != 64 ||
       description.global_mem_size != 2147483648ULL ||
-      description.max_allocation_size != 2113929216ULL) {
+      // mmio_server.cc reports GLOBAL_ALLOC_BASE = FSA_STACK_BASE + 32 MiB.
+      description.max_allocation_size != FSA_GLOBAL_MEM_BASE +
+                                             FSA_GLOBAL_MEM_SIZE -
+                                             (FSA_STACK_BASE + 0x2000000)) {
     std::cerr << "[FORMOSA HAL Test] Unexpected Device Description"
               << std::endl;
     exit(-1);

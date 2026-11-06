@@ -41,6 +41,24 @@ int cp_wgi_buf_init() {
     wgi_buf_len += limit;
   }
 
+  /* Dispatch gives slot i the stacks at STACK_BASE + i * threads_per_core *
+   * PER_THREAD_STACK_SIZE for the SM the work-group runs on, so every slot's
+   * stacks must end below the global allocations on every SM. */
+  const uint64_t threads_per_slot =
+      (cp_hwinfo_global_alloc_base() - STACK_BASE) / PER_THREAD_STACK_SIZE /
+      wgi_buf_len;
+  for (size_t i = 0; i < g_num_sm; ++i) {
+    if (cp_hwinfo_threads_per_core(i) > threads_per_slot) {
+      fprintf(stderr,
+              "\033[31mStacks of %lu WGI slots with THREADS_PER_CORE=%lu for "
+              "SM %lu cross GLOBAL_ALLOC_BASE=0x%lx\033[0m\r\n",
+              (unsigned long)wgi_buf_len,
+              (unsigned long)cp_hwinfo_threads_per_core(i), (unsigned long)i,
+              (unsigned long)cp_hwinfo_global_alloc_base());
+      return -1;
+    }
+  }
+
   for (size_t i = 0; i < wgi_buf_len; i++) {
     wgi_buf[i].in_use = 0;
     wgi_buf[i].stack_remap_slot = -1;

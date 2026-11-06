@@ -12,7 +12,6 @@
 struct cp_kernel_state kernel_state_buf[CP_KERNEL_STATE_BUF_SIZE] = {0};
 const int kernel_state_buf_size = CP_KERNEL_STATE_BUF_SIZE;
 
-struct cp_cache_state cache_state = {0};
 struct cp_memory_copy_state memory_copy_state = {0};
 
 int cp_kernel_state_buf_alloc() {

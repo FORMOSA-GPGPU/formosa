@@ -99,6 +99,10 @@ void initialize_mmio_registers() {
       0x20000;
   mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_CACHE_BLOCK_SIZE] =
       64;
+  // Four large SMs' 32 MiB of stacks: unlike the default system's base, this
+  // shows whether HAL uses the reported value.
+  mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_GLOBAL_ALLOC_BASE] =
+      FSA_STACK_BASE + 0x2000000;
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_SIZE] =
       8;  // Example: 8 packets
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_BASE] =

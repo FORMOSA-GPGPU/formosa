@@ -13,9 +13,8 @@
 namespace {
 
 constexpr size_t kCopySize = 16;
-constexpr uintptr_t kDeviceAddr = FSA_GLOBAL_MEM_BASE + 0x02001000;
-
-bool host_to_device(const std::array<uint8_t, kCopySize> &input,
+bool host_to_device(uintptr_t destination,
+                    const std::array<uint8_t, kCopySize> &input,
                     FsaCompletionToken *completion) {
   FsaMemoryCopyInfo info{};
   info.struct_size = sizeof(info);
@@ -23,7 +22,7 @@ bool host_to_device(const std::array<uint8_t, kCopySize> &input,
   info.source.range.address = reinterpret_cast<uintptr_t>(input.data());
   info.source.range.size = input.size();
   info.destination.domain = kFsaMemoryDomainDevice;
-  info.destination.range.address = kDeviceAddr;
+  info.destination.range.address = destination;
   info.destination.range.size = input.size();
   const FsaCommandSubmitStatus submit = fsa_cmd_memory_copy(&info, completion);
   if (submit != kFsaCommandSubmitAccepted) {
@@ -50,6 +49,12 @@ int main() {
     std::cerr << "HAL init failed\n";
     return 1;
   }
+  void *device_buffer = nullptr;
+  if (fsa_malloc(&device_buffer, 0x100) != 0) {
+    std::cerr << "device allocation failed\n";
+    return 1;
+  }
+  const uintptr_t device_addr = reinterpret_cast<uintptr_t>(device_buffer);
 
   std::array<uint8_t, kCopySize> input{};
   for (size_t i = 0; i < input.size(); ++i) {
@@ -58,7 +63,7 @@ int main() {
 
   /* Pre-reset copy must succeed under live firmware. */
   FsaCompletionToken before = 0;
-  if (!host_to_device(input, &before)) {
+  if (!host_to_device(device_addr, input, &before)) {
     std::cerr << "pre-reset memory copy failed\n";
     return 1;
   }
@@ -77,7 +82,7 @@ int main() {
   pending_info.source.range.address = reinterpret_cast<uintptr_t>(input.data());
   pending_info.source.range.size = input.size();
   pending_info.destination.domain = kFsaMemoryDomainDevice;
-  pending_info.destination.range.address = kDeviceAddr + 0x40;
+  pending_info.destination.range.address = device_addr + 0x40;
   pending_info.destination.range.size = input.size();
   if (fsa_cmd_memory_copy(&pending_info, &pending) !=
       kFsaCommandSubmitAccepted) {
@@ -110,7 +115,7 @@ int main() {
 
   /* Post-reset copy must succeed with a new boot generation. */
   FsaCompletionToken after = 0;
-  if (!host_to_device(input, &after)) {
+  if (!host_to_device(device_addr, input, &after)) {
     std::cerr << "post-reset memory copy failed\n";
     return 1;
   }

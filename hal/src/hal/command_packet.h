@@ -115,7 +115,7 @@ typedef struct {
   // [127:64]   - addr
   uint64_t addr;
 
-  // [191:128]  - size
+  // [191:128]  - size (0 selects the whole cache and ignores addr)
   uint64_t size;
 
   // [447:192] - reserved1

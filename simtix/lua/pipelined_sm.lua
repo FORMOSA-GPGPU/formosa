@@ -69,12 +69,12 @@ function PipelinedSM.new(name, options)
   dcache_param.write_hit_policy = dcache_param.write_hit_policy or "WriteThrough"
   dcache_param.block_size_bytes = dcache_param.block_size_bytes or config.cache_block_size
   dcache_param.non_cacheable_regions = config:effective_non_cacheable_regions()
-  if id == 0 and config.num_sm > 1 and dcache_param.write_hit_policy == "WriteBack" then
-    lv.warning(
-      "PipelinedSM: multiple SMs with WriteBack L1 D-caches can overwrite other SMs' "
-        .. "updates, including atomic results, when sharing a cache line. Use WriteThrough."
-    )
-  end
+  -- L1 D-caches are not coherent with each other, so a write-back line would
+  -- overwrite other SMs' updates to the same line, atomic results included.
+  assert(
+    config.num_sm == 1 or dcache_param.write_hit_policy ~= "WriteBack",
+    "PipelinedSM: multiple SMs require WriteThrough L1 D-caches"
+  )
 
   local core_param = {
     num_warps = config.warps_per_core,
@@ -201,7 +201,7 @@ function PipelinedSM.new(name, options)
         granularity = 8,
         stack_group_size = config:effective_stack_remap_group_size(),
         stack_start = addr.stack_base,
-        stack_end = addr.global_alloc_base - 1,
+        stack_end = config:global_alloc_base(addr) - 1,
         stack_size_per_thread = addr.per_thread_stack_size,
       }
       local lsu

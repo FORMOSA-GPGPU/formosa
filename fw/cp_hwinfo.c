@@ -13,6 +13,7 @@
 #include "cp_stack_remap.h"
 
 uint64_t g_num_sm = 0;
+static uint64_t g_global_alloc_base = 0;
 static uint64_t g_per_sm_threads[FORMOSA_MAX_NUM_SM] = {0};
 static uint64_t g_per_sm_wg_resident_limits[FORMOSA_MAX_NUM_SM] = {0};
 
@@ -33,6 +34,8 @@ uint64_t cp_hwinfo_threads_per_core(size_t sm_id) {
   return g_per_sm_threads[sm_id];
 }
 
+uint64_t cp_hwinfo_global_alloc_base(void) { return g_global_alloc_base; }
+
 void cp_hwinfo_init(void) {
   volatile struct system_info_mmio *system_info =
       (volatile struct system_info_mmio *)SYSTEM_INFO_BASE;
@@ -50,6 +53,13 @@ void cp_hwinfo_init(void) {
   if (g_num_sm > FORMOSA_MAX_NUM_SM) {
     cp_panic("NUM_SM=%lu exceeds firmware max=%d", (unsigned long)g_num_sm,
              FORMOSA_MAX_NUM_SM);
+  }
+  /* Work-group stacks occupy [FSA_STACK_BASE, GLOBAL_ALLOC_BASE). */
+  g_global_alloc_base = system_info->GLOBAL_ALLOC_BASE;
+  if (g_global_alloc_base <= FSA_STACK_BASE ||
+      g_global_alloc_base >= FSA_GLOBAL_MEM_BASE + FSA_GLOBAL_MEM_SIZE) {
+    cp_panic("Invalid GLOBAL_ALLOC_BASE=0x%lx",
+             (unsigned long)g_global_alloc_base);
   }
 
   for (size_t i = 0; i < g_num_sm; ++i) {

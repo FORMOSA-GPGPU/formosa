@@ -255,9 +255,19 @@ typedef struct {
 FsaCommandSubmitStatus fsa_cmd_start_kernel(const FsaKernelLaunchInfo *info,
                                             FsaCompletionToken *completion);
 
+/**
+ * Enqueue a write-back of dirty SM data-cache lines in \p range.
+ * A zero range size selects the whole cache and ignores the address.
+ * \return FsaCommandSubmitStatus.
+ */
 FsaCommandSubmitStatus fsa_cmd_cache_flush(const FsaMemoryRange *range,
                                            FsaCompletionToken *completion);
 
+/**
+ * Enqueue an invalidation of SM instruction- and data-cache lines in \p range.
+ * A zero range size selects the whole cache and ignores the address.
+ * \return FsaCommandSubmitStatus.
+ */
 FsaCommandSubmitStatus fsa_cmd_cache_invalidate(const FsaMemoryRange *range,
                                                 FsaCompletionToken *completion);
 

@@ -15,5 +15,7 @@ void cp_hwinfo_init(void);
 
 uint64_t cp_hwinfo_sm_wg_resident_limit(size_t sm_id);
 uint64_t cp_hwinfo_threads_per_core(size_t sm_id);
+/* First global-allocation address; work-group stacks end below it. */
+uint64_t cp_hwinfo_global_alloc_base(void);
 
 #endif

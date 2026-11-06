@@ -13,6 +13,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "cp_cache.h"
 #include "cp_dispatch.h"
 #include "cp_hwinfo.h"
 #include "cp_lmem_allocator.h"

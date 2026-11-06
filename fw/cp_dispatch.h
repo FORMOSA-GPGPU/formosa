@@ -9,11 +9,8 @@
 
 #include <stdbool.h>
 
-#include "cp_defs.h"
-
 void cp_dispatch(void *args);
 
-void handle_cache_control_packet(union Packet *cmd, CacheOpMode mode);
 bool cp_has_active_kernel_or_cache(void);
 
 #endif

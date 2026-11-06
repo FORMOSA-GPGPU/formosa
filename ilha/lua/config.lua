@@ -69,6 +69,20 @@ function SystemConfig:effective_stack_remap_group_size()
   return self.stack_remap_group_size ~= 0 and self.stack_remap_group_size or self:threads_per_core()
 end
 
+--- First global-allocation address, published to firmware and HAL in SystemInfo.
+--- Firmware gives every resident work-group slot a threads_per_core stack.
+---@param address_map? ilha.addr_map Address map that places the stacks; ilha.addr_map by default
+---@return integer
+function SystemConfig:global_alloc_base(address_map)
+  local map = address_map or addr
+  local stacks = self.num_sm
+    * self.wg_resident_limit
+    * self:threads_per_core()
+    * map.per_thread_stack_size
+  local align = map.global_alloc_align
+  return math.ceil((map.stack_base + stacks) / align) * align
+end
+
 ---@return {addr: integer, size: integer}[]
 function SystemConfig:effective_non_cacheable_regions()
   if #self.non_cacheable_regions > 0 then return self.non_cacheable_regions end
@@ -99,6 +113,10 @@ function SystemConfig:validate()
   assert(
     self.stack_remap_entries <= addr.stack_remap_max_entries,
     "system.stack_remap_entries must not exceed the MMIO ABI maximum"
+  )
+  assert(
+    self:global_alloc_base() < addr.global_mem_base + addr.global_mem_size,
+    "system.num_sm * wg_resident_limit * threads_per_core stacks must leave global memory"
   )
 end
 

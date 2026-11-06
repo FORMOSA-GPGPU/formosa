@@ -21,17 +21,6 @@ struct cp_kernel_state {
   FsaKernelStatus status;
 };
 
-struct cp_cache_state {
-  // There are undergoing operation
-  volatile uint32_t pending;
-  // One bit per SM to indicate that the cache operation for it is pending
-  volatile uint64_t pending_mask;
-  // The mode that the cache is currently handling
-  CacheOpMode mode;
-  /* Host token, or 0 for firmware-internal cache ops. */
-  FsaCompletionToken completion_token;
-};
-
 enum cp_memory_copy_phase {
   kMemoryCopyPhaseIdle = 0,
   kMemoryCopyPhaseWaitPredecessor,
@@ -57,7 +46,6 @@ struct cp_memory_copy_state {
 extern struct cp_kernel_state kernel_state_buf[];
 extern const int kernel_state_buf_size;
 
-extern struct cp_cache_state cache_state;
 extern struct cp_memory_copy_state memory_copy_state;
 /* Return id if success, -1 if no free buf */
 int cp_kernel_state_buf_alloc();

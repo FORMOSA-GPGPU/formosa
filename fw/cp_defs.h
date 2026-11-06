@@ -87,6 +87,9 @@ struct system_info_mmio {
   volatile uint64_t ABI_VERSION;
   volatile uint64_t LENGTH_BYTES;
   volatile uint64_t NUM_SM;
+  /* Host capabilities; firmware reads per-SM values from SM MMIO instead. */
+  volatile uint64_t RESERVED[5];
+  volatile uint64_t GLOBAL_ALLOC_BASE;
 };
 
 /* Shared dual-port DMA CSR (Host DMA and Device DMA). */
@@ -120,6 +123,9 @@ _Static_assert(offsetof(struct system_info_mmio, LENGTH_BYTES) ==
 _Static_assert(offsetof(struct system_info_mmio, NUM_SM) ==
                    FSA_SYSTEM_INFO_OFF_NUM_SM,
                "SystemInfo NUM_SM offset mismatch");
+_Static_assert(offsetof(struct system_info_mmio, GLOBAL_ALLOC_BASE) ==
+                   FSA_SYSTEM_INFO_OFF_GLOBAL_ALLOC_BASE,
+               "SystemInfo GLOBAL_ALLOC_BASE offset mismatch");
 
 struct sm_mmio {
   // Workgroup Initializer

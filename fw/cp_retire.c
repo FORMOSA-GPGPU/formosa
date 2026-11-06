@@ -51,48 +51,6 @@ static bool sm_free(volatile struct sm_mmio **smp) {
   return false;
 }
 
-static bool cache_done() {
-  // Early return if there is no undergoing cache operations
-  if (cache_state.pending == 0) {
-    return false;
-  }
-  /* A pending operation with no mask is still publishing its MMIO starts.
-   * Do not sample START bits until the issuer has made the mask visible. */
-  if (cache_state.pending_mask == 0) {
-    return false;
-  }
-  DPRINTF("[R]CacheCheckAll:%lu\r\n", cache_state.pending_mask);
-
-  // Iterate through every SM and update the pending_mask
-  for (size_t i = 0; i < g_num_sm; i++) {
-    // Skip if the SM is not pending
-    if ((cache_state.pending_mask & (1ULL << i)) == 0) {
-      continue;
-    }
-
-    volatile struct sm_mmio *sm = sm_mmio_at((unsigned)i);
-    bool icache_done =
-        cache_state.mode != kCacheOpInvalidate || !sm->ICACHE_CONTROL_START;
-    bool dcache_done = !sm->DCACHE_CONTROL_START;
-
-    DPRINTF("[R]CacheCheck:%zu %d\r\n", i, icache_done && dcache_done);
-
-    // If both ICache and DCache are done, clear the pending bit
-    if (icache_done && dcache_done) {
-      cache_state.pending_mask &= ~(1ULL << i);
-    }
-  }
-
-  // Only when all SMs are not pending will the function return true.
-  DPRINTF("[R]CacheCheckAll:%lu\r\n", cache_state.pending_mask);
-  if (cache_state.pending_mask == 0) {
-    return true;
-  }
-
-  // Not finished yet.
-  return false;
-}
-
 static void free_wg_local_memory(const struct cp_wgi_buf *wginfo) {
   if (wginfo->smid < 0 || (uint64_t)wginfo->smid >= g_num_sm) {
     return;
@@ -207,19 +165,5 @@ void cp_retire_sm(void *args) {
               (unsigned long)completion_token, (unsigned)kstate->result);
       cp_kernel_state_buf_free(kid);
     }
-  }
-}
-
-void cp_retire_cache(void *args) {
-  while (1) {
-    CP_WAIT_UNTIL(cache_done());
-    DPRINTF("[R]CacheRetire\r\n");
-    if (cache_state.completion_token != 0) {
-      cp_publish_completion(cache_state.completion_token,
-                            FSA_COMPLETION_RESULT_SUCCESS);
-    }
-    cache_state.completion_token = 0;
-    asm volatile("fence w, w" ::: "memory");
-    cache_state.pending = 0;
   }
 }

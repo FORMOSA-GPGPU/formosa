@@ -130,7 +130,7 @@ target("lv", function()
   for _, sm in ipairs({ "atomic", "pipelined" }) do
     case("sm/map/" .. sm, "sm/sm_map.lua", { "simtix." .. sm .. "_sm" })
   end
-  for _, variant in ipairs({ "default", "core", "four" }) do
+  for _, variant in ipairs({ "default", "core", "four", "writeback" }) do
     case("sm/config/pipelined/" .. variant, "sm/sm_config.lua", { variant })
   end
   for lat = 1, 16 do

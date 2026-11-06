@@ -249,6 +249,11 @@ function System.new(name, config, opts)
       { addr = addr.system_info_off_local_mem_size, size = 8, value = addr.lmem_size },
       { addr = addr.system_info_off_shared_cache_size, size = 8, value = system.shared_cache_size },
       { addr = addr.system_info_off_cache_block_size, size = 8, value = system.cache_block_size },
+      {
+        addr = addr.system_info_off_global_alloc_base,
+        size = 8,
+        value = system:global_alloc_base(),
+      },
     },
   })
   self._agent = ipc.Agent("agent", {

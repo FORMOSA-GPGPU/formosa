@@ -54,4 +54,20 @@ assert(
   "system override resources must resolve relative to the override file"
 )
 
+-- Global allocations start at the first aligned address past the stacks of
+-- every resident work-group slot: 3 SMs * 8 slots * 1024 threads.
+local addr = require("ilha.addr_map")
+overridden:override({ system = { num_sm = 3 } })
+local stacks_end = addr.stack_base + 3 * 8 * 1024 * addr.per_thread_stack_size
+local alloc_base = overridden.system:global_alloc_base()
+assert(alloc_base % addr.global_alloc_align == 0)
+assert(alloc_base >= stacks_end and alloc_base < stacks_end + addr.global_alloc_align)
+overridden:validate()
+
+-- 8 SMs * 8 slots * 32768 threads of stacks would cover global memory.
+overridden:override({ system = { num_sm = 8, warps_per_core = 1024 } })
+ok, message = pcall(function() overridden:validate() end)
+assert(not ok)
+assert(tostring(message):match("must leave global memory"))
+
 print("Ilha config tests passed")

@@ -42,7 +42,6 @@ struct ConfigurationSnapshot {
   uint64_t global_mem_noncache_alloc_size = 0;
   uint64_t fsa_mmio_base = 0;
   uint64_t clint_base = 0;
-  uint64_t stack_size_per_thread = 0;
 };
 
 const ConfigurationSnapshot *configuration_snapshot() noexcept;

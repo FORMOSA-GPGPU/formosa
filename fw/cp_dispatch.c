@@ -9,14 +9,13 @@
 #include <stdbool.h>
 #include <string.h>
 
+#include "cp_cache.h"
 #include "cp_completion.h"
 #include "cp_context.h"
 #include "cp_defs.h"
-#include "cp_hwinfo.h"
 #include "cp_kernel_dispatch.h"
 #include "cp_log.h"
 #include "cp_memory_copy.h"
-#include "cp_moving_average.h"
 #include "cp_reboot.h"
 #include "cp_status.h"
 
@@ -39,53 +38,8 @@ static void fail_host_token_if_present(const union Packet *cmd) {
 #include "task.h"
 /* clang-format on */
 
-void handle_cache_control_packet(union Packet *cmd, CacheOpMode mode) {
-  const CacheOperationPacket *packet = &cmd->cache_operation_packet;
-  if (packet->addr == 0 || packet->size == 0 ||
-      packet->addr > UINT64_MAX - packet->size) {
-    cp_publish_completion(packet->completion_token,
-                          FSA_COMPLETION_RESULT_COMMAND_FAILURE_MIN);
-    return;
-  }
-
-  // Check if cache is busy now; if busy, wait.
-  CP_WAIT_UNTIL(cache_state.pending == 0);
-
-  /* Publish the operation before issuing the MMIO starts.  MMIO writes are
-   * asynchronous on the system fabric; publishing pending only after the
-   * writes lets cp_retire_cache observe a zero START bit and retire the
-   * operation before the cache has accepted its request.  A zero pending_mask
-   * is an explicit "starts in flight" state that cp_retire_cache will not
-   * retire. */
-  cache_state.pending_mask = 0;
-  cache_state.mode = mode;
-  cache_state.completion_token = packet->completion_token;
-  cache_state.pending = 1;
-  asm volatile("fence w, w" ::: "memory");
-
-  for (size_t i = 0; i < g_num_sm; i++) {
-    volatile struct sm_mmio *sm = sm_mmio_at((unsigned)i);
-    // I-cache only needs to handle invalidate
-    if (mode == kCacheOpInvalidate) {
-      sm->ICACHE_CONTROL_ADDR = packet->addr;
-      sm->ICACHE_CONTROL_SIZE = packet->size;
-      sm->ICACHE_CONTROL_MODE = mode;
-      sm->ICACHE_CONTROL_START = 1;
-    }
-
-    // D-cache
-    sm->DCACHE_CONTROL_ADDR = packet->addr;
-    sm->DCACHE_CONTROL_SIZE = packet->size;
-    sm->DCACHE_CONTROL_MODE = mode;
-    sm->DCACHE_CONTROL_START = 1;
-  }
-
-  cache_state.pending_mask = (UINT64_C(1) << g_num_sm) - 1;
-  asm volatile("fence w, w" ::: "memory");
-}
-
 bool cp_has_active_kernel_or_cache() {
-  if (cache_state.pending != 0) {
+  if (cp_cache_operation_pending()) {
     return true;
   }
 
@@ -155,11 +109,11 @@ void cp_dispatch(void *args) {
 
       case kCacheFlushPacketHeader:
         DPRINTF("[D]CFPReceived\r\n");
-        handle_cache_control_packet(&cmd, kCacheOpFlush);
+        cp_cache_handle_packet(&cmd, kCacheOpFlush);
         break;
       case kCacheInvalidatePacketHeader:
         DPRINTF("[D]CIPReceived\r\n");
-        handle_cache_control_packet(&cmd, kCacheOpInvalidate);
+        cp_cache_handle_packet(&cmd, kCacheOpInvalidate);
         break;
       case kMemoryCopyPacketHeader:
         DPRINTF("[D]MemoryCopyReceived\r\n");

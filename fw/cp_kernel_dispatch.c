@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "cp_cache.h"
 #include "cp_completion.h"
 #include "cp_context.h"
 #include "cp_defs.h"
@@ -130,6 +131,16 @@ void handle_kernel_dispatch_packet(KernelDispatchPacket *packet) {
   }
 
   int kid = -1;
+
+  /* L1 D-caches are not coherent with each other. With several SMs, a launch
+   * must not observe lines that a previous kernel overwrote from another SM,
+   * so drop every SM's D-cache before any work-group starts. They hold no
+   * dirty lines: several SMs require write-through L1s, as line write-backs
+   * would lose other SMs' updates. A single L1 needs nothing. */
+  if (g_num_sm > 1) {
+    cp_cache_operation_start_and_wait(0, 0, kCacheOpInvalidate,
+                                      kCacheTargetDCache);
+  }
 
   DPRINTF("[D]KallocStart\r\n");
   CP_WAIT_UNTIL((kid = cp_kernel_state_buf_alloc()) >= 0);

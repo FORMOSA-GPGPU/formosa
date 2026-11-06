@@ -43,7 +43,11 @@ local ok, err = xpcall(function()
   util.runfile = runfile
   ipc.Agent = make_agent
   local addr = require("ilha.addr_map")
-  for _, offset in ipairs({ addr.system_info_off_num_sm, addr.system_info_off_threads_per_warp }) do
+  for _, offset in ipairs({
+    addr.system_info_off_num_sm,
+    addr.system_info_off_threads_per_warp,
+    addr.system_info_off_global_alloc_base,
+  }) do
     reader:add_payload({ addr = addr.system_info_base + offset, size = 8 })
   end
   system:start(100)
@@ -56,6 +60,7 @@ local ok, err = xpcall(function()
   end
   assert(u64(assert(reader:get_read_data())) == config.system.num_sm)
   assert(u64(assert(reader:get_read_data())) == config.system.threads_per_warp)
+  assert(u64(assert(reader:get_read_data())) == config.system:global_alloc_base())
   print("Ilha system/SM regression PASS: " .. args[2])
 end, debug.traceback)
 

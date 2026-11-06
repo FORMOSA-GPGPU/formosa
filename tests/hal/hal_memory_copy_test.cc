@@ -18,7 +18,6 @@ namespace {
 
 constexpr size_t kCopySize = 37;
 constexpr uintptr_t kOnchipAddress = FSA_ONCHIP_GMEM_BASE + 0x100;
-constexpr uintptr_t kDdrAddress = FSA_GLOBAL_MEM_BASE + 0x02000100;
 
 FsaMemoryCopyInfo make_copy(FsaMemoryDomain src_domain, uint64_t src_addr,
                             FsaMemoryDomain dst_domain, uint64_t dst_addr,
@@ -113,6 +112,12 @@ int main() {
     std::cerr << "HAL initialization failed\n";
     return 1;
   }
+  void *ddr_buffer = nullptr;
+  if (fsa_malloc(&ddr_buffer, 0x1000) != 0) {
+    std::cerr << "DDR allocation failed\n";
+    return 1;
+  }
+  const uintptr_t kDdrAddress = reinterpret_cast<uintptr_t>(ddr_buffer);
   if (const char *expected = std::getenv("FORMOSA_EXPECTED_MAX_THREADS")) {
     const uint64_t expected_max_threads = std::strtoull(expected, nullptr, 10);
     if (description.max_threads_per_work_group != expected_max_threads) {
@@ -345,10 +350,27 @@ int main() {
     }
   }
 
+  /* A zero size selects the whole cache, whatever the address. */
+  for (const bool flush : {true, false}) {
+    FsaCompletionToken whole_cache = 0;
+    const FsaMemoryRange whole_range = {0, 0};
+    const FsaCommandSubmitStatus status =
+        flush ? fsa_cmd_cache_flush(&whole_range, &whole_cache)
+              : fsa_cmd_cache_invalidate(&whole_range, &whole_cache);
+    FsaCompletionResult whole_result = FSA_COMPLETION_RESULT_PENDING;
+    if (status != kFsaCommandSubmitAccepted ||
+        fsa_wait_completion(whole_cache, 60000, &whole_result) !=
+            kFsaCompletionWaitSuccess ||
+        whole_result != FSA_COMPLETION_RESULT_SUCCESS) {
+      std::cerr << "whole-cache operation did not succeed\n";
+      return 1;
+    }
+  }
+
   /* A malformed cache packet still terminates its valid Host token. */
   {
     FsaCompletionToken invalid_cache = 0;
-    const FsaMemoryRange invalid_range = {0, 0};
+    const FsaMemoryRange invalid_range = {0, 64};
     if (fsa_cmd_cache_flush(&invalid_range, &invalid_cache) !=
         kFsaCommandSubmitAccepted) {
       std::cerr << "malformed cache submit failed\n";
@@ -410,7 +432,7 @@ int main() {
     return 1;
   }
   if (!submit_memory_copy(kFsaMemoryDomainDevice,
-                          FSA_GLOBAL_ALLOC_BASE + FSA_GLOBAL_ALLOC_SIZE - 4,
+                          FSA_GLOBAL_MEM_BASE + FSA_GLOBAL_MEM_SIZE - 4,
                           kFsaMemoryDomainDevice, kDdrAddress, 8,
                           kFsaMemoryCopyStatusInvalidRange)) {
     std::cerr << "aperture-crossing range was not rejected\n";

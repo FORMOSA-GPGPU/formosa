@@ -9,10 +9,12 @@
 #include <limits.h>
 #include <stdint.h>
 
+#include "cp_cache.h"
 #include "cp_completion.h"
 #include "cp_context.h"
 #include "cp_defs.h"
 #include "cp_dispatch.h"
+#include "cp_hwinfo.h"
 #include "cp_log.h"
 #include "cp_moving_average.h"
 #include "cp_status.h"
@@ -48,8 +50,9 @@ static bool valid_memory_range(uint64_t address, uint64_t size) {
           * a device-visible payload aperture used for synchronization data. */
          range_in_window(address, size, FSA_NONCACHE_ALLOC_BASE,
                          FSA_NONCACHE_ALLOC_SIZE) ||
-         range_in_window(address, size, FSA_GLOBAL_ALLOC_BASE,
-                         FSA_GLOBAL_ALLOC_SIZE);
+         range_in_window(address, size, cp_hwinfo_global_alloc_base(),
+                         FSA_GLOBAL_MEM_BASE + FSA_GLOBAL_MEM_SIZE -
+                             cp_hwinfo_global_alloc_base());
   /* Firmware staging is reserved; never a MemoryCopy destination/source. */
 }
 
@@ -105,14 +108,10 @@ static bool start_cache_operation(uint64_t address, uint64_t size,
    * memory-copy task must never enter that blocking helper: doing so would
    * bypass the copy phase timeout and could starve fault retirement.  Check
    * the shared cache state here and let the cooperative task yield instead. */
-  if (cache_state.pending != 0) {
+  if (cp_cache_operation_pending()) {
     return false;
   }
-  union Packet cmd = {0};
-  cmd.cache_operation_packet.addr = address;
-  cmd.cache_operation_packet.size = size;
-  cmd.cache_operation_packet.completion_token = 0;
-  handle_cache_control_packet(&cmd, mode);
+  cp_cache_operation_start(address, size, mode, cp_cache_targets_for(mode), 0);
   return true;
 }
 
@@ -283,7 +282,7 @@ void cp_memory_copy_task(void *args) {
         break;
 
       case kMemoryCopyPhaseFlushSource:
-        if (cache_state.pending != 0) {
+        if (cp_cache_operation_pending()) {
           taskYIELD();
           break;
         }
@@ -299,7 +298,7 @@ void cp_memory_copy_task(void *args) {
         break;
 
       case kMemoryCopyPhaseFlushDestination: {
-        if (cache_state.pending != 0) {
+        if (cp_cache_operation_pending()) {
           taskYIELD();
           break;
         }
@@ -341,7 +340,7 @@ void cp_memory_copy_task(void *args) {
       }
 
       case kMemoryCopyPhaseInvalidateDestination:
-        if (cache_state.pending != 0) {
+        if (cp_cache_operation_pending()) {
           taskYIELD();
           break;
         }

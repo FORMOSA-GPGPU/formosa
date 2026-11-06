@@ -76,7 +76,6 @@ bool derive_device_description(
       config.local_mem_size == 0 || config.shared_cache_size == 0 ||
       config.cache_line_size == 0 || config.global_mem_size == 0 ||
       config.global_mem_noncache_alloc_size == 0 ||
-      config.stack_size_per_thread == 0 ||
       !is_power_of_two(config.cache_line_size) ||
       config.cache_line_size > config.shared_cache_size ||
       config.shared_cache_size % config.cache_line_size != 0) {
@@ -84,35 +83,29 @@ bool derive_device_description(
   }
 
   uint64_t threads_per_core = 0;
-  uint64_t total_threads = 0;
   uint64_t global_mem_end = 0;
   uint64_t noncache_end = 0;
   uint64_t fsa_mmio_end = 0;
   uint64_t clint_end = 0;
-  uint64_t stack_end = 0;
-  uint64_t stack_bytes = 0;
   if (!checked_mul(config.threads_per_warp, config.warps_per_core,
                    threads_per_core) ||
-      !checked_mul(threads_per_core, config.num_cores, total_threads) ||
       !checked_add(config.global_mem_base, config.global_mem_size,
                    global_mem_end) ||
       !checked_add(config.global_mem_noncache_alloc_base,
                    config.global_mem_noncache_alloc_size, noncache_end) ||
       !checked_add(config.fsa_mmio_base, FSA_MMIO_SIZE, fsa_mmio_end) ||
-      !checked_add(config.clint_base, FSA_CLINT_SIZE, clint_end) ||
-      !checked_mul(total_threads, config.stack_size_per_thread, stack_bytes) ||
-      !checked_add(FSA_STACK_BASE, FSA_STACK_POOL_SIZE, stack_end)) {
+      !checked_add(config.clint_base, FSA_CLINT_SIZE, clint_end)) {
     return false;
   }
 
-  if (config.global_mem_alloc_base < config.global_mem_base ||
-      config.global_mem_alloc_base < stack_end ||
+  // Work-group stacks occupy [FSA_STACK_BASE, global_mem_alloc_base).
+  const uint64_t stack_end = config.global_mem_alloc_base;
+  if (stack_end <= FSA_STACK_BASE || stack_end % config.cache_line_size != 0 ||
       config.global_mem_alloc_base >= global_mem_end ||
       config.global_mem_noncache_alloc_base < config.global_mem_base ||
       noncache_end > global_mem_end ||
       noncache_end > config.global_mem_alloc_base ||
-      FSA_STACK_BASE < config.global_mem_base || stack_end > global_mem_end ||
-      stack_bytes > FSA_STACK_POOL_SIZE ||
+      FSA_STACK_BASE < config.global_mem_base ||
       (config.global_mem_noncache_alloc_base < stack_end &&
        noncache_end > FSA_STACK_BASE)) {
     return false;

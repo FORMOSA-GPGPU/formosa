@@ -36,19 +36,19 @@ int load_configuration_snapshot() noexcept {
       read_capability(FSA_SYSTEM_INFO_OFF_SHARED_CACHE_SIZE,
                       next.shared_cache_size) != 0 ||
       read_capability(FSA_SYSTEM_INFO_OFF_CACHE_BLOCK_SIZE,
-                      next.cache_line_size) != 0) {
+                      next.cache_line_size) != 0 ||
+      read_capability(FSA_SYSTEM_INFO_OFF_GLOBAL_ALLOC_BASE,
+                      next.global_mem_alloc_base) != 0) {
     snapshot.reset();
     return -1;
   }
 
   next.global_mem_base = FSA_GLOBAL_MEM_BASE;
-  next.global_mem_alloc_base = FSA_GLOBAL_ALLOC_BASE;
   next.global_mem_size = FSA_GLOBAL_MEM_SIZE;
   next.global_mem_noncache_alloc_base = FSA_NONCACHE_ALLOC_BASE;
   next.global_mem_noncache_alloc_size = FSA_NONCACHE_ALLOC_SIZE;
   next.fsa_mmio_base = FSA_MMIO_BASE;
   next.clint_base = FSA_CLINT_BASE;
-  next.stack_size_per_thread = FSA_PER_THREAD_STACK_SIZE;
   snapshot = next;
   return 0;
 }

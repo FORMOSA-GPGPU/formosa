@@ -8,6 +8,5 @@
 #define CP_RETIRE_H
 
 void cp_retire_sm(void *args);
-void cp_retire_cache(void *args);
 
 #endif

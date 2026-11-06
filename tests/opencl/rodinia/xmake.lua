@@ -316,12 +316,25 @@ local workloads = {
     },
   },
 }
+local default_sms = { "simtix.atomic_sm", "simtix.pipelined_sm" }
 for _, size in ipairs({ "4", "25", "33" }) do
   local matrix = path.join(source, "gaussian/matrix" .. size .. ".txt")
   table.insert(
     workloads.gaussian.cases,
     { size, args = { "-f", matrix, "-p", "0", "-d", "0" }, reference_args = { matrix } }
   )
+end
+do
+  local matrix = path.join(source, "gaussian/matrix4.txt")
+  table.insert(workloads.gaussian.cases, {
+    "writeback",
+    args = { "-f", matrix, "-p", "0", "-d", "0" },
+    reference_args = { matrix },
+    config = path.join(source, "gaussian/writeback_l1.lua"),
+    -- Only the pipelined SM has a configurable write policy; selecting the
+    -- atomic SM drops the SM parameters, so it would repeat gaussian/4.
+    sms = { "simtix.pipelined_sm" },
+  })
 end
 
 local function target_name(name)
@@ -367,7 +380,7 @@ target("opencl.rodinia-data", function()
         local upstream = path.join(source, "opencl", workload.directory or name)
         local variants = #workload.cases > 0 and workload.cases or { { "" } }
         for _, case in ipairs(variants) do
-          for _, sm in ipairs({ "simtix.atomic_sm", "simtix.pipelined_sm" }) do
+          for _, sm in ipairs(case.sms or default_sms) do
             local cwd = path.join(directory, name .. case[1], sm)
             os.mkdir(cwd)
             for _, file in
@@ -507,7 +520,7 @@ for name, workload in pairs(workloads) do
         do
           table.insert(wrapper, "--reference-arg=" .. arg)
         end
-        for _, sm in ipairs({ "simtix.atomic_sm", "simtix.pipelined_sm" }) do
+        for _, sm in ipairs(case.sms or default_sms) do
           target:add("tests", (case[1] ~= "" and case[1] .. "/" or "") .. sm, {
             hostargs = case.args,
             config = case.config,

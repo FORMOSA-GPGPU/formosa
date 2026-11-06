@@ -98,6 +98,7 @@ target("gpufw.elf", function()
     "cp_memory_copy.c",
     "cp_hwinfo.c",
     "cp_lmem_allocator.c",
+    "cp_cache.c",
     "cp_retire.c",
     "cp_dispatch.c",
     "cp_kernel_dispatch.c",
