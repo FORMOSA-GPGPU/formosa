@@ -1,0 +1,8 @@
+dEQP-VK.image.load_store.with_format.1d.r8g8b8a8_unorm
+dEQP-VK.image.load_store.with_format.1d_array.r8g8b8a8_snorm
+dEQP-VK.image.load_store.with_format.2d.r16g16b16a16_sfloat
+dEQP-VK.image.load_store.with_format.2d.r32g32b32a32_sint
+dEQP-VK.image.load_store.with_format.2d_array.r32_uint
+dEQP-VK.image.load_store.with_format.3d.r8g8b8a8_unorm
+dEQP-VK.image.load_store.without_format.2d.r16g16b16a16_unorm
+dEQP-VK.image.load_store.without_any_format.2d.r16g16b16a16_unorm

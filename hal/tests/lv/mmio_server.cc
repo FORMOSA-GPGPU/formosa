@@ -315,7 +315,9 @@ void handle_mmio_message(libcomm::Transceiver *self, const libcomm::Msg &msg) {
     std::cout << "[MMIO Server] Received Terminate command." << std::endl;
     libcomm::Msg resp = libcomm::Msg::Respond(msg);
     self->Send(resp);
-    exit(0);
+    // Send is synchronous. Static Transceiver destructors would join this
+    // receiver thread if exit() ran them here.
+    std::_Exit(0);
   } else {
     std::cout << "[MMIO Server] Received unknown command: "
               << static_cast<int>(msg.cmd()) << std::endl;

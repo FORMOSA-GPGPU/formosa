@@ -1,0 +1,6 @@
+dEQP-VK.subgroups.basic.compute.subgroupelect
+dEQP-VK.subgroups.basic.compute.subgroupbarrier
+dEQP-VK.subgroups.basic.compute.subgroupmemorybarrier
+dEQP-VK.subgroups.basic.compute.subgroupmemorybarrierbuffer
+dEQP-VK.subgroups.basic.compute.subgroupmemorybarrierimage
+dEQP-VK.subgroups.basic.compute.subgroupmemorybarriershared

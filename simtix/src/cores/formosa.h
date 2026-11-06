@@ -10,6 +10,8 @@
 
 // Per-warp CSRs (read-only)
 #define CSR_XWID 0xFC0
+// Active lanes of the executing instruction, least significant 64 lanes.
+#define CSR_XACTIVEMASK 0xFC2
 
 // Per-thread CSRs (read-only)
 #define CSR_XLANEID 0xFD0

@@ -37,6 +37,7 @@ static bool noncache_alloc_ready = false;
 static const formosa::real::ConfigurationSnapshot *active_configuration =
     nullptr;
 static std::mutex command_mtx;
+static std::mutex allocation_mtx;
 
 /* Shared completion-pool ownership. */
 struct CompletionSlotMetadata {
@@ -496,14 +497,17 @@ static int upload_firmware(const void *fw_ptr, size_t fw_size) {
 }
 
 int fsa_addr_malloc(uintptr_t dev_addr, size_t size) {
+  std::lock_guard<std::mutex> lock(allocation_mtx);
   return falloc_addr_malloc(dev_addr, size);
 }
 
 int fsa_malloc(void **dev_addr, size_t size) {
+  std::lock_guard<std::mutex> lock(allocation_mtx);
   return falloc_malloc(dev_addr, size);
 }
 
 int fsa_malloc_noncache(void **dev_addr, size_t size) {
+  std::lock_guard<std::mutex> lock(allocation_mtx);
   if (!noncache_alloc_ready) {
     *dev_addr = nullptr;
     return -1;
@@ -515,6 +519,7 @@ int fsa_malloc_noncache(void **dev_addr, size_t size) {
 }
 
 int fsa_free(void *dev_addr) {
+  std::lock_guard<std::mutex> lock(allocation_mtx);
   int status = falloc_free(dev_addr);
   if (status != 0 && noncache_alloc_ready) {
     status = falloc_noncache_free(dev_addr);
@@ -936,6 +941,11 @@ int fsa_hal_is_available() {
   return active_configuration != nullptr &&
          firmware_ready.load(std::memory_order_acquire) &&
          !firmware_session_failed();
+}
+
+int fsa_hal_time_ns(uint64_t *now_ns) {
+  if (now_ns == nullptr || !fsa_hal_is_available()) return -1;
+  return fsa_real_time_ns(now_ns);
 }
 
 int fsa_hal_check_occupancy(uint64_t group_size, uint64_t local_mem_per_group,

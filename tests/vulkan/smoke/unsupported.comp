@@ -1,0 +1,7 @@
+#version 450
+// SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+// SPDX-License-Identifier: Apache-2.0
+#extension GL_EXT_shader_atomic_float : require
+layout(local_size_x = 1) in;
+layout(set = 0, binding = 0, std430) buffer Counter { float count; };
+void main() { atomicAdd(count, 1.0); }

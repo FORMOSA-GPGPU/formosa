@@ -72,6 +72,27 @@ class FrontendTester : public sc_module, private ToFrontendIntf {
     frontend.Redirect(wid, wpc);
   }
 
+  void pending_redirect() {
+    activate(0);
+    Packet *packet = AllocatePacket();
+    packet->wid = 0;
+    packet->wpc = 0x100;
+    // Broadcast can write a packet before the FIFO makes it readable.
+    frontend.ibuffer_[0].put(packet);
+    frontend.next_pc_[0] = 0x104;
+    redirect(0, 0x104);
+    Packet *target = AllocatePacket();
+    target->wid = 0;
+    target->wpc = 0x104;
+    frontend.decode_q_.put(target);
+  }
+
+  uint64_t broadcast_redirect() {
+    redirect(0, 0x104);
+    frontend.Broadcast();
+    return frontend.next_pc_[0];
+  }
+
   void restart(uint32_t wid, uint64_t wpc) {
     frontend.NoteFlush(wid, FlushReason::kMisc, wpc, 0);
     frontend.Restart(wid, wpc);
@@ -116,6 +137,10 @@ LV_BINDING(simtix, FrontendTester)
             lv::doc("Issue one packet from a warp"))
     .method("redirect", &FrontendTester::redirect, lv::params("wid", "wpc"),
             lv::doc("Redirect a warp program counter"))
+    .method("pending_redirect", &FrontendTester::pending_redirect,
+            lv::doc("Exercise redirect with a pending FIFO write"))
+    .method("broadcast_redirect", &FrontendTester::broadcast_redirect,
+            lv::doc("Exercise broadcast while a redirect flush is pending"))
     .method("restart", &FrontendTester::restart, lv::params("wid", "wpc"),
             lv::doc("Start a warp afresh at a program counter"))
     .property("target", &FrontendTester::set_target,

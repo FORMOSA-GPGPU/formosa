@@ -416,6 +416,14 @@ local config = {
       },
       depends = { "formosa-pocl", "ilha.platform" },
     },
+    ["formosa-mesa"] = {
+      paths = { "formosa-mesa/**" },
+      depends = { "formosa-llvm", "formosa-pocl", "hal", "repo.environment" },
+    },
+    ["tests.vulkan"] = {
+      paths = { "tests/vulkan/**", "tests/opencl/run_opencl.lua" },
+      depends = { "formosa-mesa", "ilha.platform", "lv.executable" },
+    },
     ["tests.kernel-sim"] = {
       paths = { "tests/kernel-sim/**" },
     },
@@ -426,6 +434,16 @@ local config = {
     release = { mode = "release" },
   },
   test_suites = {
+    ["vulkan.simtix.atomic_sm"] = {
+      depends = { "tests.vulkan", "simtix.atomic_sm" },
+      build_options = { ["vulkan-tests"] = true },
+      selectors = { "vulkan-compute/*/simtix.atomic_sm" },
+    },
+    ["vulkan.simtix.pipelined_sm"] = {
+      depends = { "tests.vulkan", "simtix.pipelined_sm" },
+      build_options = { ["vulkan-tests"] = true },
+      selectors = { "vulkan-compute/*/simtix.pipelined_sm" },
+    },
     ["opencl.validation"] = {
       depends = { "tests.opencl" },
       selectors = { "opencl-*-validation/validation" },
@@ -582,6 +600,10 @@ local config = {
     },
   },
   workflows = {
+    vulkan = {
+      description = "Validate Vulkan compute with both Simtix SM models.",
+      test_suites = { "vulkan.simtix.atomic_sm", "vulkan.simtix.pipelined_sm" },
+    },
     hal = {
       description = "Validate firmware, HAL, libcomm, and HAL daemon behavior.",
       test_suites = { "fw.unit", "hal.unit", "libcomm.unit", "hal.daemon" },

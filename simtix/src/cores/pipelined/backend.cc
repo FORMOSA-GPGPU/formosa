@@ -577,6 +577,11 @@ void Backend::ExecuteCsrOp(Packet *packet) {
         case CSR_XWID:
           old_val = wid;
           break;
+        case CSR_XACTIVEMASK:
+          for (uint32_t lane = 0; lane < std::min(num_lanes_, 64u); ++lane) {
+            if (packet->tmask[lane] == 1) old_val |= uint64_t{1} << lane;
+          }
+          break;
         case CSR_XLANEID:
           old_val = i;
           break;

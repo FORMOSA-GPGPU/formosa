@@ -3,11 +3,12 @@
 # SPDX-License-Identifier: Apache-2.0
 
 # Uncomment and replace with absolute install prefixes.
-# FORMOSA_POCL_PREFIX is required whenever FORMOSA_LLVM_PREFIX is set.
+# LLVM validation requires at least one local driver (PoCL or Mesa).
 # export FORMOSA_POCL_PREFIX=/absolute/path/to/pocl-install
+# export FORMOSA_MESA_PREFIX=/absolute/path/to/mesa-install
 # export FORMOSA_LLVM_PREFIX=/absolute/path/to/llvm-install
 
 # Optional newlib/compiler-rt for direct formosa-clang and bare-metal builds.
-# Independent of the LLVM and PoCL overrides. For PoCL kernels, select this
-# in PoCL's .envrc.local before configuring/building/installing PoCL instead.
+# Independent of the LLVM and driver overrides. For kernels/shaders, select
+# this in PoCL's or Mesa's .envrc.local before configuring/building/installing it.
 # export FORMOSA_RUNTIME_PREFIX=/absolute/path/to/runtime-install

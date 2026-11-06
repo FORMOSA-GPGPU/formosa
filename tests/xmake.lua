@@ -5,3 +5,4 @@
 includes("kernel-sim/xmake.lua", "cp/xmake.lua", "opencl/xmake.lua", "hal/xmake.lua")
 includes("ipc/xmake.lua", "pfreader/xmake.lua", "baremetal-freertos/xmake.lua")
 includes("plic/xmake.lua")
+includes("vulkan/xmake.lua")

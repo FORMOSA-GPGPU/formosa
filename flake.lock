@@ -36,6 +36,24 @@
         "url": "https://github.com/FORMOSA-GPGPU/formosa-llvm.git"
       }
     },
+    "formosa-mesa-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1793947176,
+        "narHash": "sha256-5ilrnSl2XDT51jLbyt6IzETcBFmDOytarRkM1+Ciajs=",
+        "ref": "refs/heads/formosa/main",
+        "rev": "a1cc6530ab40aa0a54877cf0a9ef98c2487dca49",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/FORMOSA-GPGPU/formosa-mesa.git"
+      },
+      "original": {
+        "rev": "a1cc6530ab40aa0a54877cf0a9ef98c2487dca49",
+        "shallow": true,
+        "type": "git",
+        "url": "https://github.com/FORMOSA-GPGPU/formosa-mesa.git"
+      }
+    },
     "formosa-pocl-src": {
       "flake": false,
       "locked": {
@@ -76,6 +94,7 @@
       "inputs": {
         "flake-utils": "flake-utils",
         "formosa-llvm-src": "formosa-llvm-src",
+        "formosa-mesa-src": "formosa-mesa-src",
         "formosa-pocl-src": "formosa-pocl-src",
         "nixpkgs": "nixpkgs"
       }

@@ -135,11 +135,8 @@ class Frontend : public sc_module {
   void Redirect(uint32_t wid, uint64_t wpc) {
     if (core_->active_warps().val()[wid]) {
       Packet *packet = nullptr;
-      // We can omit the flush when:
-      // 1. The head of the I-Buffer has the exactly target WPC we need, or
-      // 2. The I-Buffer is empty but the next PC is exactly we need
-      if (ibuffer_[wid].nb_peek(packet) && packet->wpc == wpc ||
-          !ibuffer_[wid].nb_can_get() && next_pc_[wid] == wpc) {
+      // An apparently empty FIFO can still have a same-cycle pending write.
+      if (ibuffer_[wid].nb_peek(packet) && packet->wpc == wpc) {
         return;
       }
 
@@ -161,6 +158,8 @@ class Frontend : public sc_module {
   }
 
  private:
+  friend class FrontendTester;
+
   void Tick() {
     Broadcast();
     Decode();

@@ -63,6 +63,15 @@ tester.target = mem.port
 
 sc.start(sc.ZERO_TIME)
 
+-- A same-cycle write must not survive a redirect to the following PC.
+tester:pending_redirect()
+sc.start(sc.time(1, sc.time_unit.PS))
+assert(tester:issue(0) == nil, "redirect issued a stale same-cycle packet")
+assert(tester:broadcast_redirect() == 0x104, "broadcast skipped the redirect target")
+sc.start(sc.time(1, sc.time_unit.PS))
+assert(tester:issue(0) == nil, "broadcast issued before the redirect flush")
+tester:deactivate(0)
+
 local golden_wpc = {}
 local issued_count = {}
 

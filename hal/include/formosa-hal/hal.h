@@ -50,6 +50,13 @@ int fsa_free(void *dev_addr);
  * until it is cleaned up and initialized again. */
 int fsa_hal_is_available();
 
+/** Read the initialized device's monotonic runtime clock in nanoseconds.
+ * This samples device progress; it does not wait for preceding commands.
+ * Order it after a Completion Token or Barrier when measuring completed work.
+ * Return 0 on success, -1 for a null output or unavailable session.
+ */
+int fsa_hal_time_ns(uint64_t *now_ns);
+
 /**
  * Probe for available devices.
  * \return 0 on device found, -1 on no device found.

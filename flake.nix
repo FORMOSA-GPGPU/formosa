@@ -18,6 +18,11 @@
         "git+https://github.com/FORMOSA-GPGPU/formosa-llvm.git?rev=b1342ddf401e6967aaeb676ab4e262e7c0988575&shallow=1";
       flake = false;
     };
+    formosa-mesa-src = {
+      url =
+        "git+https://github.com/FORMOSA-GPGPU/formosa-mesa.git?rev=a1cc6530ab40aa0a54877cf0a9ef98c2487dca49&shallow=1";
+      flake = false;
+    };
     formosa-pocl-src = {
       url =
         "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=5ce003aebe8f0db5aad6fdc400f5d7f910a0b598&shallow=1&submodules=1";
@@ -26,8 +31,8 @@
 
   };
 
-  outputs =
-    { self, nixpkgs, flake-utils, formosa-llvm-src, formosa-pocl-src, ... }:
+  outputs = { self, nixpkgs, flake-utils, formosa-llvm-src, formosa-pocl-src
+    , formosa-mesa-src, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs {
@@ -74,6 +79,11 @@
             ];
           });
           "spirv-llvm" = spirvLlvm;
+          formosa-mesa = import ./formosa-mesa/default.nix {
+            inherit pkgs formosa-llvm formosa-pocl formosa-clang-cross;
+            src = formosa-mesa-src;
+            hal = projectPackages.hal;
+          };
           formosa-pocl = import ./formosa-pocl/default.nix {
             inherit pkgs formosa-llvm formosa-clang-cross spirvLlvm;
             src = formosa-pocl-src;
@@ -98,6 +108,13 @@
           formosa-pocl = softwareStacks.formosa-pocl;
         };
 
+        formosaMesaDevShell = import ./formosa-mesa/shell.nix {
+          inherit pkgs;
+          inherit (softwareStacks)
+            formosa-mesa formosa-llvm formosa-pocl formosa-clang-cross;
+          hal = projectPackages.hal;
+        };
+
         # Xmake's native configuration menu needs curses at build time.
         xmakeWithCurses = pkgs.xmake.overrideAttrs (old: {
           buildInputs = (old.buildInputs or [ ]) ++ [ pkgs.ncurses ];
@@ -105,27 +122,35 @@
             ++ [ pkgs.pkg-config ];
         });
 
-        basePackages = with pkgs; [
-          git
-          curl
-          reviewdog
-          reuse
-          jq
-          nixfmt-classic
-          tree
-          black
-          lua-language-server
-          xmakeWithCurses
-          # SDK consumer checks and external PoCL/LLVM/DLPrim builds.
-          cmake
-          ninja
-          pkg-config
-          opencl-headers
-          opencl-clhpp
-          ocl-icd
-          clinfo
-          verilator
-        ];
+        basePackages = with pkgs;
+          [
+            git
+            curl
+            reviewdog
+            reuse
+            jq
+            nixfmt-classic
+            tree
+            black
+            lua-language-server
+            xmakeWithCurses
+            # SDK consumer checks and external PoCL/LLVM/DLPrim builds.
+            cmake
+            ninja
+            pkg-config
+            opencl-headers
+            opencl-clhpp
+            ocl-icd
+            clinfo
+            verilator
+          ] ++ lib.optionals stdenv.isLinux [
+            glslang
+            spirv-tools
+            vulkan-headers
+            vulkan-loader
+            vulkan-tools
+            vulkan-validation-layers
+          ];
 
         # Tools the CI pipeline expects inside the docker env image (built from
         # defaultDevShell below), collected in one place instead of scattered
@@ -176,12 +201,14 @@
         ];
 
         # All-in-one dev shell for FORMOSA GPGPU projects.
-        defaultDevShell = pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } {
+        defaultDevShell = pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } ({
           name = "formosa";
           inputsFrom =
             pkgs.lib.mapAttrsToList (name: value: value) projectDevShells;
           packages = [ gemmaPython softwareStacks.formosa-pocl ] ++ basePackages
-            ++ ciPackages ++ toolPackages;
+            ++ ciPackages ++ toolPackages
+            ++ pkgs.lib.optionals pkgs.stdenv.isLinux
+            [ softwareStacks.formosa-mesa ];
           AGENT_SOCKET_PATH = "/tmp/formosa.sock";
           TORCH_ROOT =
             "${pkgs.python313Packages.torch}/${pkgs.python313.sitePackages}/torch";
@@ -191,7 +218,10 @@
             # Prefer Formosa OpenCL (ocl-icd + formosa-pocl) over any host ICD
             export LD_LIBRARY_PATH="${pkgs.ocl-icd}/lib''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           '';
-        };
+        } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+          VK_DRIVER_FILES =
+            "${softwareStacks.formosa-mesa}/share/vulkan/icd.d/formosa_icd.${pkgs.stdenv.hostPlatform.parsed.cpu.name}.json";
+        });
 
         # A lightweight identity for preflight lookup.  Evaluating the Docker
         # archive itself asks Nix to materialize the full shell closure; this
@@ -319,12 +349,16 @@
             '';
           };
           formosa-pocl = formosaPoclDevShell;
+          formosa-mesa = formosaMesaDevShell;
+          # Compatibility entry for running Vulkan workloads.
+          vulkan-compute = defaultDevShell;
         } // projectDevShells // (import ./formosa-llvm/runtime-shells.nix {
           inherit pkgs;
           toolchain = formosaToolchain;
         });
 
         packages = {
+          vulkan-cts = pkgs.vulkan-cts;
           # Retain the explicit native SDK entry as an alias of the shared SDK.
           formosa-sdk-xmake = projectPackages.hal;
           dev-shell = defaultDevShell;

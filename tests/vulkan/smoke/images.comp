@@ -1,0 +1,51 @@
+#version 450
+// SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+// SPDX-License-Identifier: Apache-2.0
+#extension GL_ARB_gpu_shader_int64 : require
+#extension GL_EXT_shader_realtime_clock : require
+layout(local_size_x=8,local_size_y=8) in;
+layout(set=0,binding=1) uniform texture2D source2d;
+layout(set=0,binding=2,rgba32f) uniform image2D result2d;
+layout(set=0,binding=3) uniform sampler source_sampler;
+layout(set=0,binding=5) uniform sampler3D source3d;
+layout(set=0,binding=7) uniform sampler2DArray source_array;
+layout(set=0,binding=8,rgba32f) uniform image3D result3d;
+layout(set=0,binding=9,rgba32f) uniform image2DArray result_array;
+layout(set=0,binding=10) uniform samplerBuffer texels;
+layout(set=0,binding=11,rgba32f) uniform imageBuffer texel_result;
+layout(set=3,binding=7,std430) writeonly buffer Output { float c[]; };
+layout(push_constant) uniform Push { uint width,height,depth,unused; } p;
+void main() {
+    uvec3 id=gl_GlobalInvocationID;
+    if(id.x>=p.width || id.y>=p.height || id.z>=p.depth) return;
+    uint pixel=id.y*p.width+id.x, plane=p.width*p.height;
+    vec2 uv=(vec2(id.xy)+vec2(0.25,0.75))/vec2(p.width,p.height);
+    if(id.z==0) {
+        uint64_t begin=packUint2x32(clockRealtime2x32EXT());
+        vec4 value=textureProjLod(sampler2D(source2d,source_sampler),vec3(uv*2.0,2.0),0.0)+vec4(0.5,1,1.5,2);
+        uint64_t end=packUint2x32(clockRealtime2x32EXT());
+        vec4 texel=texelFetch(texels,int(pixel))+vec4(0.25,0.5,0.75,1);
+        imageStore(texel_result,int(pixel),texel);
+        memoryBarrierImage();
+        if(any(notEqual(imageLoad(texel_result,int(pixel)),texel)) || end<=begin)
+            value=vec4(uintBitsToFloat(0x7fc00000u));
+        if((pixel&1u)==0) imageStore(result2d,ivec2(id.xy),value);
+        memoryBarrierImage();
+        value=imageLoad(result2d,ivec2(id.xy));
+        for(uint k=0;k<4;k++) c[pixel*4+k]=value[k];
+    }
+    uint index=id.z*plane+pixel;
+    vec4 volume=textureLod(source3d,vec3(uv,(float(id.z)+0.25)/float(p.depth)),0.0)+vec4(0.5,1,1.5,2);
+    vec4 layer=textureLod(source_array,vec3(uv,float(id.z)),0.0)+vec4(0.5,1,1.5,2);
+    if((index&1u)==0) {
+        imageStore(result3d,ivec3(id),volume);
+        imageStore(result_array,ivec3(id),layer);
+    }
+    memoryBarrierImage();
+    volume=imageLoad(result3d,ivec3(id));
+    layer=imageLoad(result_array,ivec3(id));
+    for(uint k=0;k<4;k++) {
+        c[(plane+index)*4+k]=volume[k];
+        c[(plane*(1+p.depth)+index)*4+k]=layer[k];
+    }
+}

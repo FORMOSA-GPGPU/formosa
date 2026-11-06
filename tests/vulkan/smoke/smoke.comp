@@ -1,0 +1,152 @@
+#version 450
+// SPDX-FileCopyrightText: 2026 CASLab, National Cheng Kung University
+// SPDX-License-Identifier: Apache-2.0
+#extension GL_EXT_debug_printf : require
+#extension GL_ARB_gpu_shader_fp64 : require
+#extension GL_ARB_gpu_shader_int64 : require
+#extension GL_EXT_shader_atomic_int64 : require
+#extension GL_KHR_shader_subgroup_basic : require
+#extension GL_KHR_shader_subgroup_vote : require
+#extension GL_KHR_shader_subgroup_ballot : require
+#extension GL_EXT_shader_realtime_clock : require
+#extension GL_EXT_shader_8bit_storage : require
+#extension GL_EXT_shader_16bit_storage : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int8 : require
+#extension GL_EXT_shader_explicit_arithmetic_types_int16 : require
+layout(local_size_x=40) in;
+layout(constant_id=0) const float scale=2.0;
+layout(set=1,binding=3,std430) readonly buffer Input { float value[]; } inputs[2];
+layout(set=0,binding=0,std430) coherent buffer Metadata {
+    uint counter, padding;
+    uint64_t wide;
+    uint touched[259];
+    uint64_t words[259];
+    int8_t bytes[262];
+    int16_t shorts[262];
+} b;
+layout(set=3,binding=7,std430) writeonly buffer Output { float c[]; };
+layout(push_constant) uniform Push { uint n, rows, cols, inner; } p;
+shared float partial[40];
+shared uint published[40], local_counter;
+shared uint64_t local_words[40], local_wide;
+uint hash32(uint v) {
+    v = (v ^ (v >> 16)) * 0x7feb352du;
+    v = (v ^ (v >> 15)) * 0x846ca68bu;
+    return v ^ (v >> 16);
+}
+
+uint collective_checksum(uint index) {
+    uint checksum = 17u;
+    for (uint round = 0; round < 1u + index % 3u; ++round) {
+        bool predicate = round == 1u || (round == 0u && (hash32(index ^ round) & 1u) != 0u);
+        uvec4 selected = subgroupBallot(predicate);
+        uvec4 entry = subgroupBallot(true);
+        uint payload = (index * 31337u) ^ 0x80000000u;
+        uint values[16] = uint[16](selected.x, selected.y, selected.z, selected.w,
+            uint(subgroupAny(predicate)), uint(subgroupAll(predicate)),
+            uint(subgroupAllEqual(42u)), uint(subgroupAllEqual(index)),
+            uint(subgroupAllEqual(vec2(gl_SubgroupInvocationID == 0u ? -0.0 : 0.0, 3.0))),
+            uint(subgroupAllEqual(uintBitsToFloat(0x7fc00001u))),
+            subgroupBallotBitCount(selected), subgroupBallotInclusiveBitCount(selected),
+            subgroupBallotExclusiveBitCount(selected),
+            subgroupBroadcastFirst(payload),
+            uint(subgroupInverseBallot(selected)),
+            uint(subgroupBallotBitExtract(selected, gl_SubgroupInvocationID)));
+        for (uint k = 0; k < 16u; ++k) checksum = hash32(checksum ^ values[k]);
+        if (subgroupAny(predicate)) {
+            checksum = hash32(checksum ^ subgroupBallotFindLSB(selected));
+            checksum = hash32(checksum ^ subgroupBallotFindMSB(selected));
+        }
+        if (round == 0u) checksum = hash32(checksum ^ subgroupBroadcast(payload, 0u));
+    }
+    return checksum;
+}
+
+void main() {
+    uint id=gl_GlobalInvocationID.x, lid=gl_LocalInvocationIndex;
+    if(lid==0) { local_counter=0; local_wide=uint64_t(0); }
+    local_words[lid]=uint64_t(0);
+    partial[lid]=id<p.n ? inputs[0].value[id] : 0.0;
+    barrier();
+    uint old=0;
+    if(id<p.n) {
+        debugPrintfEXT("Formosa smoke id=%u value=%.2f\n",id,1.25);
+        old=atomicAdd(b.counter,1u);
+        atomicAdd(b.wide,(uint64_t(1)<<32)+uint64_t(1));
+        atomicAdd(local_counter,1u);
+        atomicAdd(local_wide,uint64_t(3));
+    }
+    for(uint stride=32;stride>0;stride>>=1) {
+        barrier();
+        if(lid<stride && lid+stride<40) partial[lid]+=partial[lid+stride];
+    }
+    barrier();
+    if(id>=p.n) return;
+    uint base=id*21;
+    float a=inputs[0].value[id], v=abs(a)+0.25;
+    uint64_t begin=packUint2x32(clockRealtime2x32EXT());
+    c[base]=a+inputs[1].value[id];
+    c[base+1]=scale*(exp(v)+log(v)+sin(v)+cos(v));
+    c[base+2]=float((double(a)+16777217.0lf)-16777216.0lf);
+    uint64_t shifted=(uint64_t(id)<<40)+uint64_t(7);
+    c[base+3]=float((shifted>>40)+uint64_t(7));
+    c[base+4]=float(gl_SubgroupID);
+    c[base+5]=float(gl_SubgroupInvocationID);
+    c[base+6]=float(gl_NumSubgroups);
+    c[base+7]=float(local_counter);
+    c[base+8]=float(old);
+    c[base+9]=float(atomicCompSwap(b.touched[id],0u,id+1u));
+    uint64_t end=packUint2x32(clockRealtime2x32EXT());
+    c[base+10]=float(end>begin && local_wide==uint64_t(local_counter)*uint64_t(3));
+    float values[17];
+    for(uint j=0;j<17;j++) values[j]=inputs[gl_WorkGroupID.x&1u].value[id]+float(j)*0.125;
+    float sum=0;
+    for(uint j=0;j<17;j++) {
+        if(j==13) break;
+        if(j%3==0) continue;
+        sum+=values[(j+id)%17]*0.5;
+    }
+    c[base+11]=sum;
+    c[base+12]=float(subgroupElect());
+    published[lid]=id+17;
+    subgroupMemoryBarrierShared();
+    subgroupBarrier();
+    bool odd=false;
+    // Only odd lanes participate in this divergent subgroup barrier.
+    if((lid&1u)!=0) { odd=subgroupElect(); subgroupBarrier(); }
+    c[base+13]=float(odd);
+    c[base+14]=float(published[gl_SubgroupID*gl_SubgroupSize]);
+    uint bits=0;
+    for(uint round=0;round<3;round++)
+        if(id%3<=round && subgroupElect()) bits|=1u<<round;
+    c[base+15]=float(bits);
+    int8_t z=b.bytes[id]+int8_t(int(id%7)-3);
+    int16_t q=(b.shorts[id]*int16_t(3)-int16_t(7))/int16_t(5);
+    b.bytes[id]=z;
+    b.shorts[id]=q;
+    c[base+16]=float(int(z)*257+int(q));
+    uint64_t start=(uint64_t(id)<<33)|uint64_t(0x21);
+    uint64_t high=(uint64_t(1)<<40)|uint64_t(id);
+    bool ok=true;
+#define CHECK_ATOMICS(word) \
+    ok=(atomicExchange(word,start)==uint64_t(0)) && ok; \
+    ok=(atomicOr(word,uint64_t(4))==start) && ok; \
+    ok=(atomicXor(word,uint64_t(0x20))==(start|uint64_t(4))) && ok; \
+    ok=(atomicAnd(word,~uint64_t(1))==(start^uint64_t(0x24))) && ok; \
+    ok=(atomicMin(word,uint64_t(0))==(start^uint64_t(0x25))) && ok; \
+    ok=(atomicMax(word,high)==uint64_t(0)) && ok; \
+    ok=(atomicCompSwap(word,high,uint64_t(9))==high) && ok; \
+    ok=(atomicAdd(word,uint64_t(3))==uint64_t(9)) && ok; \
+    ok=(atomicCompSwap(word,uint64_t(0),uint64_t(77))==uint64_t(12)) && ok; \
+    ok=(word==uint64_t(12)) && ok;
+    CHECK_ATOMICS(b.words[id])
+    CHECK_ATOMICS(local_words[lid])
+    c[base+17]=float(ok);
+    c[base+18]=partial[0];
+    float dot=0;
+    if(id<p.rows*p.cols)
+        for(uint k=0;k<p.inner;k++)
+            dot+=inputs[0].value[(id/p.cols)*p.inner+k]*inputs[1].value[k*p.cols+id%p.cols];
+    c[base+19]=dot;
+    c[base+20]=uintBitsToFloat(collective_checksum(id));
+}

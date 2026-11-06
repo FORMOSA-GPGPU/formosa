@@ -5,6 +5,7 @@
 #include <formosa-hal/api.h>
 #include <formosa-hal/hal.h>
 
+#include <algorithm>
 #include <atomic>
 #include <cstdint>
 #include <iostream>
@@ -53,6 +54,40 @@ void worker() {
   }
 }
 
+static bool check_allocations() {
+  constexpr size_t count = 128, bytes = 64;
+  std::vector<std::vector<void *>> allocations(kNumThreads,
+                                               std::vector<void *>(count));
+  std::vector<std::thread> workers;
+  std::atomic<bool> failed{false};
+  for (int t = 0; t < kNumThreads; t++)
+    workers.emplace_back([&, t] {
+      for (auto &address : allocations[t]) {
+        const int result = fsa_malloc(&address, bytes);
+        if (result != 0 || !address) failed = true;
+      }
+    });
+  for (auto &thread : workers) thread.join();
+  std::vector<uintptr_t> addresses;
+  for (const auto &group : allocations)
+    for (auto address : group)
+      addresses.push_back(reinterpret_cast<uintptr_t>(address));
+  std::sort(addresses.begin(), addresses.end());
+  for (size_t i = 1; i < addresses.size(); i++)
+    if (addresses[i] < addresses[i - 1] + bytes) failed = true;
+  workers.clear();
+  for (int t = 0; t < kNumThreads; t++)
+    workers.emplace_back([&, t] {
+      for (auto address : allocations[t]) {
+        if (!address) continue;
+        const int result = fsa_free(address);
+        if (result != 0) failed = true;
+      }
+    });
+  for (auto &thread : workers) thread.join();
+  return !failed;
+}
+
 int main() {
   std::cout << "\n[Race Condition Test] Starting..." << std::endl;
 
@@ -64,6 +99,12 @@ int main() {
     return 1;
   }
 
+  const bool allocations_valid = check_allocations();
+  if (!allocations_valid) {
+    std::cerr << "Concurrent allocations overlapped or failed" << std::endl;
+    fsa_hal_cleanup();
+    return 1;
+  }
   std::vector<std::thread> threads;
   for (int i = 0; i < kNumThreads; ++i) {
     threads.emplace_back(worker);

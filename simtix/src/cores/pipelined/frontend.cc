@@ -138,8 +138,8 @@ void Frontend::Broadcast() {
 
       // Make sure the warp is active and its ibuffer is capacious and next PC
       // is exactly the packet's wpc
-      if (!core_->active_warps().val()[i] || !ibuffer_[i].nb_can_put() ||
-          next_pc_[i] != packet->wpc)
+      if (!core_->active_warps().val()[i] || pending_flush_mask_[i] ||
+          !ibuffer_[i].nb_can_put() || next_pc_[i] != packet->wpc)
         continue;
 
       // Allocate another packet for the sharing warps
