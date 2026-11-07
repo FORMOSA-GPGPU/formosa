@@ -39,16 +39,16 @@
     "formosa-mesa-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1793947176,
-        "narHash": "sha256-5ilrnSl2XDT51jLbyt6IzETcBFmDOytarRkM1+Ciajs=",
+        "lastModified": 1794036222,
+        "narHash": "sha256-W7TCMn/57SBUKV+WH64cTCvhaVu9YYqC7YtGTwNwVAg=",
         "ref": "refs/heads/formosa/main",
-        "rev": "a1cc6530ab40aa0a54877cf0a9ef98c2487dca49",
+        "rev": "2a52779495bd645c780e1f71273e779b6000d2f1",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-mesa.git"
       },
       "original": {
-        "rev": "a1cc6530ab40aa0a54877cf0a9ef98c2487dca49",
+        "rev": "2a52779495bd645c780e1f71273e779b6000d2f1",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-mesa.git"
