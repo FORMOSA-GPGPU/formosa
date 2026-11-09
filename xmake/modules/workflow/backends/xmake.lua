@@ -66,13 +66,28 @@ function schedule_config_summary()
     print("Configuration: %s", selection)
     print("  Mode: %s", config.mode())
     print("  Build directory: %s", path.absolute(config.builddir()))
-    for _, name in ipairs(frontend.keys(effective_options)) do
-      local value = config.get(name)
-      local policy = (value == nil or value == "auto") and "auto" or "explicit"
-      print("  %s: %s (%s)", name, effective_options[name] and "y" or "n", policy)
+    local project = import("core.project.project")
+    local options = project.options()
+    for _, name in ipairs(frontend.keys(options)) do
+      -- Match the native menu's visibility; selection and install paths have
+      -- dedicated summary lines rather than duplicate option rows.
+      if
+        options[name]:showmenu() ~= false
+        and name ~= "workflow"
+        and name ~= "test-suites"
+        and name ~= "installdir"
+      then
+        local value = options[name]:value()
+        if effective_options[name] ~= nil then
+          local policy = (value == nil or value == "auto") and "auto" or "explicit"
+          print("  %s: %s (%s)", name, effective_options[name] and "y" or "n", policy)
+        elseif value ~= nil then
+          if type(value) == "boolean" then value = value and "y" or "n" end
+          print("  %s: %s", name, value)
+        end
+      end
     end
     if selected.install then
-      local project = import("core.project.project")
       for _, name in ipairs(selected.build_options["install-targets"]) do
         print("  Install on build: %s -> %s", name, project.target(name):installdir())
       end

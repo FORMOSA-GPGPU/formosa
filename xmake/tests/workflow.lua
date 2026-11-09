@@ -48,6 +48,9 @@ add_moduledirs(%q)
 option("workflow", function() set_default("") end)
 option("test-suites", function() set_default("") end)
 option("probe", function() set_default("auto"); set_values("auto", "y", "n") end)
+option("fixture-feature", function() set_default(false) end)
+option("fixture-path", function() set_default("default path") end)
+option("fixture-private", function() set_default(true); set_showmenu(false) end)
 includes(%q, %q)
 add_rules("workflow.test_suites")
 local function output_flags(option)
@@ -227,6 +230,12 @@ end)
       local _, summaries = configured:gsub("Configuration: good", "")
       assert(summaries == 1, configured)
       assert(configured:find("probe: y (auto)", 1, true), configured)
+      assert(configured:find("  fixture-feature: n\n", 1, true), configured)
+      assert(configured:find("  fixture-path: default path\n", 1, true), configured)
+      assert(not configured:find("  fixture-private:", 1, true), configured)
+      assert(not configured:find("  workflow:", 1, true), configured)
+      assert(not configured:find("  test-suites:", 1, true), configured)
+      assert(not configured:find("  installdir:", 1, true), configured)
       for _, phase in ipairs({ "configure", "build", "test" }) do
         assert(io.readfile(path.join(fixture, phase .. "-flags.txt")) == "false,true,true", phase)
       end
@@ -285,8 +294,19 @@ end)
       invoke({ "install", "-o", "manual-prefix", "package" }, true)
       assert(os.isfile(path.join(fixture, "manual-prefix/package.txt")), "manual prefix ignored")
       os.rm(path.join(fixture, "installed.txt"))
-      local configured = invoke({ "f", "-c", "-y", "--workflow=good", "--probe=n" }, true)
+      local configured = invoke({
+        "f",
+        "-c",
+        "-y",
+        "--workflow=good",
+        "--probe=n",
+        "--fixture-feature=y",
+        "--fixture-path=custom path",
+      }, true)
       assert(configured:find("probe: n (explicit)", 1, true), configured)
+      assert(configured:find("  fixture-feature: y\n", 1, true), configured)
+      assert(configured:find("  fixture-path: custom path\n", 1, true), configured)
+      assert(not configured:find("  fixture-private:", 1, true), configured)
       assert(not configured:find("Install on build:", 1, true), configured)
       invoke({ "build", "package" }, true)
       assert(
