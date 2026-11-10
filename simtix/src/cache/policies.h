@@ -21,4 +21,10 @@ enum class WriteMissPolicy {
   kWriteNoAllocate  // aka write around
 };
 
+// How a (shifted) line address is mapped to a set.
+enum class SetIndexFunction {
+  kModulo,  // line % num_sets
+  kIpoly,   // Split polynomial remainder over GF(2)
+};
+
 }  // namespace simtix::cache

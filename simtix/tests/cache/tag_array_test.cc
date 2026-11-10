@@ -6,6 +6,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <set>
 
 #include "cache/packet.h"
 #include "cache/policies.h"
@@ -20,13 +21,15 @@ using simtix::cache::Packet;
 using simtix::cache::PacketType;
 using simtix::cache::Param;
 using simtix::cache::ReplacementPolicy;
+using simtix::cache::SetIndexFunction;
 using simtix::cache::TagArray;
 using simtix::cache::WriteHitPolicy;
 
-Param MakeParam(size_t cache_size, size_t block_size, size_t ways,
-                ReplacementPolicy replacement_policy,
-                WriteHitPolicy write_hit_policy, uint64_t random_seed = 0,
-                size_t set_index_shift = 0) {
+Param MakeParam(
+    size_t cache_size, size_t block_size, size_t ways,
+    ReplacementPolicy replacement_policy, WriteHitPolicy write_hit_policy,
+    uint64_t random_seed = 0, size_t set_index_shift = 0,
+    SetIndexFunction set_index_function = SetIndexFunction::kModulo) {
   Param param;
   param.cache_size_bytes = cache_size;
   param.block_size_bytes = block_size;
@@ -35,6 +38,7 @@ Param MakeParam(size_t cache_size, size_t block_size, size_t ways,
   param.write_hit_policy = write_hit_policy;
   param.random_seed = random_seed;
   param.set_index_shift = set_index_shift;
+  param.set_index_function = set_index_function;
   return param;
 }
 
@@ -533,6 +537,86 @@ SCENARIO("Tag array set index can skip low line-address bits",
         CHECK(driver.CoreReq(addr_b).packet()->is_hit);
         CHECK_FALSE(driver.CoreReq(addr_c).packet()->is_hit);
       }
+    }
+  }
+}
+
+namespace {
+
+// Bit-serial long division, independent of the table-driven implementation.
+uint64_t RefGf2Mod(uint64_t value, uint64_t poly, unsigned degree) {
+  for (int bit = 63; bit >= static_cast<int>(degree); --bit) {
+    if ((value >> bit) & 1) value ^= poly << (bit - degree);
+  }
+  return value;
+}
+
+uint64_t RefGpgpuSim(uint64_t a, uint64_t b) {
+  // GPGPU-Sim hashing.cc, ipoly_hash_function for 32 sets.
+  constexpr int taps[5][9] = {{13, 12, 11, 10, 9, 6, 5, 3, 0},
+                              {14, 13, 12, 11, 10, 7, 6, 4, 1},
+                              {14, 10, 9, 8, 7, 6, 3, 2, 0},
+                              {11, 10, 9, 8, 7, 4, 3, 1, -1},
+                              {12, 11, 10, 9, 8, 5, 4, 2, -1}};
+  uint64_t result = b;
+  for (unsigned i = 0; i < 5; ++i) {
+    for (int tap : taps[i]) {
+      if (tap >= 0) result ^= ((a >> tap) & 1) << i;
+    }
+  }
+  return result;
+}
+
+constexpr size_t kHashBlock = 64;
+uint64_t AddrOfLine(uint64_t line) { return line * kHashBlock; }
+TagArray MakeHashTagArray(size_t sets, size_t shift = 0) {
+  return TagArray(MakeParam(
+      sets * kHashBlock, kHashBlock, 1, ReplacementPolicy::kFIFO,
+      WriteHitPolicy::kWriteBack, 0, shift, SetIndexFunction::kIpoly));
+}
+
+}  // namespace
+
+SCENARIO("Tag array set index function", "[cache][tag_array][set_index]") {
+  SECTION("GPGPU-Sim equivalence") {
+    auto array = MakeHashTagArray(32);
+    TagArrayTester driver(array);
+    for (uint64_t line = 0; line < (1 << 20); line += 7) {
+      REQUIRE(driver.ToSetIndex(AddrOfLine(line)) ==
+              RefGpgpuSim(line >> 5, line & 31));
+    }
+  }
+  SECTION("split form") {
+    for (size_t sets : {28, 768}) {
+      auto array = MakeHashTagArray(sets);
+      TagArrayTester driver(array);
+      const unsigned degree = sets == 28 ? 2 : 8;
+      const uint64_t poly = sets == 28 ? 0x7 : 0x11d;
+      const uint64_t q = sets >> degree;
+      for (uint64_t line = 0; line < 200000; ++line) {
+        const auto index = driver.ToSetIndex(AddrOfLine(line));
+        REQUIRE(index == RefGf2Mod(line / q, poly, degree) * q + line % q);
+        REQUIRE(index < sets);
+      }
+    }
+  }
+  SECTION("stride spread") {
+    auto array = MakeHashTagArray(1024);
+    TagArrayTester driver(array);
+    for (unsigned shift = 10; shift <= 20; ++shift) {
+      std::set<size_t> indices;
+      for (uint64_t i = 0; i < 1024; ++i) {
+        indices.insert(driver.ToSetIndex(AddrOfLine(i << shift)));
+      }
+      REQUIRE(indices.size() == 1024);
+    }
+  }
+  SECTION("skipped bank bit does not change the set") {
+    auto array = MakeHashTagArray(32, 1);
+    TagArrayTester driver(array);
+    for (uint64_t line = 0; line < 512; ++line) {
+      REQUIRE(driver.ToSetIndex(AddrOfLine(line << 1)) ==
+              driver.ToSetIndex(AddrOfLine(line << 1) + kHashBlock));
     }
   }
 }

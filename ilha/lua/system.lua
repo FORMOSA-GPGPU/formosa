@@ -91,7 +91,6 @@ function System.new(name, config, opts)
   local scratch_size = addr.scratch_size
   local cmd_ring_base = addr.cmd_ring_base
   local max_size = addr.max_size
-  local shared_cache_size = system.shared_cache_size
   local sm_mmio_base = addr.sm_mmio_base
   local sm_mmio_stride = addr.sm_mmio_stride
   local cp_printbuf_base = addr.cp_printbuf_base
@@ -247,7 +246,11 @@ function System.new(name, config, opts)
       { addr = addr.system_info_off_threads_per_warp, size = 8, value = system.threads_per_warp },
       { addr = addr.system_info_off_warps_per_core, size = 8, value = system.warps_per_core },
       { addr = addr.system_info_off_local_mem_size, size = 8, value = addr.lmem_size },
-      { addr = addr.system_info_off_shared_cache_size, size = 8, value = system.shared_cache_size },
+      {
+        addr = addr.system_info_off_shared_cache_size,
+        size = 8,
+        value = system.shared_cache.cache_size_bytes,
+      },
       { addr = addr.system_info_off_cache_block_size, size = 8, value = system.cache_block_size },
       {
         addr = addr.system_info_off_global_alloc_base,
@@ -287,15 +290,7 @@ function System.new(name, config, opts)
   self._fab_agent = simple.XBar("fab_agent", 2, fab_agent_mmap)
 
   -- Global memories
-  self._l2cache = simtix.Cache("L2Cache", {
-    write_hit_policy = "WriteBack",
-    cache_size_bytes = shared_cache_size,
-    block_size_bytes = system.cache_block_size,
-    atomic_linearization = true,
-    non_cacheable_regions = system:effective_non_cacheable_regions(),
-    ways = 8,
-    mshr_entries = 16,
-  })
+  self._l2cache = simtix.Cache("L2Cache", system:shared_cache_param())
   self._aligner = simple.BlockAligner("Aligner" .. system.cache_block_size, system.cache_block_size)
   self._gmem = simple.Memory("gmem", { size = onchip_gmem_size })
   self._dram = dramsys.DRAMSys("dram", {

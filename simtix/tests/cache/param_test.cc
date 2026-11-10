@@ -39,6 +39,25 @@ SCENARIO("Cache Param parses canonical Lua field names", "[cache][param]") {
   CHECK(param.set_index_shift == 2);
 }
 
+SCENARIO("Cache Param parses set_index_function", "[cache][param]") {
+  sol::state lua;
+
+  THEN("it defaults to modulo") {
+    CHECK(ParseParam(lua.create_table()).set_index_function ==
+          simtix::cache::SetIndexFunction::kModulo);
+  }
+
+  THEN("modulo and ipoly are accepted") {
+    sol::table table = lua.create_table();
+    table["set_index_function"] = "ipoly";
+    CHECK(ParseParam(table).set_index_function ==
+          simtix::cache::SetIndexFunction::kIpoly);
+    table["set_index_function"] = "modulo";
+    CHECK(ParseParam(table).set_index_function ==
+          simtix::cache::SetIndexFunction::kModulo);
+  }
+}
+
 SCENARIO("Cache rejects invalid non-cacheable regions", "[cache][param]") {
   Param param;
   SECTION("unaligned start") { param.non_cacheable_regions = {{1, 64}}; }

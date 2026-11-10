@@ -8,14 +8,72 @@
 #include <tlm_core/tlm_1/tlm_analysis/tlm_analysis_port.h>
 
 #include <cassert>
+#include <iterator>
 
 namespace simtix::cache {
+namespace {
+// W. W. Peterson, Error-Correcting Codes, MIT Press: first entry per degree,
+// primitive with the fewest nonzero coefficients. Degrees 4-6 match
+// GPGPU-Sim's cache IPOLY; degree 1 is x+1.
+constexpr uint64_t kIpolyPolynomials[] = {0,     0x3,   0x7,    0xb,   0x13,
+                                          0x25,  0x43,  0x89,   0x11d, 0x211,
+                                          0x409, 0x805, 0x1053, 0x201b};
+
+// Multiplies a residue by x modulo P(x), which has the given degree.
+constexpr uint64_t MultiplyByX(uint64_t residue, uint64_t poly,
+                               unsigned degree) {
+  residue <<= 1;
+  return (residue >> degree) & 1 ? residue ^ poly : residue;
+}
+
+// x generates all nonzero residues modulo P(x) iff its order is 2^degree - 1.
+constexpr bool IsPrimitive(uint64_t poly, unsigned degree) {
+  const uint64_t period = (uint64_t{1} << degree) - 1;
+  uint64_t power = 1;
+  for (uint64_t k = 1; k <= period; ++k) {
+    power = MultiplyByX(power, poly, degree);
+    if (power == 1) return k == period;
+  }
+  return false;
+}
+
+constexpr bool AllIpolyPolynomialsPrimitive() {
+  for (unsigned degree = 1; degree < std::size(kIpolyPolynomials); ++degree) {
+    if (!IsPrimitive(kIpolyPolynomials[degree], degree)) return false;
+  }
+  return true;
+}
+
+static_assert(AllIpolyPolynomialsPrimitive(),
+              "every ipoly polynomial must be primitive");
+}  // namespace
 
 TagArray::TagArray(const Param &p)
     : config_(p),
       num_sets_(p.GetNumSets()),
       random_engine_(p.random_seed),
       set_index_shift_(p.set_index_shift) {
+  // IPOLY setup. Split num_sets into 2^degree * q with q odd; only the
+  // 2^degree part is hashed. Line-address bits are coefficients of a GF(2)
+  // polynomial, where addition is XOR, so a line reduces mod P(x) by XOR-ing
+  // the residues of its set bits. ipoly_powers_[bit] holds x^bit mod P(x):
+  // each left shift multiplies by x, and XOR-ing P(x) when the x^degree term
+  // appears reduces the result back below degree.
+  if (config_.set_index_function == SetIndexFunction::kIpoly) {
+    const unsigned degree = num_sets_ == 0 ? 0 : __builtin_ctzll(num_sets_);
+    set_index_odd_factor_ = num_sets_ >> degree;
+    if (degree >= std::size(kIpolyPolynomials)) {
+      lv::Fatal("Invalid cache configuration: ipoly degree {} exceeds {}\n",
+                degree, std::size(kIpolyPolynomials) - 1);
+    }
+    if (degree != 0) {
+      uint64_t power = 1;
+      for (auto &entry : ipoly_powers_) {
+        entry = power;
+        power = MultiplyByX(power, kIpolyPolynomials[degree], degree);
+      }
+    }
+  }
   // initialize the tag array
   tag_array_.resize(num_sets_ * config_.ways);
 }

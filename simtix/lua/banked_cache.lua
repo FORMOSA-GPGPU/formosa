@@ -121,6 +121,15 @@ function BankedCache.new(name, param)
   local ways = param.ways or 4
   local set_index_shift = bank_id_bits(num_banks)
 
+  assert(
+    param.set_index_function == nil
+      or param.set_index_function == "modulo"
+      or param.set_index_function == "ipoly",
+    string.format(
+      'BankedCache: `set_index_function` must be "modulo" or "ipoly", got %s',
+      tostring(param.set_index_function)
+    )
+  )
   assert(size > 0, "BankedCache: `cache_size_bytes` must be positive")
   assert(num_froms > 0, "BankedCache: `num_froms` must be positive")
   assert(block_size > 0, "BankedCache: `block_size_bytes` must be positive")

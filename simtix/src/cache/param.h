@@ -66,6 +66,10 @@ struct Param {
   // mapping used when those bits identify an interleaved destination.
   size_t set_index_shift = 0;
 
+  // Mapping from the shifted line address to a set. Tags retain the full
+  // line address for lookup, victim selection and command scans.
+  SetIndexFunction set_index_function = SetIndexFunction::kModulo;
+
   // Trace config
   bool pftrace = false;
   std::optional<std::string> konata_trace_out = std::nullopt;
@@ -133,6 +137,12 @@ struct Param {
       LV_FIELD(set_index_shift,
                "Low bits of the line address skipped when computing the set "
                "index"),
+      LV_FIELD_ENUM(set_index_function,
+                    "Line-to-set mapping applied after set_index_shift",
+                    {
+                        {SetIndexFunction::kModulo, "modulo"},
+                        {SetIndexFunction::kIpoly, "ipoly"},
+                    }),
       LV_FIELD(pftrace, "Enable Perfetto trace"),
       LV_FIELD(konata_trace_out, "Output path for Konata trace (optional)"));
 };

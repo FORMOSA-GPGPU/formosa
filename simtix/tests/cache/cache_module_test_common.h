@@ -253,7 +253,7 @@ class CacheModuleTester {
   std::optional<CachedLineSnapshot> CachedLine(uint64_t address) const {
     const TagArray &tag_array = dut_.tag_array_;
     const uint64_t line_address = address / tag_array.config_.block_size_bytes;
-    const size_t set = line_address % tag_array.num_sets_;
+    const size_t set = tag_array.ToSetIndex(address);
     const size_t set_base = set * tag_array.config_.ways;
 
     for (size_t way = 0; way < tag_array.config_.ways; ++way) {

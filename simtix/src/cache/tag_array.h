@@ -6,9 +6,11 @@
 
 #pragma once
 
+#include <liblv/log.h>
 #include <systemc.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_fifo_ifs.h>
 
+#include <array>
 #include <cstddef>
 #include <optional>
 #include <random>
@@ -83,7 +85,25 @@ class TagArray {
   }
 
   uint64_t ToSetIndex(uint64_t address) const {
-    return (ToLineAddress(address) >> set_index_shift_) % num_sets_;
+    const uint64_t line = ToLineAddress(address) >> set_index_shift_;
+    switch (config_.set_index_function) {
+      case SetIndexFunction::kModulo:
+        return line % num_sets_;
+      case SetIndexFunction::kIpoly: {
+        // Write line = hi * q + lo with q = set_index_odd_factor_. hi mod P(x)
+        // is the XOR of ipoly_powers_ over its set bits and is below
+        // 2^degree, so remainder * q + lo covers every set in [0, num_sets_).
+        // With q == 1 this is plain IPOLY.
+        uint64_t remainder = 0;
+        uint64_t hi = line / set_index_odd_factor_;
+        for (size_t bit = 0; hi != 0; ++bit, hi >>= 1) {
+          if (hi & 1) remainder ^= ipoly_powers_[bit];
+        }
+        return remainder * set_index_odd_factor_ + line % set_index_odd_factor_;
+      }
+    }
+    lv::Fatal("Invalid cache configuration: unhandled set index function\n");
+    return 0;
   }
 
   TagEntry *GetSet(uint64_t address) {
@@ -105,6 +125,8 @@ class TagArray {
   size_t pending_replay_lines_ = 0;
 
   const size_t set_index_shift_;
+  size_t set_index_odd_factor_ = 1;
+  std::array<uint64_t, 64> ipoly_powers_{};
 };
 
 }  // namespace simtix::cache

@@ -57,7 +57,14 @@ local SystemConfig = {
   stack_remap_entries = 8,
   -- 0 selects threads_per_core; positive values explicitly override it.
   stack_remap_group_size = 0,
-  shared_cache_size = 0x20000,
+  shared_cache = {
+    cache_size_bytes = 0x20000,
+    ways = 8,
+    mshr_entries = 16,
+    write_hit_policy = "WriteBack",
+    atomic_linearization = true,
+    set_index_function = "ipoly",
+  },
   cache_block_size = 64,
   non_cacheable_regions = {},
 }
@@ -92,6 +99,14 @@ function SystemConfig:effective_non_cacheable_regions()
   }
 end
 
+---@return simtix.Cache.Param
+function SystemConfig:shared_cache_param()
+  local param = copy(self.shared_cache)
+  param.block_size_bytes = self.cache_block_size
+  param.non_cacheable_regions = self:effective_non_cacheable_regions()
+  return param
+end
+
 function SystemConfig:validate()
   assert(
     self.num_sm >= 1
@@ -117,6 +132,11 @@ function SystemConfig:validate()
   assert(
     self:global_alloc_base() < addr.global_mem_base + addr.global_mem_size,
     "system.num_sm * wg_resident_limit * threads_per_core stacks must leave global memory"
+  )
+  assert(
+    self.shared_cache.set_index_function == "modulo"
+      or self.shared_cache.set_index_function == "ipoly",
+    'system.shared_cache.set_index_function must be "modulo" or "ipoly"'
   )
 end
 

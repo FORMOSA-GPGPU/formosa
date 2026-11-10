@@ -40,7 +40,8 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
         cmd_stalled_write_bench_(
             "cmd_stalled_write_bench",
             MakeParam(WriteMissPolicy::kWriteAllocate,
-                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 1)) {
+                      WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 1)),
+        cmd_ipoly_bench_("cmd_ipoly_bench", MakeIpolyParam()) {
     SC_THREAD(Run);
   }
 
@@ -54,6 +55,7 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
     cmd_flush_replay_bench_.clock_.write(false);
     cmd_invalidate_replay_bench_.clock_.write(false);
     cmd_stalled_write_bench_.clock_.write(false);
+    cmd_ipoly_bench_.clock_.write(false);
     wait(sc_core::SC_ZERO_TIME);
 
     RunBench("cmd_flush_bench", [this] {
@@ -80,8 +82,90 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
     RunBench("cmd_stalled_write_bench", [this] {
       TestCommandFlushWaitsForStalledWrite();
     });
+    RunBench("cmd_ipoly_bench", [this] {
+      TestCommandScansFindLinesUnderIpolyIndex();
+    });
 
     sc_core::sc_stop();
+  }
+
+  // 4 direct-mapped sets of 16 B lines with ipoly indexing. Line 4 (0x40)
+  // maps to set 3 while line 0 (0x00) stays in set 0; under modulo both
+  // would collide in set 0 and the second fill would evict the first.
+  static Param MakeIpolyParam() {
+    Param param = MakeParam(WriteMissPolicy::kWriteAllocate,
+                            WriteHitPolicy::kWriteBack, 1, 2, 1, 4, 2);
+    param.set_index_function = simtix::cache::SetIndexFunction::kIpoly;
+    return param;
+  }
+
+  void TestCommandScansFindLinesUnderIpolyIndex() {
+    CacheModuleTester view(cmd_ipoly_bench_.cache_);
+    const auto dirty0 = FillAndDirtyLine(
+        cmd_ipoly_bench_, 0x00, Sequence(16, 0x10), 4, Sequence(4, 0xA0));
+    const auto dirty4 = FillAndDirtyLine(
+        cmd_ipoly_bench_, 0x40, Sequence(16, 0x30), 4, Sequence(4, 0xB0));
+    Expect(
+        view.CachedLine(0x00).has_value() && view.CachedLine(0x40).has_value(),
+        "ipoly keeps lines 0 and 4 resident together");
+
+    // Ranged flush covers both lines by address.
+    size_t begin = cmd_ipoly_bench_.memory_.request_count();
+    Expect(SendCacheCommand(cmd_ipoly_bench_, kFlushOpcode, 0x00, 0x50),
+           "ipoly ranged flush is accepted");
+    Expect(cmd_ipoly_bench_.WaitForMemoryRequests(begin + 2, 64),
+           "ipoly ranged flush writes back both dirty lines");
+    ExpectWriteRequest(cmd_ipoly_bench_, begin, 0x00, dirty0,
+                       "ipoly ranged flush writes back line 0",
+                       AllEnabledMask(dirty0.size()));
+    ExpectWriteRequest(
+        cmd_ipoly_bench_, begin + 1, 0x40, dirty4,
+        "ipoly ranged flush writes back line 4 at its own address",
+        AllEnabledMask(dirty4.size()));
+    cmd_ipoly_bench_.memory_.RespondAt(begin);
+    cmd_ipoly_bench_.memory_.RespondAt(begin + 1);
+    Expect(WaitForCacheCommandResponse(cmd_ipoly_bench_, 64),
+           "ipoly ranged flush completes");
+
+    // Ranged invalidate drops both lines.
+    begin = cmd_ipoly_bench_.memory_.request_count();
+    Expect(SendCacheCommand(cmd_ipoly_bench_, kInvalidateOpcode, 0x00, 0x50),
+           "ipoly ranged invalidate is accepted");
+    Expect(WaitForCacheCommandResponse(cmd_ipoly_bench_, 64),
+           "ipoly ranged invalidate completes");
+    Expect(cmd_ipoly_bench_.memory_.request_count() == begin,
+           "ipoly ranged invalidate issues no writes");
+    Expect(!view.CachedLine(0x00).has_value() &&
+               !view.CachedLine(0x40).has_value(),
+           "ipoly ranged invalidate removes both lines");
+
+    // Full-cache scans do not look at addresses but must still see both lines.
+    const auto full0 = FillAndDirtyLine(
+        cmd_ipoly_bench_, 0x00, Sequence(16, 0x50), 4, Sequence(4, 0xC0));
+    const auto full4 = FillAndDirtyLine(
+        cmd_ipoly_bench_, 0x40, Sequence(16, 0x70), 4, Sequence(4, 0xD0));
+    begin = cmd_ipoly_bench_.memory_.request_count();
+    Expect(SendCacheCommand(cmd_ipoly_bench_, kFlushOpcode, 0x80, 0),
+           "ipoly full flush is accepted");
+    Expect(cmd_ipoly_bench_.WaitForMemoryRequests(begin + 2, 64),
+           "ipoly full flush writes back both dirty lines");
+    ExpectWriteRequest(cmd_ipoly_bench_, begin, 0x00, full0,
+                       "ipoly full flush writes back line 0",
+                       AllEnabledMask(full0.size()));
+    ExpectWriteRequest(cmd_ipoly_bench_, begin + 1, 0x40, full4,
+                       "ipoly full flush writes back line 4",
+                       AllEnabledMask(full4.size()));
+    cmd_ipoly_bench_.memory_.RespondAt(begin);
+    cmd_ipoly_bench_.memory_.RespondAt(begin + 1);
+    Expect(WaitForCacheCommandResponse(cmd_ipoly_bench_, 64),
+           "ipoly full flush completes");
+    Expect(SendCacheCommand(cmd_ipoly_bench_, kInvalidateOpcode, 0x80, 0),
+           "ipoly full invalidate is accepted");
+    Expect(WaitForCacheCommandResponse(cmd_ipoly_bench_, 64),
+           "ipoly full invalidate completes");
+    Expect(!view.CachedLine(0x00).has_value() &&
+               !view.CachedLine(0x40).has_value(),
+           "ipoly full invalidate removes both lines");
   }
 
   void TestCommandRangedFlushWritesBackDirtyLines() {
@@ -445,6 +529,7 @@ class CacheModuleCommandTestRunner : public CacheModuleTestRunnerBase {
   CacheBench cmd_flush_replay_bench_;
   CacheBench cmd_invalidate_replay_bench_;
   CacheBench cmd_stalled_write_bench_;
+  CacheBench cmd_ipoly_bench_;
 };
 
 }  // namespace

@@ -64,10 +64,51 @@ assert(alloc_base % addr.global_alloc_align == 0)
 assert(alloc_base >= stacks_end and alloc_base < stacks_end + addr.global_alloc_align)
 overridden:validate()
 
+-- A misspelled name would otherwise silently select the schema default.
+Config:override({ system = { shared_cache = { set_index_function = "ipolly" } } })
+local index_ok, index_message = pcall(function() Config:validate() end)
+assert(not index_ok)
+assert(tostring(index_message):match("set_index_function"))
+Config:override({ system = { shared_cache = { set_index_function = "ipoly" } } })
+
 -- 8 SMs * 8 slots * 32768 threads of stacks would cover global memory.
 overridden:override({ system = { num_sm = 8, warps_per_core = 1024 } })
 ok, message = pcall(function() overridden:validate() end)
 assert(not ok)
 assert(tostring(message):match("must leave global memory"))
+
+-- The shared cache uses the generic cache parameter schema.
+local default_cache = Config.system:shared_cache_param()
+assert(default_cache.ways == 8)
+assert(default_cache.set_index_function == "ipoly")
+assert(default_cache.mshr_entries == 16)
+assert(default_cache.write_hit_policy == "WriteBack")
+assert(default_cache.cache_size_bytes == Config.system.shared_cache.cache_size_bytes)
+assert(default_cache.block_size_bytes == Config.system.cache_block_size)
+assert(default_cache.atomic_linearization == true)
+local regions = Config.system:effective_non_cacheable_regions()
+for i, region in ipairs(regions) do
+  assert(default_cache.non_cacheable_regions[i].addr == region.addr)
+  assert(default_cache.non_cacheable_regions[i].size == region.size)
+end
+Config:override({ system = { shared_cache = { ways = 4, set_index_function = "modulo" } } })
+local configured_cache = Config.system:shared_cache_param()
+assert(configured_cache.ways == 4)
+assert(configured_cache.set_index_function == "modulo")
+for key, value in pairs(default_cache) do
+  if key == "non_cacheable_regions" then
+    for i, region in ipairs(value) do
+      assert(configured_cache[key][i].addr == region.addr)
+      assert(configured_cache[key][i].size == region.size)
+    end
+  elseif key ~= "ways" and key ~= "set_index_function" then
+    assert(configured_cache[key] == value)
+  end
+end
+local cache_ok, cache_message = pcall(
+  function() Config:override({ system = { shared_cache = { wayz = 4 } } }) end
+)
+assert(not cache_ok)
+assert(tostring(cache_message):match("system%.shared_cache%.wayz"))
 
 print("Ilha config tests passed")
