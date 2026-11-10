@@ -80,7 +80,7 @@ Cache::WatchdogSnapshot Cache::MakeWatchdogSnapshot() const {
       .victim_buffer_reserved_entries = victim_buffer_.ReservedEntryCount(),
       .victim_buffer_committed_entries = victim_buffer_.CommittedEntryCount(),
       .victim_buffer_inflight_entries = victim_buffer_.InflightEntryCount(),
-      .atomic_busy = atomic_sequencer_.IsBusy(),
+      .atomic_busy = atomic_sequencer_.IsBusy() || atomic_write_latch_.IsBusy(),
       .cmd_busy = cmd_sequencer_.IsBusy(),
       .cmd_phase = cmd_sequencer_.phase,
       .cmd_active = cmd_active_,

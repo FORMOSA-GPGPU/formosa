@@ -96,12 +96,12 @@ bool Cache::HasPendingPipelineWork() const {
 }
 
 // Exclude queued younger core requests and the sequencer waiting for this
-// drain, while retaining every admitted refill, writeback and bypass hazard. A
-// pending line also covers a last replay that has left the MSHR entry but is
-// not yet visible in its FIFO.
+// drain, while retaining every admitted refill, writeback and bypass hazard and
+// a latched atomic write. A pending line also covers a last replay that has
+// left the MSHR entry but is not yet visible in its FIFO.
 bool Cache::HasPendingDataPathWork() const {
   return tag_array_.HasPendingReplayLine() ||
-         tag_array_resp_queue_.used() > 0 ||
+         tag_array_resp_queue_.used() > 0 || atomic_write_latch_.IsBusy() ||
          mshr_file_mem_req_queue_.used() > 0 ||
          mshr_file_refill_notify_queue_.used() > 0 ||
          mshr_file_replay_queue_.used() > 0 || mshr_file_.HasPendingWork() ||

@@ -42,10 +42,6 @@ class TagArray {
    */
   AccessStatus Process(Packet *packet);
 
-  void LockEntry(Location location);
-  void UnlockEntry(Location location);
-  void MarkDirty(Location location);
-
   struct DirtyLine {
     Location location;
     uint64_t address = 0;
@@ -61,7 +57,6 @@ class TagArray {
   struct TagEntry {
     bool valid = false;
     bool dirty = false;
-    bool locked = false;
     // Set when a refill installs the line and cleared when the last replay of
     // its MSHR entry probes it. Meanwhile core requests cannot hit the line and
     // refills cannot evict it.
@@ -71,7 +66,7 @@ class TagArray {
     SC_TIME_DT access_timestamp;  // for replacement policy
 
     void UpdateTimestamp() { access_timestamp = sc_time_stamp().value(); }
-    bool CanBeEvicted() const { return !locked && !pending_replay; }
+    bool CanBeEvicted() const { return !pending_replay; }
   };
 
  private:
@@ -96,8 +91,6 @@ class TagArray {
     return &tag_array_[set_index * config_.ways];
   }
 
-  TagEntry &GetEntry(Location location);
-  const TagEntry &GetEntry(Location location) const;
   std::optional<TagLookupResult> FindTagEntry(uint64_t address);
   std::optional<TagLookupResult> FindInvalidEntry(TagEntry *set);
   std::optional<TagLookupResult> SelectVictim(TagEntry *set);

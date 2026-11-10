@@ -36,26 +36,6 @@ TagArray::AccessStatus TagArray::Process(Packet *packet) {
   return AccessStatus::kMiss;
 }
 
-void TagArray::LockEntry(Location location) {
-  TagEntry &entry = GetEntry(location);
-  assert(entry.valid);
-  assert(!entry.locked);
-  entry.locked = true;
-}
-
-void TagArray::UnlockEntry(Location location) {
-  TagEntry &entry = GetEntry(location);
-  assert(entry.valid);
-  assert(entry.locked);
-  entry.locked = false;
-}
-
-void TagArray::MarkDirty(Location location) {
-  TagEntry &entry = GetEntry(location);
-  assert(entry.valid);
-  entry.dirty = true;
-}
-
 std::optional<TagArray::DirtyLine> TagArray::ProbeDirtyEntry(size_t index) {
   if (index >= tag_array_.size()) {
     return std::nullopt;
@@ -65,7 +45,6 @@ std::optional<TagArray::DirtyLine> TagArray::ProbeDirtyEntry(size_t index) {
   if (!entry.valid || !entry.dirty) {
     return std::nullopt;
   }
-  assert(!entry.locked);
   assert(!entry.pending_replay);
 
   entry.dirty = false;
@@ -84,7 +63,6 @@ std::optional<TagArray::DirtyLine> TagArray::ProbeDirtyLine(uint64_t address) {
   if (!lookup || !lookup->entry->dirty) {
     return std::nullopt;
   }
-  assert(!lookup->entry->locked);
   assert(!lookup->entry->pending_replay);
 
   lookup->entry->dirty = false;
@@ -106,11 +84,9 @@ void TagArray::InvalidateEntry(size_t index) {
   if (!entry.valid) {
     return;
   }
-  assert(!entry.locked);
   assert(!entry.pending_replay);
   entry.valid = false;
   entry.dirty = false;
-  entry.locked = false;
   if (config_.replacement_policy == ReplacementPolicy::kLRU) {
     entry.UpdateTimestamp();
   }
@@ -122,11 +98,9 @@ void TagArray::InvalidateLine(uint64_t address) {
     return;
   }
 
-  assert(!lookup->entry->locked);
   assert(!lookup->entry->pending_replay);
   lookup->entry->valid = false;
   lookup->entry->dirty = false;
-  lookup->entry->locked = false;
   if (config_.replacement_policy == ReplacementPolicy::kLRU) {
     lookup->entry->UpdateTimestamp();
   }
@@ -170,8 +144,11 @@ TagArray::AccessStatus TagArray::Probe(Packet *packet) {
     // Update timestamp for LRU replacement policy
     tag_entry->UpdateTimestamp();
   }
-  // Write hit policy may update the dirty bit on hit
-  tag_entry->dirty |= packet->is_write() &&
+  // A write-back hit marks the line dirty here, before the data stage writes
+  // it. A refill that evicts the line in between then writes the victim back,
+  // and reads it after this packet's write because the data stage keeps tag
+  // order. An atomic modifies the line although its payload is a read.
+  tag_entry->dirty |= (packet->is_write() || packet->is_atomic) &&
                       config_.write_hit_policy == WriteHitPolicy::kWriteBack;
 
   // Pass the hit information to the packet's meta info
@@ -322,23 +299,10 @@ std::optional<TagArray::TagLookupResult> TagArray::SelectVictim(TagEntry *set) {
 void TagArray::FillTagEntry(TagEntry *tag_entry, uint64_t address) {
   tag_entry->valid = true;
   tag_entry->dirty = false;  // newly filled line is clean
-  tag_entry->locked = false;
   tag_entry->pending_replay = true;
   ++pending_replay_lines_;
   tag_entry->tag = ToLineAddress(address);
   tag_entry->UpdateTimestamp();
-}
-
-TagArray::TagEntry &TagArray::GetEntry(Location location) {
-  assert(location.set < num_sets_);
-  assert(location.way < config_.ways);
-  return tag_array_[location.set * config_.ways + location.way];
-}
-
-const TagArray::TagEntry &TagArray::GetEntry(Location location) const {
-  assert(location.set < num_sets_);
-  assert(location.way < config_.ways);
-  return tag_array_[location.set * config_.ways + location.way];
 }
 
 }  // namespace simtix::cache

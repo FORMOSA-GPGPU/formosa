@@ -70,15 +70,6 @@ Param MakeAtomicParam(bool atomic_linearization) {
   return param;
 }
 
-Param MakeAtomicNonCacheableParam() {
-  Param param = MakeAtomicParam(true);
-  simtix::cache::NonCacheableEntry region;
-  region.addr = 0x40;
-  region.size = 0x10;
-  param.non_cacheable_regions.push_back(region);
-  return param;
-}
-
 std::vector<uint8_t> Sequence(size_t size, uint8_t first) {
   std::vector<uint8_t> data(size);
   for (size_t i = 0; i < data.size(); ++i) {
@@ -170,7 +161,6 @@ class CacheModuleTester {
     Location location;
     uint64_t address = 0;
     bool dirty = false;
-    bool locked = false;
     SC_TIME_DT access_timestamp = 0;
   };
 
@@ -276,7 +266,6 @@ class CacheModuleTester {
                     .location = location,
                     .address = entry.tag * tag_array.config_.block_size_bytes,
                     .dirty = entry.dirty,
-                    .locked = entry.locked,
                     .access_timestamp = entry.access_timestamp,
                 },
             .data = DataBlock(dut_.data_array_, location),
@@ -353,6 +342,10 @@ class CacheModuleTester {
   bool HasMemoryResponse() const {
     return dut_.source_.resp_port->num_available() > 0;
   }
+  bool HasLatchedAtomicWrite() const {
+    return dut_.atomic_write_latch_.IsBusy();
+  }
+  void AdvanceCommandSequencer() { dut_.AdvanceCommandSequencer(); }
   void AccessDataArrayStage() { dut_.AccessDataArrayStage(); }
   void AccessTagArrayStage() { dut_.AccessTagArrayStage(); }
   void SendMemRequest() { dut_.SendMemRequest(); }

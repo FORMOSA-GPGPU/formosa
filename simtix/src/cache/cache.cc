@@ -908,10 +908,6 @@ void Cache::AccessTagArrayStage() {
       success = core_req_queue_.nb_get(dequeued_packet);
       assert(success);
       assert(dequeued_packet == tag_array_packet);
-      if (tag_array_packet->is_atomic) {
-        atomic_sequencer_.Start(tag_array_packet,
-                                AtomicSequencer::Phase::kWaitReplay);
-      }
       MarkProgress("mshr_accept_core_miss");
       return;
     }
@@ -934,11 +930,6 @@ void Cache::AccessTagArrayStage() {
     success = core_req_queue_.nb_get(dequeued_packet);
     assert(success);
     assert(dequeued_packet == tag_array_packet);
-    if (tag_array_packet->is_atomic) {
-      atomic_sequencer_.Start(tag_array_packet,
-                              AtomicSequencer::Phase::kReadOld);
-      tag_array_.LockEntry(tag_array_packet->location);
-    }
     MarkProgress("tag_accept_core_hit_or_wna");
   } else {
     assert(tag_array_packet->type == PacketType::kReplay);
@@ -946,12 +937,6 @@ void Cache::AccessTagArrayStage() {
     if (tag_array_packet->is_write() &&
         config_.write_hit_policy == WriteHitPolicy::kWriteThrough) {
       IncrementLineEscapeHazard(tag_array_packet);
-    }
-    if (tag_array_packet->is_atomic) {
-      assert(tag_array_packet == atomic_sequencer_.packet);
-      assert(atomic_sequencer_.phase == AtomicSequencer::Phase::kWaitReplay);
-      atomic_sequencer_.phase = AtomicSequencer::Phase::kReadOld;
-      tag_array_.LockEntry(tag_array_packet->location);
     }
   }
 
@@ -1095,9 +1080,6 @@ bool Cache::TryAdvanceAtomicTagStage() {
   switch (atomic_sequencer_.phase) {
     case AtomicSequencer::Phase::kIdle:
       return false;
-    case AtomicSequencer::Phase::kWaitReplay:
-    case AtomicSequencer::Phase::kReadOld:
-    case AtomicSequencer::Phase::kWriteNewRespond:
     case AtomicSequencer::Phase::kFlushBypassLine:
     case AtomicSequencer::Phase::kWaitBypassResponse:
       return false;
@@ -1158,69 +1140,81 @@ bool Cache::TryAdvanceAtomicDataStage() {
     return true;
   }
 
-  if (atomic_sequencer_.phase != AtomicSequencer::Phase::kReadOld &&
-      atomic_sequencer_.phase != AtomicSequencer::Phase::kWriteNewRespond) {
-    return false;
-  }
+  return false;
+}
 
-  // Older packets ahead of the atomic in the queue must finish first, and
-  // younger replays stay behind it.
-  Packet *queue_head = nullptr;
-  if (!tag_array_resp_queue_.nb_peek(queue_head) || queue_head != packet) {
-    return false;
-  }
+/**
+ * @brief Read and modify a linearized atomic at the data-stage head.
+ *
+ * The atomic moves from the tag-array response queue to the write latch. The
+ * payload takes the old value now because the operand is no longer needed.
+ *
+ * @param packet Atomic hit or replay at the tag-array response queue head.
+ */
+void Cache::LatchLinearizedAtomic(Packet *packet) {
+  assert(packet != nullptr);
+  assert(packet->type == PacketType::kCoreReq ||
+         packet->type == PacketType::kReplay);
+  assert(packet->is_atomic);
+  assert(packet->is_hit);
+  assert(!atomic_write_latch_.IsBusy());
 
-  const size_t size = packet->GetTlmGp()->get_data_length();
-  if (atomic_sequencer_.phase == AtomicSequencer::Phase::kReadOld) {
-    const bool read_ok =
-        data_array_.ReadBytes(packet, atomic_sequencer_.old_value.data(), size);
-    assert(read_ok);
-
-    simtix::AtomicExtension *ext = nullptr;
-    packet->GetTlmGp()->get_extension(ext);
-    assert(ext != nullptr);
-    const uint8_t *operand = packet->GetTlmGp()->get_data_ptr();
-    if (size == sizeof(uint32_t)) {
-      const uint32_t old_value = LoadU32(atomic_sequencer_.old_value.data());
-      const uint32_t operand_value = LoadU32(operand);
-      StoreU32(atomic_sequencer_.new_value.data(),
-               ApplyAtomicOp32(ext->op, old_value, operand_value,
-                               ext->compare_value));
-    } else {
-      assert(size == sizeof(uint64_t));
-      const uint64_t old_value = LoadU64(atomic_sequencer_.old_value.data());
-      const uint64_t operand_value = LoadU64(operand);
-      StoreU64(atomic_sequencer_.new_value.data(),
-               ApplyAtomicOp64(ext->op, old_value, operand_value,
-                               ext->compare_value));
-    }
-    atomic_sequencer_.phase = AtomicSequencer::Phase::kWriteNewRespond;
-    MarkProgress("atomic_read_old");
-    return true;
-  }
-
-  if (!core_resp_queue_.nb_can_put()) {
-    MarkBlockReason("core_resp_backpressure", true);
-    return true;
-  }
-
+  // Nothing below can stall, so take the packet before changing its payload.
   Packet *dequeued_packet = nullptr;
   const bool got_packet = tag_array_resp_queue_.nb_get(dequeued_packet);
   assert(got_packet);
   assert(dequeued_packet == packet);
 
-  const bool write_ok =
-      data_array_.WriteBytes(packet, atomic_sequencer_.new_value.data(), size);
-  assert(write_ok);
-  tag_array_.MarkDirty(packet->location);
-  std::memcpy(packet->GetTlmGp()->get_data_ptr(),
-              atomic_sequencer_.old_value.data(), size);
-  tag_array_.UnlockEntry(packet->location);
+  const size_t size = packet->GetTlmGp()->get_data_length();
+  std::array<uint8_t, sizeof(uint64_t)> old_value{};
+  const bool read_ok = data_array_.ReadBytes(packet, old_value.data(), size);
+  assert(read_ok);
 
+  simtix::AtomicExtension *ext = nullptr;
+  packet->GetTlmGp()->get_extension(ext);
+  assert(ext != nullptr);
+  uint8_t *payload_data = packet->GetTlmGp()->get_data_ptr();
+  if (size == sizeof(uint32_t)) {
+    StoreU32(atomic_write_latch_.new_value.data(),
+             ApplyAtomicOp32(ext->op, LoadU32(old_value.data()),
+                             LoadU32(payload_data), ext->compare_value));
+  } else {
+    assert(size == sizeof(uint64_t));
+    StoreU64(atomic_write_latch_.new_value.data(),
+             ApplyAtomicOp64(ext->op, LoadU64(old_value.data()),
+                             LoadU64(payload_data), ext->compare_value));
+  }
+  std::memcpy(payload_data, old_value.data(), size);
+  atomic_write_latch_.packet = packet;
+  MarkProgress("atomic_read_old");
+  LogPacketTraceEvent(cache_log::Category::kStage, "data_to_atomic_latch",
+                      "read_old", "data_array", packet);
+}
+
+/**
+ * @brief Write the latched linearized atomic back and respond to the core.
+ *
+ * @return true when the atomic left the latch; false when the core response
+ * queue is full.
+ */
+bool Cache::TryWriteBackLinearizedAtomic() {
+  Packet *packet = atomic_write_latch_.packet;
+  assert(packet != nullptr);
+  if (!core_resp_queue_.nb_can_put()) {
+    MarkBlockReason("core_resp_backpressure", true);
+    return false;
+  }
+
+  const size_t size = packet->GetTlmGp()->get_data_length();
+  const bool write_ok = data_array_.WriteBytes(
+      packet, atomic_write_latch_.new_value.data(), size);
+  assert(write_ok);
   const bool put_response = core_resp_queue_.nb_put(packet);
   assert(put_response);
-  atomic_sequencer_.Reset();
+  atomic_write_latch_ = {};
   MarkProgress("atomic_write_response");
+  LogPacketTraceEvent(cache_log::Category::kStage, "data_to_core_response",
+                      "atomic", "data_array", packet);
   return true;
 }
 
@@ -1429,6 +1423,10 @@ bool Cache::TryProcessDataArrayHit(Packet *packet) {
 }
 
 void Cache::AccessDataArrayStage() {
+  if (atomic_write_latch_.IsBusy()) {
+    (void)TryWriteBackLinearizedAtomic();
+    return;
+  }
   if (TryAdvanceAtomicDataStage()) {
     return;
   }
@@ -1461,6 +1459,14 @@ void Cache::AccessDataArrayStage() {
     MarkProgress("data_bypass_to_core_response");
     LogPacketTraceEvent(cache_log::Category::kStage, "data_to_core_response",
                         "bypass", "data_array", packet);
+    return;
+  }
+
+  // Refills also carry is_atomic, copied from the miss that allocated them.
+  if ((packet->type == PacketType::kCoreReq ||
+       packet->type == PacketType::kReplay) &&
+      packet->is_atomic) {
+    LatchLinearizedAtomic(packet);
     return;
   }
 

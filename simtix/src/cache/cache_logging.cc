@@ -103,7 +103,7 @@ void Cache::LogQueueSnapshot(cache_log::Category category, const char *event,
       line_escape_hazards_.size(), mshr_file_.HasPendingWork(),
       write_buffer_.HasPendingWork(), victim_buffer_.ReservedEntryCount(),
       victim_buffer_.CommittedEntryCount(), victim_buffer_.InflightEntryCount(),
-      atomic_sequencer_.IsBusy());
+      atomic_sequencer_.IsBusy() || atomic_write_latch_.IsBusy());
 }
 
 }  // namespace simtix::cache

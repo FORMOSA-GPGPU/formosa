@@ -145,12 +145,11 @@ class Cache : public sc_module, public PacketLifecycleIntf {
     size_t entry_count = 0;
   };
 
+  // Sequences an atomic that the cache forwards to the next level instead of
+  // performing it locally.
   struct AtomicSequencer {
     enum class Phase {
-      kIdle,             ///< No atomic request is currently being sequenced.
-      kWaitReplay,       ///< Wait for the atomic miss to refill and replay.
-      kReadOld,          ///< Read the old value from the locked cache line.
-      kWriteNewRespond,  ///< Write the new value, respond, and unlock the line.
+      kIdle,             ///< No forwarded atomic is being sequenced.
       kWaitBypassDrain,  ///< Drain older data-path work before a forwarded AMO.
       kFlushBypassLine,  ///< Write back and invalidate the local cache copy.
       kWaitBypassWriteback,  ///< Wait for writeback before forwarding the AMO.
@@ -161,8 +160,6 @@ class Cache : public sc_module, public PacketLifecycleIntf {
     void Reset() {
       phase = Phase::kIdle;
       packet = nullptr;
-      old_value.fill(0);
-      new_value.fill(0);
     }
 
     void Start(Packet *new_packet, Phase new_phase) {
@@ -174,7 +171,17 @@ class Cache : public sc_module, public PacketLifecycleIntf {
 
     Phase phase = Phase::kIdle;
     Packet *packet = nullptr;
-    std::array<uint8_t, sizeof(uint64_t)> old_value{};
+  };
+
+  // Holds a linearized atomic from the data-stage cycle that reads and modifies
+  // its value until the next one, which writes the value back. The write-back
+  // must reach the data array before any packet behind the atomic, so it takes
+  // that cycle ahead of the tag-array response queue; the data array has one
+  // port.
+  struct AtomicWriteLatch {
+    bool IsBusy() const { return packet != nullptr; }
+
+    Packet *packet = nullptr;
     std::array<uint8_t, sizeof(uint64_t)> new_value{};
   };
 
@@ -259,6 +266,8 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   void StartForwardedAtomic(Packet *packet);
   bool TryAdvanceAtomicTagStage();
   bool TryAdvanceAtomicDataStage();
+  void LatchLinearizedAtomic(Packet *packet);
+  bool TryWriteBackLinearizedAtomic();
   bool TryProcessDataArrayMiss(Packet *packet);
   bool TryProcessDataArrayHit(Packet *packet);
   bool HasLineEscapeHazard(uint64_t line_address) const;
@@ -338,6 +347,7 @@ class Cache : public sc_module, public PacketLifecycleIntf {
   size_t mem_response_slots_in_use_ = 0;
 
   AtomicSequencer atomic_sequencer_;
+  AtomicWriteLatch atomic_write_latch_;
 
   // Cache maintenance
   CommandSequencer cmd_sequencer_;

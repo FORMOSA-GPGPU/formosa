@@ -21,13 +21,15 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
         atomic_peer_bench_("atomic_peer_bench", MakeWriteThroughAtomicParam()),
         atomic_hit_bench_("atomic_hit_bench", MakeAtomicParam(true)),
         atomic_miss_bench_("atomic_miss_bench", MakeAtomicParam(true)),
-        atomic_bypass_starvation_bench_("atomic_bypass_starvation_bench",
-                                        MakeAtomicNonCacheableParam()),
-        atomic_order_bench_("atomic_order_bench", MakeAtomicParam(true)),
+        atomic_order_bench_("atomic_order_bench",
+                            [] {
+                              auto param = MakeAtomicParam(true);
+                              param.mshr_entries = 3;
+                              return param;
+                            }()),
         atomic_escape_hazard_bench_("atomic_escape_hazard_bench",
                                     MakeAtomicParam(true)),
-        atomic_locked_refill_bench_("atomic_locked_refill_bench",
-                                    MakeAtomicParam(true)),
+        atomic_evict_bench_("atomic_evict_bench", MakeAtomicParam(true)),
         atomic_probe_order_bench_("atomic_probe_order_bench",
                                   MakeMergedWriteAtomicParam(2)),
         atomic_replay_order_bench_("atomic_replay_order_bench",
@@ -48,10 +50,9 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
     atomic_peer_bench_.clock_.write(false);
     atomic_hit_bench_.clock_.write(false);
     atomic_miss_bench_.clock_.write(false);
-    atomic_bypass_starvation_bench_.clock_.write(false);
     atomic_order_bench_.clock_.write(false);
     atomic_escape_hazard_bench_.clock_.write(false);
-    atomic_locked_refill_bench_.clock_.write(false);
+    atomic_evict_bench_.clock_.write(false);
     atomic_probe_order_bench_.clock_.write(false);
     atomic_replay_order_bench_.clock_.write(false);
     atomic_full_queue_bench_.clock_.write(false);
@@ -66,21 +67,20 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
     RunBench("atomic_hit_bench", [this] {
       TestAtomicLinearizedHitRmw();
       TestAtomicCompareSwap();
+      TestSameAddressAtomicsOverlap();
+      TestFlushWaitsForLatchedAtomicWrite();
     });
     RunBench("atomic_miss_bench", [this] {
       TestAtomicLinearizedMissRefillReplayRmw();
     });
-    RunBench("atomic_bypass_starvation_bench", [this] {
-      TestAtomicBlockedBypassDoesNotStarveMshrRead();
-    });
     RunBench("atomic_order_bench", [this] {
-      TestAtomicDoesNotDrainUnrelatedOlderMissAndBlocksYoungerTraffic();
+      TestAtomicMissDoesNotHoldOlderOrYoungerTraffic();
     });
     RunBench("atomic_escape_hazard_bench", [this] {
       TestAtomicWaitsForSameLineDirtyVictimWriteback();
     });
-    RunBench("atomic_locked_refill_bench", [this] {
-      TestLockedVictimRefillStallsAndRecovers();
+    RunBench("atomic_evict_bench", [this] {
+      TestRefillEvictingAtomicLineWritesBackResult();
     });
     RunBench("atomic_probe_order_bench", [this] {
       TestAtomicObservesOlderWriteStalledInDataStage(atomic_probe_order_bench_,
@@ -258,19 +258,6 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
     auto *atomic = atomic_hit_bench_.core_.SendAtomic(
         0x04, U32Bytes(5), simtix::AtomicExtension::Op::kAdd);
 
-    bool saw_lock = false;
-    for (size_t cycle = 0; cycle < 8; ++cycle) {
-      atomic_hit_bench_.AdvanceCycle();
-      auto line = view.CachedLine(0x04);
-      if (line.has_value() && line->tag.locked) {
-        saw_lock = true;
-        Expect(atomic_hit_bench_.core_.response_count() == response_count,
-               "atomic hit does not respond during the read half of RMW");
-        break;
-      }
-    }
-    Expect(saw_lock, "atomic hit locks the tag entry during RMW");
-
     Expect(atomic_hit_bench_.WaitForCoreResponses(response_count + 1),
            "atomic hit RMW returns to core");
     Expect(atomic_hit_bench_.core_.HasResponse(atomic),
@@ -284,7 +271,6 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
       Expect(line->data == StoreU32At(block, 4, old_value + 5),
              "atomic hit writes the new value into the cached line");
       Expect(line->tag.dirty, "atomic hit marks the line dirty");
-      Expect(!line->tag.locked, "atomic hit unlocks the tag entry");
     }
     for (size_t i = 0; i < 4; ++i) {
       atomic_hit_bench_.AdvanceCycle();
@@ -341,6 +327,98 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
     }
   }
 
+  void TestSameAddressAtomicsOverlap() {
+    CacheBench &bench = atomic_hit_bench_;
+    CacheModuleTester view(bench.cache_);
+    const uint64_t address = 0x04;
+    const auto line = view.CachedLine(address);
+    Expect(line.has_value(), "same-address atomics start with a resident line");
+    if (!line.has_value()) return;
+    const uint32_t old_value = LoadU32(line->data, 4);
+
+    const size_t response_count = bench.core_.response_count();
+    auto *first = bench.core_.SendAtomic(address, U32Bytes(3),
+                                         simtix::AtomicExtension::Op::kAdd);
+    auto *second = bench.core_.SendAtomic(address, U32Bytes(5),
+                                          simtix::AtomicExtension::Op::kAdd);
+    bool overlapped = false;
+    for (size_t cycle = 0; cycle < 16 && !overlapped; ++cycle) {
+      bench.AdvanceCycle();
+      overlapped =
+          view.HasLatchedAtomicWrite() && view.Queues().tag_array_resp == 1;
+    }
+    Expect(overlapped,
+           "second atomic passes the tag stage while the first waits to "
+           "write back");
+
+    Expect(bench.WaitForCoreResponses(response_count + 2, 32),
+           "both same-address atomics respond");
+    Expect(bench.core_.HasResponse(first) && bench.core_.HasResponse(second),
+           "both same-address atomic responses are observed");
+    Expect(PayloadData(first) == U32Bytes(old_value),
+           "first atomic returns the resident value");
+    Expect(PayloadData(second) == U32Bytes(old_value + 3),
+           "second atomic returns the first atomic's result");
+    const auto after = view.CachedLine(address);
+    Expect(after.has_value() && LoadU32(after->data, 4) == old_value + 8,
+           "line holds the result of both atomics");
+  }
+
+  void TestFlushWaitsForLatchedAtomicWrite() {
+    CacheBench &bench = atomic_hit_bench_;
+    CacheModuleTester view(bench.cache_);
+    const uint64_t address = 0x04;
+    const auto line = view.CachedLine(address);
+    Expect(line.has_value(), "flush test starts with a resident line");
+    if (!line.has_value()) return;
+    const uint32_t old_value = LoadU32(line->data, 4);
+    const auto expected = StoreU32At(line->data, 4, old_value + 7);
+    const size_t request_count = bench.memory_.request_count();
+    const size_t response_count = bench.core_.response_count();
+
+    auto *atomic = bench.core_.SendAtomic(address, U32Bytes(7),
+                                          simtix::AtomicExtension::Op::kAdd);
+    bool atomic_queued = false;
+    for (size_t cycle = 0; cycle < 8 && !atomic_queued; ++cycle) {
+      bench.AdvanceCycle();
+      atomic_queued = view.Queues().core_req == 1;
+    }
+    Expect(atomic_queued, "atomic enters the core request queue");
+    Expect(SendCacheCommand(bench, kFlushOpcode, 0x00, 16),
+           "flush command is accepted behind the atomic");
+    bench.AdvanceCycle();
+    const bool atomic_tagged = view.Queues().tag_array_resp == 1;
+    Expect(atomic_tagged, "atomic passes the tag stage before the flush");
+
+    // Core response backpressure holds the atomic in the write latch while the
+    // flush checks whether the pipeline has drained.
+    view.FillCoreResponseQueueWithTestPackets(0x1000);
+    view.AccessDataArrayStage();
+    wait(sc_core::SC_ZERO_TIME);
+    Expect(view.HasLatchedAtomicWrite(), "atomic waits in the write latch");
+    view.AdvanceCommandSequencer();
+    wait(sc_core::SC_ZERO_TIME);
+    view.AdvanceCommandSequencer();
+    wait(sc_core::SC_ZERO_TIME);
+    view.ClearCoreResponseQueue();
+    wait(sc_core::SC_ZERO_TIME);
+
+    Expect(bench.WaitForCoreResponses(response_count + 1, 32),
+           "atomic responds after the backpressure clears");
+    Expect(PayloadData(atomic) == U32Bytes(old_value),
+           "atomic returns the resident value");
+    Expect(bench.WaitForMemoryRequests(request_count + 1, 64),
+           "flush writes back the atomic line");
+    ExpectWriteRequest(bench, request_count, 0x00, expected,
+                       "flush writes back the atomic result",
+                       AllEnabledMask(expected.size()));
+    bench.memory_.RespondAt(request_count);
+    Expect(WaitForCacheCommandResponse(bench, 64), "flush completes");
+    const auto after = view.CachedLine(address);
+    Expect(after.has_value() && !after->tag.dirty,
+           "flush leaves the atomic line clean");
+  }
+
   void TestAtomicLinearizedMissRefillReplayRmw() {
     CacheModuleTester view(atomic_miss_bench_.cache_);
     const uint64_t address = 0x24;
@@ -370,7 +448,6 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
       Expect(line->data == StoreU32At(block, 4, old_value + 7),
              "linearized atomic miss updates the refilled cache line");
       Expect(line->tag.dirty, "linearized atomic miss marks the line dirty");
-      Expect(!line->tag.locked, "linearized atomic miss unlocks the tag entry");
     }
     for (size_t i = 0; i < 4; ++i) {
       atomic_miss_bench_.AdvanceCycle();
@@ -402,103 +479,47 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
            "read after the replayed atomic observes its result");
   }
 
-  void TestAtomicBlockedBypassDoesNotStarveMshrRead() {
-    CacheModuleTester view(atomic_bypass_starvation_bench_.cache_);
-    const uint64_t atomic_address = 0x24;
-    const uint64_t bypass_address = 0x40;
-    const auto atomic_block = Sequence(16, 0x80);
-    const auto bypass_data = Sequence(4, 0xC0);
-    const uint32_t old_value = LoadU32(atomic_block, 4);
-
-    auto *atomic = atomic_bypass_starvation_bench_.core_.SendAtomic(
-        atomic_address, U32Bytes(3), simtix::AtomicExtension::Op::kAdd);
-    auto *bypass =
-        atomic_bypass_starvation_bench_.core_.SendRead(bypass_address, 4);
-
-    Expect(atomic_bypass_starvation_bench_.WaitForMemoryRequests(1, 32),
-           "linearized atomic miss reaches memory even with a younger "
-           "non-cacheable request queued behind it");
-    ExpectReadRequest(atomic_bypass_starvation_bench_, 0, 0x20, 16,
-                      "atomic miss refill read issues before the younger "
-                      "non-cacheable bypass");
-    Expect(
-        !atomic_bypass_starvation_bench_.memory_.RequestHasAtomicExtension(0),
-        "linearized atomic miss uses a cache-owned refill read");
-
-    for (size_t i = 0; i < 8; ++i) {
-      atomic_bypass_starvation_bench_.AdvanceCycle();
-    }
-    Expect(atomic_bypass_starvation_bench_.memory_.request_count() == 1,
-           "younger non-cacheable bypass stays blocked while the linearized "
-           "atomic miss is unresolved");
-
-    atomic_bypass_starvation_bench_.memory_.RespondAt(0, atomic_block);
-    Expect(atomic_bypass_starvation_bench_.WaitForCoreResponses(1, 32),
-           "linearized atomic miss can refill, replay, and respond");
-    Expect(atomic_bypass_starvation_bench_.core_.HasResponse(atomic),
-           "linearized atomic response is observed before the bypass");
-    Expect(PayloadData(atomic) == U32Bytes(old_value),
-           "linearized atomic returns the old refilled value");
-
-    Expect(atomic_bypass_starvation_bench_.WaitForMemoryRequests(2, 32),
-           "younger non-cacheable bypass issues after the atomic completes");
-    ExpectReadRequest(atomic_bypass_starvation_bench_, 1, bypass_address, 4,
-                      "younger non-cacheable request bypasses as the original "
-                      "read after atomic completion");
-    atomic_bypass_starvation_bench_.memory_.RespondAt(1, bypass_data);
-    Expect(atomic_bypass_starvation_bench_.WaitForCoreResponses(2, 32),
-           "younger non-cacheable response returns to core");
-    Expect(atomic_bypass_starvation_bench_.core_.HasResponse(bypass),
-           "younger non-cacheable core request receives its response");
-    Expect(PayloadData(bypass) == bypass_data,
-           "younger non-cacheable response uses memory data directly");
-    Expect(!view.CachedLine(bypass_address).has_value(),
-           "younger non-cacheable response does not allocate a cache line");
-  }
-
-  void TestAtomicDoesNotDrainUnrelatedOlderMissAndBlocksYoungerTraffic() {
+  void TestAtomicMissDoesNotHoldOlderOrYoungerTraffic() {
+    CacheBench &bench = atomic_order_bench_;
     const auto older_block = Sequence(16, 0x20);
     const auto atomic_block = Sequence(16, 0x80);
     const auto younger_block = Sequence(16, 0xC0);
 
-    auto *older = atomic_order_bench_.core_.SendRead(0x00, 4);
-    Expect(atomic_order_bench_.WaitForMemoryRequests(1),
-           "older miss reaches memory first");
-    ExpectReadRequest(atomic_order_bench_, 0, 0x00, 16,
+    auto *older = bench.core_.SendRead(0x00, 4);
+    Expect(bench.WaitForMemoryRequests(1), "older miss reaches memory first");
+    ExpectReadRequest(bench, 0, 0x00, 16,
                       "older miss issues the first refill read");
 
-    auto *atomic = atomic_order_bench_.core_.SendAtomic(
-        0x10, U32Bytes(1), simtix::AtomicExtension::Op::kAdd);
-    Expect(atomic_order_bench_.WaitForMemoryRequests(2, 32),
+    auto *atomic = bench.core_.SendAtomic(0x10, U32Bytes(1),
+                                          simtix::AtomicExtension::Op::kAdd);
+    Expect(bench.WaitForMemoryRequests(2, 32),
            "atomic miss issues without draining unrelated older miss");
-    ExpectReadRequest(atomic_order_bench_, 1, 0x10, 16,
+    ExpectReadRequest(bench, 1, 0x10, 16,
                       "atomic miss issues before the younger read");
 
-    auto *younger = atomic_order_bench_.core_.SendRead(0x20, 4);
-    for (size_t i = 0; i < 8; ++i) {
-      atomic_order_bench_.AdvanceCycle();
-    }
-    Expect(atomic_order_bench_.memory_.request_count() == 2,
-           "younger read stays blocked while atomic miss is unresolved");
-
-    atomic_order_bench_.memory_.RespondAt(1, atomic_block);
-    Expect(atomic_order_bench_.WaitForCoreResponses(1, 32),
-           "atomic response can return before unrelated older miss");
-    Expect(atomic_order_bench_.core_.HasResponse(atomic),
-           "atomic ordering response is observed");
-    Expect(atomic_order_bench_.WaitForMemoryRequests(3, 32),
-           "younger read issues after atomic response");
-    ExpectReadRequest(atomic_order_bench_, 2, 0x20, 16,
+    auto *younger = bench.core_.SendRead(0x20, 4);
+    Expect(bench.WaitForMemoryRequests(3, 32),
+           "younger read issues while the atomic miss is unresolved");
+    ExpectReadRequest(bench, 2, 0x20, 16,
                       "younger read is the third memory request");
 
-    atomic_order_bench_.memory_.RespondAt(0, older_block);
-    atomic_order_bench_.memory_.RespondAt(2, younger_block);
-    Expect(atomic_order_bench_.WaitForCoreResponses(3, 32),
-           "older and younger reads can still complete");
-    Expect(atomic_order_bench_.core_.HasResponse(older),
-           "older miss response is observed");
-    Expect(atomic_order_bench_.core_.HasResponse(younger),
-           "younger miss response is observed");
+    bench.memory_.RespondAt(2, younger_block);
+    Expect(bench.WaitForCoreResponses(1, 32),
+           "younger read responds after its refill");
+    Expect(bench.core_.HasResponse(younger) && !bench.core_.HasResponse(atomic),
+           "younger read responds while the atomic miss is unresolved");
+
+    bench.memory_.RespondAt(1, atomic_block);
+    Expect(bench.WaitForCoreResponses(2, 32),
+           "atomic response can return before unrelated older miss");
+    Expect(bench.core_.HasResponse(atomic),
+           "atomic ordering response is observed");
+    Expect(PayloadData(atomic) == Slice(atomic_block, 0, 4),
+           "atomic returns the refilled value");
+
+    bench.memory_.RespondAt(0, older_block);
+    Expect(bench.WaitForCoreResponses(3, 32), "older read completes");
+    Expect(bench.core_.HasResponse(older), "older miss response is observed");
   }
 
   void TestAtomicWaitsForSameLineDirtyVictimWriteback() {
@@ -565,63 +586,71 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
            "same-line atomic returns the value from the written-back line");
   }
 
-  void TestLockedVictimRefillStallsAndRecovers() {
-    CacheModuleTester view(atomic_locked_refill_bench_.cache_);
-    const uint64_t locked_address = 0x00;
+  void TestRefillEvictingAtomicLineWritesBackResult() {
+    CacheBench &bench = atomic_evict_bench_;
+    CacheModuleTester view(bench.cache_);
+    const uint64_t atomic_address = 0x04;
     const uint64_t replacement_address = 0x40;
-    const auto locked_block = Sequence(16, 0x50);
+    const auto block = Sequence(16, 0x50);
     const auto replacement_block = Sequence(16, 0xA0);
+    const uint32_t old_value = LoadU32(block, 4);
 
-    FillLineWithRead(atomic_locked_refill_bench_, locked_address, locked_block);
+    FillLineWithRead(bench, 0x00, block);
+    auto *replacement = bench.core_.SendRead(replacement_address, 4);
+    Expect(bench.WaitForMemoryRequests(2), "replacement miss reaches memory");
 
-    auto *replacement =
-        atomic_locked_refill_bench_.core_.SendRead(replacement_address, 4);
-    Expect(atomic_locked_refill_bench_.WaitForMemoryRequests(2),
-           "replacement miss reaches memory before the atomic lock");
-
-    const size_t response_count =
-        atomic_locked_refill_bench_.core_.response_count();
-    auto *atomic = atomic_locked_refill_bench_.core_.SendAtomic(
-        0x04, U32Bytes(1), simtix::AtomicExtension::Op::kAdd);
-
-    atomic_locked_refill_bench_.AdvanceCycle();
-    atomic_locked_refill_bench_.AdvanceCycle();
-    atomic_locked_refill_bench_.memory_.RespondAt(1, replacement_block);
-
-    bool saw_stalled_refill = false;
-    for (size_t cycle = 0; cycle < 8; ++cycle) {
-      atomic_locked_refill_bench_.AdvanceCycle();
-      auto line = view.CachedLine(locked_address);
-      const auto queues = view.Queues();
-      if (line.has_value() && line->tag.locked && queues.mem_resp == 1) {
-        saw_stalled_refill = true;
-        break;
-      }
+    const size_t response_count = bench.core_.response_count();
+    auto *atomic = bench.core_.SendAtomic(atomic_address, U32Bytes(1),
+                                          simtix::AtomicExtension::Op::kAdd);
+    bool atomic_tagged = false;
+    for (size_t cycle = 0; cycle < 8 && !atomic_tagged; ++cycle) {
+      bench.AdvanceCycle();
+      atomic_tagged = view.Queues().tag_array_resp == 1;
     }
-    Expect(saw_stalled_refill,
-           "replacement refill stalls while its only victim is locked");
-    auto line = view.CachedLine(locked_address);
-    Expect(line.has_value(),
-           "locked victim remains installed while refill stalls");
+    Expect(atomic_tagged, "atomic hit passes the tag stage");
+
+    // The refill takes the tag stage in the cycle the atomic reads the line,
+    // so it evicts the line before the atomic writes the line back.
+    bench.memory_.RespondAt(1, replacement_block);
+    for (size_t delta = 0; delta < 8 && !view.HasMemoryResponse(); ++delta) {
+      wait(sc_core::SC_ZERO_TIME);
+    }
+    view.AcceptMemResponse();
+    wait(sc_core::SC_ZERO_TIME);
+    view.AccessDataArrayStage();
+    view.AccessTagArrayStage();
+    wait(sc_core::SC_ZERO_TIME);
+    Expect(!view.CachedLine(atomic_address).has_value() &&
+               bench.core_.response_count() == response_count,
+           "refill evicts the line before the atomic writes it back");
+
+    Expect(bench.WaitForCoreResponses(response_count + 2, 32),
+           "atomic and replacement read respond");
+    Expect(bench.core_.HasResponse(atomic), "atomic response is observed");
+    Expect(PayloadData(atomic) == U32Bytes(old_value),
+           "atomic returns the value read before the eviction");
+    Expect(bench.core_.HasResponse(replacement),
+           "replacement response is observed");
+    Expect(PayloadData(replacement) == Slice(replacement_block, 0, 4),
+           "replacement read returns the refilled value");
+
+    Expect(bench.WaitForMemoryRequests(3, 32),
+           "evicted atomic line is written back");
+    ExpectWriteRequest(bench, 2, 0x00, StoreU32At(block, 4, old_value + 1),
+                       "victim writeback carries the atomic result",
+                       AllEnabledMask(block.size()));
+    const auto line = view.CachedLine(replacement_address);
+    Expect(line.has_value(), "replacement line is installed");
     if (line.has_value()) {
-      Expect(line->tag.locked,
-             "victim remains locked during the stalled refill");
+      Expect(line->data == replacement_block,
+             "atomic write-back does not change the replacement line");
+      Expect(!line->tag.dirty,
+             "atomic write-back does not dirty the replacement line");
     }
-
-    Expect(atomic_locked_refill_bench_.WaitForCoreResponses(response_count + 1,
-                                                            32),
-           "atomic response unlocks the victim");
-    Expect(atomic_locked_refill_bench_.core_.HasResponse(atomic),
-           "locked-victim atomic response is observed");
-    Expect(atomic_locked_refill_bench_.WaitForCoreResponses(response_count + 2,
-                                                            32),
-           "replacement refill recovers after the atomic unlock");
-    Expect(atomic_locked_refill_bench_.core_.HasResponse(replacement),
-           "replacement response is observed after locked refill recovers");
-    Expect(!view.CachedLine(locked_address).has_value(),
-           "locked victim is evicted after refill recovery");
-    Expect(view.CachedLine(replacement_address).has_value(),
-           "replacement line installs after the lock is released");
+    bench.memory_.RespondAt(2);
+    for (size_t cycle = 0; cycle < 4; ++cycle) {
+      bench.AdvanceCycle();
+    }
   }
 
   /**
@@ -744,10 +773,9 @@ class CacheModuleAtomicTestRunner : public CacheModuleTestRunnerBase {
   CacheBench atomic_peer_bench_;
   CacheBench atomic_hit_bench_;
   CacheBench atomic_miss_bench_;
-  CacheBench atomic_bypass_starvation_bench_;
   CacheBench atomic_order_bench_;
   CacheBench atomic_escape_hazard_bench_;
-  CacheBench atomic_locked_refill_bench_;
+  CacheBench atomic_evict_bench_;
   CacheBench atomic_probe_order_bench_;
   CacheBench atomic_replay_order_bench_;
   CacheBench atomic_full_queue_bench_;
