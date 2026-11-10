@@ -29,8 +29,8 @@ tester:lsu_init(function(name)
   if args.lsu == "simple" then
     return simtix.SimpleLsu(name, param)
   elseif args.lsu == "coalescing_outstanding" then
+    -- Default remap settings: param has no thread stack pool, so nothing is remapped.
     return simtix.CoalescingOutstandingLsu(name, param, {
-      enable_stack_remap = false, -- Disable stack remap for testing
       num_inflight_slots = 4,
     })
   else

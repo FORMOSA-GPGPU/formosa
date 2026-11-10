@@ -19,6 +19,7 @@
 #include "cores/encoding.h"
 #include "cores/exec_flag.h"
 #include "cores/sched/sched.h"
+#include "cores/thread_stack_pool.h"
 #include "cores/warp_lane_state.h"
 #include "tlm_extensions/atomic_extension.h"
 
@@ -28,6 +29,7 @@ class AtomicCore : public BaseCore {
  public:
   AtomicCore(const sc_module_name &name, const ArchParam &p)
       : BaseCore(name, p),
+        thread_stack_pool_(p.thread_stack_pool),
         tmask_(false, num_lanes_),
         wmask_(false, num_warps_),
         executing_mask_(false, num_warps_),
@@ -40,6 +42,7 @@ class AtomicCore : public BaseCore {
         fflags_buf_(num_lanes_),
         trans_(num_lanes_),
         stats_(name, p) {
+    internal::ValidateThreadStackPoolLayout(thread_stack_pool_, num_threads_);
     exts_.reserve(num_lanes_);
     for (auto &trans : trans_) {
       trans.set_mm(lv::mm::Static);
@@ -149,6 +152,8 @@ class AtomicCore : public BaseCore {
   sc_event start_collecting_mem_resp_;
   sc_event done_issuing_mem_req_;
   sc_event done_collecting_mem_resp_;
+
+  const ThreadStackPoolLayout thread_stack_pool_;
 
   sc_bv_base tmask_;
   sc_bv_base wmask_;

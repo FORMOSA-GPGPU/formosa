@@ -72,20 +72,15 @@ class CoalescingOutstandingLsu : public Lsu {
     bool enable_stack_remap = true;
     uint32_t granularity = 8;
     uint32_t stack_group_size = 4;
-    uint64_t stack_start = 0x81000000;
-    uint64_t stack_end = 0x81FFFFFF;
-    uint64_t stack_size_per_thread = 1024;  // 1KB stack per thread
 
+    // The stack region and slot size come from ArchParam::thread_stack_pool.
     // clang-format off
     LV_SCHEMA(CoalescingOutstandingLsu, Param,
               LV_FIELD(num_inflight_slots, "Maximum number of in-flight LSU instructions"),
               LV_FIELD(cache_block_size, "Cache block size in bytes"),
               LV_FIELD(enable_stack_remap, "Whether to enable Stack remap or not"),
               LV_FIELD(granularity, "Granularity for stack remap (in bytes)"),
-              LV_FIELD(stack_group_size, "Number of threads sharing the same stack region"),
-              LV_FIELD(stack_start, "Start address of the stack region"),
-              LV_FIELD(stack_end, "End address of the stack region"),
-              LV_FIELD(stack_size_per_thread, "Stack size allocated per thread"))
+              LV_FIELD(stack_group_size, "Number of threads sharing the same stack region"))
     // clang-format on
   };
 
@@ -95,12 +90,14 @@ class CoalescingOutstandingLsu : public Lsu {
         cache_block_size_(lsu_param.cache_block_size),
         num_lanes_(param.num_lanes),
         inflight_slots_(lsu_param.num_inflight_slots),
-        enable_stack_remap_(lsu_param.enable_stack_remap),
+        // Without a thread stack pool there is nothing to remap.
+        enable_stack_remap_(lsu_param.enable_stack_remap &&
+                            param.thread_stack_pool.size != 0),
         granularity_(lsu_param.granularity),
         stack_group_size_(lsu_param.stack_group_size),
-        stack_start_(lsu_param.stack_start),
-        stack_end_(lsu_param.stack_end),
-        stack_size_per_thread_(lsu_param.stack_size_per_thread),
+        stack_base_(param.thread_stack_pool.base),
+        stack_size_(param.thread_stack_pool.size),
+        stack_size_per_thread_(param.thread_stack_pool.slot_size),
         stats_(name) {
     CheckPowerOfTwo("cache_block_size", cache_block_size_);
     if (inflight_slots_.empty()) {
@@ -111,7 +108,7 @@ class CoalescingOutstandingLsu : public Lsu {
     if (enable_stack_remap_) {
       CheckPowerOfTwo("granularity", granularity_);
       CheckPowerOfTwo("stack_group_size", stack_group_size_);
-      CheckPowerOfTwo("stack_size_per_thread", stack_size_per_thread_);
+      CheckPowerOfTwo("thread_stack_pool.slot_size", stack_size_per_thread_);
     }
 
     // initialize inflight_slots_
@@ -223,8 +220,8 @@ class CoalescingOutstandingLsu : public Lsu {
   const bool enable_stack_remap_;
   const uint32_t granularity_;
   const uint32_t stack_group_size_;
-  const uint64_t stack_start_;
-  const uint64_t stack_end_;
+  const uint64_t stack_base_;
+  const uint64_t stack_size_;
   const uint64_t stack_size_per_thread_;
   StackRemapTable *stack_remap_table_ = nullptr;
 

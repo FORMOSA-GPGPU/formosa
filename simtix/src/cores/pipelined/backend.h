@@ -23,6 +23,7 @@
 #include "cores/pipelined/scoreboard.h"
 #include "cores/pipelined/stats.h"
 #include "cores/sched/sched.h"
+#include "cores/thread_stack_pool.h"
 #include "cores/warp_lane_state.h"
 #include "cores/warp_mask.h"
 #include "konata/konata.h"
@@ -78,6 +79,7 @@ class Backend : public sc_module {
         num_subcores_(pp.num_subcores),
         subcore_id_(subcore_id),
         core_(core),
+        thread_stack_pool_(p.thread_stack_pool),
         ready_warps_(false, p.num_warps),
         issue_suppressed_warps_(false, p.num_warps),
         scoreboard_(num_local_warps_, pp.num_subcores),
@@ -91,6 +93,8 @@ class Backend : public sc_module {
         mdu_delay_q_("mdu_delay_q_", pp.mdu_latency, pp.mdu_ticks_per_output),
         fpu_delay_q_("fpu_delay_q_", pp.fpu_latency, pp.fpu_ticks_per_output),
         stats_(name) {
+    internal::ValidateThreadStackPoolLayout(thread_stack_pool_,
+                                            uint64_t{num_warps_} * num_lanes_);
     SC_METHOD(Tick);
     sensitive << clock.pos();
   }
@@ -218,6 +222,7 @@ class Backend : public sc_module {
   const uint32_t num_subcores_;
   const uint32_t subcore_id_;
   ToBackendIntf *const core_;
+  const ThreadStackPoolLayout thread_stack_pool_;
 
   sc_bv_base ready_warps_;
 

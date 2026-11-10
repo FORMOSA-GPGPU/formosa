@@ -14,6 +14,7 @@
 #include "cores/exec_flag.h"
 #include "cores/formosa.h"
 #include "cores/instr.h"
+#include "cores/thread_stack_pool.h"
 
 namespace simtix {
 
@@ -114,6 +115,9 @@ void AtomicCore::MainProc() {
       CompleteAbort(wid);
       continue;
     }
+
+    internal::CheckThreadStackWrites(thread_stack_pool_, num_threads_, flag,
+                                     tmask_, addr_buf_, wid, cwid_[wid], wpc);
 
     if (HasFlag(flag, ExecFlag::RD_DATA)) {
       WriteRegfile(wid, instr.rd());

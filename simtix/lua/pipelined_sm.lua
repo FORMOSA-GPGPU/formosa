@@ -79,6 +79,12 @@ function PipelinedSM.new(name, options)
   local core_param = {
     num_warps = config.warps_per_core,
     num_lanes = config.threads_per_warp,
+    -- The runtime gives each thread its own slot of the stack pool.
+    thread_stack_pool = {
+      base = addr.stack_base,
+      size = config:global_alloc_base(addr) - addr.stack_base,
+      slot_size = addr.per_thread_stack_size,
+    },
   }
 
   local pipe_param = copy_parameters(sm_param.core)
@@ -200,9 +206,6 @@ function PipelinedSM.new(name, options)
         enable_stack_remap = true,
         granularity = 8,
         stack_group_size = config:effective_stack_remap_group_size(),
-        stack_start = addr.stack_base,
-        stack_end = config:global_alloc_base(addr) - 1,
-        stack_size_per_thread = addr.per_thread_stack_size,
       }
       local lsu
       if lsu_kind == "coalescing_outstanding" then

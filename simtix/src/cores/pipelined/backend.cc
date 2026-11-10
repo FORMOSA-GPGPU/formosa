@@ -12,6 +12,7 @@
 #include "cores/exec_context.h"
 #include "cores/formosa.h"
 #include "cores/pipelined/konata_labels.h"
+#include "cores/thread_stack_pool.h"
 
 #define WITH_TRACER(code)            \
   do {                               \
@@ -147,6 +148,11 @@ void Backend::Execute1() {
       .fflags = packet->fflags_buf.data(),
   };
   packet->flag = simtix::Execute(&ctx, packet->instr);
+  // Packets are only flushed at issue, so every store checked here writes.
+  internal::CheckThreadStackWrites(
+      thread_stack_pool_, uint64_t{num_warps_} * num_lanes_, packet->flag,
+      packet->tmask, packet->addr_buf, packet->wid, core_->cwid()[packet->wid],
+      packet->wpc);
   packet->timestamp = sc_time_stamp();
   execute2_q_.put(packet);
 }

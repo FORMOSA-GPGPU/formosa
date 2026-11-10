@@ -68,10 +68,10 @@ void CoalescingOutstandingLsu::SetupLineTrans(InflightSlot &slot,
 
 bool CoalescingOutstandingLsu::StackAddressRemapper(uint64_t *addr) {
   uint64_t original_addr = *addr;
-  bool is_stack_access =
-      stack_remap_table_
-          ? stack_remap_table_->Matches(original_addr)
-          : original_addr >= stack_start_ && original_addr <= stack_end_;
+  bool is_stack_access = stack_remap_table_
+                             ? stack_remap_table_->Matches(original_addr)
+                             : original_addr >= stack_base_ &&
+                                   original_addr - stack_base_ < stack_size_;
   if (enable_stack_remap_ && is_stack_access) {
     /**
      * Address Format (Before Remapping):

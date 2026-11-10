@@ -41,6 +41,12 @@ function AtomicSM.new(name, options)
   self._core = simtix.AtomicCore("AtomicCore", {
     num_warps = config.warps_per_core,
     num_lanes = config.threads_per_warp,
+    -- The runtime gives each thread its own slot of the stack pool.
+    thread_stack_pool = {
+      base = addr.stack_base,
+      size = config:global_alloc_base(addr) - addr.stack_base,
+      slot_size = addr.per_thread_stack_size,
+    },
   })
 
   self._l1cache = simtix.Cache("L1Cache", {

@@ -64,4 +64,4 @@ target("kernel-sim-bfs", function()
   end)
 end)
 
-includes("riscv-test/xmake.lua", "barrier/xmake.lua")
+includes("riscv-test/xmake.lua", "barrier/xmake.lua", "stack-slot/xmake.lua")
