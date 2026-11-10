@@ -64,13 +64,6 @@ assert(alloc_base % addr.global_alloc_align == 0)
 assert(alloc_base >= stacks_end and alloc_base < stacks_end + addr.global_alloc_align)
 overridden:validate()
 
--- A misspelled name would otherwise silently select the schema default.
-Config:override({ system = { shared_cache = { set_index_function = "ipolly" } } })
-local index_ok, index_message = pcall(function() Config:validate() end)
-assert(not index_ok)
-assert(tostring(index_message):match("set_index_function"))
-Config:override({ system = { shared_cache = { set_index_function = "ipoly" } } })
-
 -- 8 SMs * 8 slots * 32768 threads of stacks would cover global memory.
 overridden:override({ system = { num_sm = 8, warps_per_core = 1024 } })
 ok, message = pcall(function() overridden:validate() end)

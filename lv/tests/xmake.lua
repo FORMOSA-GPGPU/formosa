@@ -52,6 +52,13 @@ target("lv-statistics-test", function()
   add_tests("test", { run_timeout = 30000 })
 end)
 
+target("lv-schema-test", function()
+  set_kind("binary")
+  add_files("unit/schema_test.cc")
+  add_deps("liblv")
+  add_tests("test", { run_timeout = 30000 })
+end)
+
 target("lv-address-router-test", function()
   set_kind("binary")
   add_files(

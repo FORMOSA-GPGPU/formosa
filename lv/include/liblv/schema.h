@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <liblv/log.h>
+
 #include <sol/sol.hpp>
 #include <sol/stack_check_unqualified.hpp>
 #include <string>
@@ -68,6 +70,8 @@ Param generic_parser(const sol::table &tbl) {
            if constexpr (std::is_same_v<
                              DescType, EnumFieldDescriptor<Param, FieldType>>) {
              // Enum field
+             std::string received =
+                 sol::type_name(obj.lua_state(), obj.get_type());
              if (obj.is<std::string>()) {
                std::string val_str = obj.as<std::string>();
                for (const auto &[enum_val, str] : fields.map) {
@@ -76,7 +80,16 @@ Param generic_parser(const sol::table &tbl) {
                    return;
                  }
                }
+               received = '"' + val_str + '"';
              }
+             std::string expected;
+             for (const auto &entry : fields.map) {
+               if (!expected.empty()) expected += ", ";
+               expected += entry.second;
+             }
+             LV_FATAL(
+                 "Invalid value for enum field `{}`: {}. Expected one of: {}",
+                 fields.name, received, expected);
            } else if constexpr (is_vector<FieldType>::value) {
              if (obj.is<sol::table>()) {
                sol::table arr = obj.as<sol::table>();

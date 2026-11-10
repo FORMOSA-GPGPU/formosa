@@ -133,11 +133,6 @@ function SystemConfig:validate()
     self:global_alloc_base() < addr.global_mem_base + addr.global_mem_size,
     "system.num_sm * wg_resident_limit * threads_per_core stacks must leave global memory"
   )
-  assert(
-    self.shared_cache.set_index_function == "modulo"
-      or self.shared_cache.set_index_function == "ipoly",
-    'system.shared_cache.set_index_function must be "modulo" or "ipoly"'
-  )
 end
 
 --- APCCAS2026 is the complete default configuration. Runners apply file and

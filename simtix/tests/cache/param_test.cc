@@ -56,6 +56,12 @@ SCENARIO("Cache Param parses set_index_function", "[cache][param]") {
     CHECK(ParseParam(table).set_index_function ==
           simtix::cache::SetIndexFunction::kModulo);
   }
+
+  THEN("an undeclared name is rejected") {
+    sol::table table = lua.create_table();
+    table["set_index_function"] = "ipolly";
+    CHECK_THROWS_AS(ParseParam(table), lv::fatal_error);
+  }
 }
 
 SCENARIO("Cache rejects invalid non-cacheable regions", "[cache][param]") {
