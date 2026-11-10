@@ -26,7 +26,8 @@ let
       (root + "/ilha/scripts/generate_header.lua")
       (root + "/ilha/scripts/generate_linker.lua")
       (root + "/formosa-sdk-xmake.lua")
-      (root + "/workflows.lua")
+      # The SDK uses native targets without selecting a workflow/test suite.
+      # Workflow metadata must not invalidate the SDK or its PoCL consumers.
       (root + "/hal/xmake.lua")
       # Consumer exports remain supported after the CMake producer is removed.
       (root + "/hal/cmake/FormosaConfig.cmake")
