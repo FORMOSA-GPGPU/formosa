@@ -63,12 +63,16 @@ function PipelinedSM.new(name, options)
   ---@type simtix.Cache.Param
   local icache_param = copy_parameters(sm_param.icache)
   icache_param.block_size_bytes = icache_param.block_size_bytes or config.cache_block_size
+  icache_param.victim_buffer_entries = icache_param.victim_buffer_entries
+    or icache_param.mshr_entries
 
   ---@type simtix.banked_cache.param
   local dcache_param = copy_parameters(sm_param.dcache)
   dcache_param.write_hit_policy = dcache_param.write_hit_policy or "WriteThrough"
   dcache_param.block_size_bytes = dcache_param.block_size_bytes or config.cache_block_size
   dcache_param.non_cacheable_regions = config:effective_non_cacheable_regions()
+  dcache_param.victim_buffer_entries = dcache_param.victim_buffer_entries
+    or dcache_param.mshr_entries
   -- L1 D-caches are not coherent with each other, so a write-back line would
   -- overwrite other SMs' updates to the same line, atomic results included.
   assert(

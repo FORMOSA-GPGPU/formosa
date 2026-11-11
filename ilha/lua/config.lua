@@ -68,6 +68,8 @@ local SystemConfig = {
   cache_block_size = 64,
   non_cacheable_regions = {},
 }
+-- Each primary miss reserves a victim slot, so fewer slots cap MSHR use.
+SystemConfig.shared_cache.victim_buffer_entries = SystemConfig.shared_cache.mshr_entries
 SystemConfig.__index = SystemConfig
 
 function SystemConfig:threads_per_core() return self.threads_per_warp * self.warps_per_core end

@@ -104,4 +104,9 @@ local cache_ok, cache_message = pcall(
 assert(not cache_ok)
 assert(tostring(cache_message):match("system%.shared_cache%.wayz"))
 
+-- The L2 victim buffer follows its MSHR count unless configured explicitly.
+assert(default_cache.victim_buffer_entries == default_cache.mshr_entries)
+Config:override({ system = { shared_cache = { victim_buffer_entries = 4 } } })
+assert(Config.system:shared_cache_param().victim_buffer_entries == 4)
+
 print("Ilha config tests passed")
