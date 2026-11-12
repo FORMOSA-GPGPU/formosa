@@ -31,6 +31,14 @@ option("test-suites", function()
   set_showmenu(true)
   set_description("Comma-separated workflow test suites; alternative to --workflow")
 end)
+option("compile-commands", function()
+  set_default(true)
+  set_showmenu(true)
+  set_description("Update compile_commands.json after builds when sources or config change")
+end)
+if has_config("compile-commands") then
+  add_rules("plugin.compile_commands.autoupdate", { outputdir = "build" })
+end
 
 includes("xmake/tasks/*/xmake.lua")
 includes("xmake/rules/*/xmake.lua")
