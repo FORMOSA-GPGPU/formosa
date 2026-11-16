@@ -38,7 +38,10 @@ int load_configuration_snapshot() noexcept {
       read_capability(FSA_SYSTEM_INFO_OFF_CACHE_BLOCK_SIZE,
                       next.cache_line_size) != 0 ||
       read_capability(FSA_SYSTEM_INFO_OFF_GLOBAL_ALLOC_BASE,
-                      next.global_mem_alloc_base) != 0) {
+                      next.global_mem_alloc_base) != 0 ||
+      read_capability(FSA_SYSTEM_INFO_OFF_TIMEBASE_FREQUENCY,
+                      next.timebase_frequency) != 0 ||
+      next.timebase_frequency == 0) {
     snapshot.reset();
     return -1;
   }

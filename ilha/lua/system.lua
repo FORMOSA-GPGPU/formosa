@@ -17,8 +17,7 @@
 ---@alias ilha.system.sm_ctor fun(name: string, options: ilha.system.sm_options): ilha.system.sm
 
 ---@class ilha.system.opts
----@field keep_alive? boolean
----@field agent_socket_path string
+---@field host fun(): ilha.host.interface How the host reaches the device (see ilha.host)
 
 ---@class ilha.system
 ---@field protected _period sc.time
@@ -39,7 +38,7 @@
 ---@field protected _fab_nexus simple.XBar
 ---@field protected _sm ilha.system.sm[]
 ---@field protected _sm_printbuf simple.PrintBuf[]
----@field protected _agent ipc.Agent
+---@field protected _host ilha.host.interface
 ---@field protected _host_dma dma.DMA
 ---@field protected _device_dma dma.DMA
 ---@field protected _scratch simple.Memory
@@ -257,15 +256,15 @@ function System.new(name, config, opts)
         size = 8,
         value = system:global_alloc_base(),
       },
+      -- mtime ticks once per cycle of the clock the CLINT runs on.
+      {
+        addr = addr.system_info_off_timebase_frequency,
+        size = 8,
+        value = math.floor(1e9 / system.clock_period_ns + 0.5),
+      },
     },
   })
-  self._agent = ipc.Agent("agent", {
-    socket_path = opts.agent_socket_path,
-    timeout_ms = 100,
-    debug = false,
-    ignore_terminate = opts.keep_alive or false,
-    synchronous = true,
-  })
+  self._host = assert(opts.host, "opts.host: a host interface from ilha.host")()
   self._host_dma = dma.DMA("host_dma", { fifo_size = 2 })
   self._device_dma = dma.DMA("device_dma", { fifo_size = 2 })
   local function u64_le(value)
@@ -288,6 +287,15 @@ function System.new(name, config, opts)
     { addr = scratch_mem_base, size = scratch_mem_size }, -- scratch (CP CSR + ABI ring)
   }
   self._fab_agent = simple.XBar("fab_agent", 2, fab_agent_mmap)
+
+  -- A PCI host reaches these windows through BAR0.
+  local host_bar_end = addr.host_bar_base + addr.host_bar_size
+  for _, window in ipairs(fab_agent_mmap) do
+    assert(
+      window.addr >= addr.host_bar_base and window.addr + window.size <= host_bar_end,
+      "fab_agent window outside the host BAR"
+    )
+  end
 
   -- Global memories
   self._l2cache = simtix.Cache("L2Cache", system:shared_cache_param())
@@ -345,7 +353,7 @@ function System.new(name, config, opts)
   end
 
   -- Shared fab_agent connections
-  self._agent.target = self._fab_agent.core_side[1].port
+  self._host.target = self._fab_agent.core_side[1].port
   self._host_dma.port1_target = sys_core_side[1].port
   self._device_dma.port0_target = sys_core_side[3 + system.num_sm].port
   self._device_dma.port1_target = sys_core_side[4 + system.num_sm].port
@@ -355,7 +363,7 @@ function System.new(name, config, opts)
   self._scratch.clock = self._clock
   self._fab_agent.clock = self._clock
 
-  self._host_dma.port0_target = self._agent.port
+  self._host_dma.port0_target = self._host.port
 
   self._fab_sys.mem_side[1].target = self._gmem.port
   self._fab_sys.mem_side[2].target = self._l2cache.port
@@ -377,7 +385,7 @@ function System:_initialize()
   self._rst_n:write(false)
   sc.start(5 * self._period)
   self._rst_n:write(true)
-  self._agent:start()
+  self._host:start()
 end
 
 ---@param cycles integer

@@ -25,7 +25,7 @@ target("hal-race-test", function()
   add_deps("formosa-hal.lv")
 end)
 
-target("hal-lv-tests", function()
+target("hal-unit-test.lv", function()
   set_kind("phony")
   add_deps("hal-mmio-server", "hal-selftest", "hal-race-test")
   add_tests("normal")

@@ -39,10 +39,21 @@ static const formosa::real::ConfigurationSnapshot *active_configuration =
 static std::mutex command_mtx;
 static std::mutex allocation_mtx;
 
+/* Host memory that a command's device DMA reaches. */
+struct HostDmaBuffer {
+  void *ptr;
+  size_t size;
+  /* Where the device reaches it, once mapped. */
+  uint64_t dma_addr = 0;
+};
+static uint64_t firmware_dma_addr = 0;
+
 /* Shared completion-pool ownership. */
 struct CompletionSlotMetadata {
   bool in_use = false;
   FsaCompletionToken token = 0;
+  /* Mapped for device DMA while the command holds the slot. */
+  std::optional<HostDmaBuffer> host_dma;
 };
 static std::vector<CompletionSlotMetadata> completion_slots;
 static std::vector<FsaCompletionToken> stale_completion_tokens;
@@ -287,6 +298,14 @@ std::optional<size_t> allocate_completion_slot() {
   return std::nullopt;
 }
 
+/* Frees a slot once the device no longer uses its command. */
+void free_completion_slot(size_t slot_index) {
+  CompletionSlotMetadata &metadata = completion_slots[slot_index];
+  if (metadata.host_dma.has_value())
+    fsa_real_dma_unmap(metadata.host_dma->dma_addr, metadata.host_dma->size);
+  metadata = CompletionSlotMetadata{};
+}
+
 enum class SendCmdStatus {
   Ok = 0,
   /* Packet write failed before WP doorbell: safe to free the host slot. */
@@ -312,7 +331,8 @@ SendCmdStatus send_cmd(const Packet &cmd) {
 
 template <typename FillPacket>
 FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
-                                      FillPacket fill) {
+                                      FillPacket fill,
+                                      HostDmaBuffer *host_dma = nullptr) {
   if (completion == nullptr) return kFsaCommandSubmitInvalidArgument;
   *completion = 0;
 
@@ -333,22 +353,31 @@ FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
     }
     return kFsaCommandSubmitTransportError;
   }
+  const auto slot_index = allocate_completion_slot();
+  if (!slot_index.has_value()) return kFsaCommandSubmitWouldBlock;
+
+  CompletionSlotMetadata &metadata = completion_slots[*slot_index];
+  if (host_dma != nullptr) {
+    if (fsa_real_dma_map(host_dma->ptr, host_dma->size, &host_dma->dma_addr) !=
+        0) {
+      free_completion_slot(*slot_index);
+      return kFsaCommandSubmitTransportError;
+    }
+    metadata.host_dma = *host_dma;
+  }
+  /* The packet names host memory by its DMA address, known only now. */
   fill(*pkt);
 
   const FsaCompletionToken empty_token = 0;
   memcpy(pkt->raw + FSA_COMPLETION_TOKEN_OFFSET, &empty_token,
          sizeof(empty_token));
-  const auto slot_index = allocate_completion_slot();
-  if (!slot_index.has_value()) return kFsaCommandSubmitWouldBlock;
-
-  CompletionSlotMetadata &metadata = completion_slots[*slot_index];
   const FsaCompletionSlot slot =
       fsa_completion_slot_encode(fsa_completion_token_alloc_tag(metadata.token),
                                  FSA_COMPLETION_RESULT_PENDING);
   const uintptr_t slot_address =
       FSA_COMPLETION_POOL_BASE + *slot_index * FSA_COMPLETION_SLOT_BYTES;
   if (fsa_real_copy_to_scratchpad(slot_address, &slot, sizeof(slot)) != 0) {
-    completion_slots[*slot_index] = CompletionSlotMetadata{};
+    free_completion_slot(*slot_index);
     return kFsaCommandSubmitTransportError;
   }
   memcpy(pkt->raw + FSA_COMPLETION_TOKEN_OFFSET, &metadata.token,
@@ -357,7 +386,7 @@ FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
 
   const SendCmdStatus rc = send_cmd(*pkt);
   if (rc == SendCmdStatus::PreWpFailure) {
-    completion_slots[*slot_index] = CompletionSlotMetadata{};
+    free_completion_slot(*slot_index);
     *completion = 0;
     return kFsaCommandSubmitTransportError;
   }
@@ -406,15 +435,26 @@ FsaCommandSubmitStatus send_memory_copy_cmd(FsaMemoryDomain src_domain,
                                             FsaMemoryDomain dst_domain,
                                             uint64_t dst_addr, uint64_t size,
                                             FsaCompletionToken *completion) {
-  return submit_command(completion, [=](Packet &packet) {
-    MemoryCopyPacket &cmd = packet.memory_copy_packet;
-    cmd.header = kMemoryCopyPacketHeader;
-    cmd.src_domain = src_domain;
-    cmd.dst_domain = dst_domain;
-    cmd.src_addr = src_addr;
-    cmd.dst_addr = dst_addr;
-    cmd.size = size;
-  });
+  /* Firmware rejects a Host-to-Host pair, so only the host side of a
+   * host/device copy is mapped. */
+  const bool from_host = src_domain == kFsaMemoryDomainHost &&
+                         dst_domain == kFsaMemoryDomainDevice;
+  const bool to_host = src_domain == kFsaMemoryDomainDevice &&
+                       dst_domain == kFsaMemoryDomainHost;
+  HostDmaBuffer host_dma = {
+      reinterpret_cast<void *>(from_host ? src_addr : dst_addr), size};
+  return submit_command(
+      completion,
+      [&](Packet &packet) {
+        MemoryCopyPacket &cmd = packet.memory_copy_packet;
+        cmd.header = kMemoryCopyPacketHeader;
+        cmd.src_domain = src_domain;
+        cmd.dst_domain = dst_domain;
+        cmd.src_addr = from_host ? host_dma.dma_addr : src_addr;
+        cmd.dst_addr = to_host ? host_dma.dma_addr : dst_addr;
+        cmd.size = size;
+      },
+      from_host || to_host ? &host_dma : nullptr);
 }
 
 int wait_for_copy_completion(FsaCompletionToken completion) {
@@ -466,14 +506,13 @@ int fsa_copy_from_dev(uintptr_t dev_addr, void *host_ptr, size_t size) {
 
 /* Publish Boot Descriptor only.  ROM programs Host DMA into the fixed staging
  * aperture and copies into TCM.  Returns after ROM clears FW_SIZE. */
-static int upload_firmware(const void *fw_ptr, size_t fw_size) {
-  if (fw_ptr == nullptr || fw_size == 0 || fw_size > FSA_CP_TCM_SIZE) return -1;
+static int upload_firmware(uint64_t fw_dma_addr, size_t fw_size) {
+  if (fw_size == 0 || fw_size > FSA_CP_TCM_SIZE) return -1;
 
   host_rd_ptr = 0;
   host_wr_ptr = 0;
 
-  CHECK_ERR(real_mmio(FSA_CP_OFF_FW_HOST_ADDR,
-                      reinterpret_cast<uintptr_t>(fw_ptr), nullptr));
+  CHECK_ERR(real_mmio(FSA_CP_OFF_FW_HOST_ADDR, fw_dma_addr, nullptr));
   CHECK_ERR(
       real_mmio(FSA_CP_OFF_FW_SIZE, static_cast<int64_t>(fw_size), nullptr));
 
@@ -740,9 +779,7 @@ FsaCompletionReleaseStatus fsa_release_completion(FsaCompletionToken token) {
   if (firmware_rebooted(firmware, token)) {
     std::lock_guard<std::mutex> lock(command_mtx);
     const auto found = find_completion_slot(token);
-    if (found.has_value()) {
-      completion_slots[*found] = CompletionSlotMetadata{};
-    }
+    if (found.has_value()) free_completion_slot(*found);
     return kFsaCompletionReleaseAccepted;
   }
 
@@ -768,7 +805,7 @@ FsaCompletionReleaseStatus fsa_release_completion(FsaCompletionToken token) {
   }
   const auto found = find_completion_slot(token);
   if (!found.has_value()) return kFsaCompletionReleaseInvalidToken;
-  completion_slots[*found] = CompletionSlotMetadata{};
+  free_completion_slot(*found);
   return kFsaCompletionReleaseAccepted;
 }
 
@@ -881,8 +918,11 @@ int fsa_hal_init(FsaDeviceDescription *description) {
     }
     noncache_alloc_ready = true;
 
-    if (ensure_rom_reset_state(5000) != 0 ||
-        upload_firmware(gpufw_elf, gpufw_elf_len) != 0 ||
+    /* Every boot and reset fetches the firmware image by DMA, so it stays
+     * mapped for the session; cleanup drops it with the connection. */
+    if (fsa_real_dma_map(gpufw_elf, gpufw_elf_len, &firmware_dma_addr) != 0 ||
+        ensure_rom_reset_state(5000) != 0 ||
+        upload_firmware(firmware_dma_addr, gpufw_elf_len) != 0 ||
         wait_for_firmware_ready(5000) != kFirmwareReadyResultSuccess) {
       rollback_initialization();
       return -1;
@@ -908,7 +948,7 @@ int fsa_hal_reset(uint64_t timeout) {
   uint64_t start_ns;
   if (fsa_real_time_ns(&start_ns) != 0 ||
       ensure_rom_reset_state(timeout) != 0 ||
-      upload_firmware(gpufw_elf, gpufw_elf_len) != 0) {
+      upload_firmware(firmware_dma_addr, gpufw_elf_len) != 0) {
     firmware_reboot_failed.store(true, std::memory_order_release);
     return -1;
   }
@@ -917,11 +957,12 @@ int fsa_hal_reset(uint64_t timeout) {
     firmware_reboot_failed.store(true, std::memory_order_release);
     return -1;
   }
-  for (const CompletionSlotMetadata &metadata : completion_slots) {
-    if (metadata.in_use) stale_completion_tokens.push_back(metadata.token);
+  /* The rebooted firmware no longer uses any command in flight. */
+  for (size_t i = 0; i < completion_slots.size(); ++i) {
+    if (completion_slots[i].in_use)
+      stale_completion_tokens.push_back(completion_slots[i].token);
+    free_completion_slot(i);
   }
-  std::fill(completion_slots.begin(), completion_slots.end(),
-            CompletionSlotMetadata{});
   host_rd_ptr = 0;
   host_wr_ptr = 0;
   next_alloc_generation = FSA_COMPLETION_ALLOC_GENERATION_INITIAL;

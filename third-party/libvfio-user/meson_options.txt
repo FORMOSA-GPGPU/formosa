@@ -1,0 +1,12 @@
+option('rpath', type: 'feature', value: 'auto',
+       description: 'whether to include rpath information in installed binaries and libraries')
+option('tran-pipe', type: 'boolean', value: false,
+       description: 'enable pipe transport for testing')
+option('debug-logs', type: 'feature', value: 'auto',
+       description: 'enable extra debugging code (default for debug builds)')
+option('shadow-ioeventfd', type: 'boolean', value : false,
+       description: 'enable shadow ioeventfd (experimental)')
+option('client-server-test', type: 'boolean', value : false,
+       description: 'enable client-server test (flaky)')
+option('debug-sgl', type: 'boolean', value : false,
+       description: 'additional debugging for sgl maps')

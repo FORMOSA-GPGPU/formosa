@@ -77,3 +77,37 @@ target("ilha-system-test", function()
     end
   end)
 end)
+
+if is_plat("linux") and is_arch("x86_64") then
+  -- qemu.lua must fail when QEMU itself cannot start: with a command, not read
+  -- QEMU's exit status as the command's; without one, not report success.
+  target("qemu-ilha-test", function()
+    set_kind("phony")
+    add_deps("lv", "fw.runfiles")
+    add_tests("startup_failure", {
+      run_timeout = 600000,
+      guest_command = { "--", "true" },
+      message = "without reporting the command's status",
+    })
+    add_tests("interactive_startup_failure", {
+      run_timeout = 600000,
+      message = "QEMU stopped abnormally",
+    })
+    on_test(function(target, opt)
+      local passed = import("testing").run_with(
+        path.absolute(target:dep("lv"):targetfile()),
+        table.join(
+          { path.join(os.projectdir(), "ilha/qemu.lua"), "--memory", "invalid" },
+          opt.guest_command or {}
+        ),
+        opt
+      )
+      if passed or not opt.stderr:find(opt.message, 1, true) then
+        opt.errors = "qemu.lua did not report QEMU's startup failure"
+        return false
+      end
+      opt.errors = nil
+      return true
+    end)
+  end)
+end

@@ -29,10 +29,59 @@ rule("opencl.benchmark", function()
   )
 end)
 
+-- Runs the cases of the one OpenCL test target it depends on in a QEMU guest
+-- against the device on a PCI bus (ilha/qemu.lua, x86_64 Linux only): the
+-- target's own test script runs each case with `qemu` set. A case staged under
+-- the build directory runs in a sibling copy of it, at the same depth for its
+-- relative paths, so its outputs never meet a concurrent original run. Its
+-- timeout is four times the original's.
+rule("opencl.qemu", function()
+  on_load(function(target) target:set("kind", "phony") end)
+  after_load(function(target)
+    import("core.project.config")
+    local source = target:dep(table.wrap(target:get("deps"))[1])
+    local builddir = path.absolute(config.builddir()) .. "/"
+    for _, name in ipairs(table.wrap(source:get("tests"))) do
+      local conf = table.join(source:extraconf("tests", name) or {}, { qemu = true })
+      -- Under CI's load the guest run took a median 3.6 times the original's.
+      if conf.run_timeout then conf.run_timeout = conf.run_timeout * 4 end
+      if conf.rundir and conf.rundir:startswith(builddir) then
+        conf.staged, conf.rundir = conf.rundir, conf.rundir .. ".qemu"
+      end
+      target:add("tests", name, conf)
+    end
+  end)
+  on_build(function(target)
+    for _, name in ipairs(table.wrap(target:get("tests"))) do
+      local conf = target:extraconf("tests", name)
+      if conf.staged then
+        os.tryrm(conf.rundir)
+        if os.isdir(conf.staged) then
+          os.cp(conf.staged, conf.rundir)
+        else
+          os.mkdir(conf.rundir)
+        end
+      end
+    end
+  end)
+  on_test(function(target, opt)
+    -- As xmake runs a test: the target's script, else its rules'.
+    local source = target:dep(table.wrap(target:get("deps"))[1])
+    local run = source:script("test")
+    for _, r in ipairs(source:orderules()) do
+      run = run or r:script("test")
+    end
+    return run(source, opt)
+  end)
+end)
+
 target("run-opencl", function()
   add_rules("lv.script", { script = "run_opencl.lua" })
   add_deps("fw.runfiles", { inherit = false })
 end)
+
+-- Every program also runs in the guest, as qemu-opencl-<name>.
+local qemu = is_plat("linux") and is_arch("x86_64")
 
 -- Cases and their native groups belong to their host executable.
 local function program(name, directory, cases, sources)
@@ -64,6 +113,13 @@ local function program(name, directory, cases, sources)
       end
     end)
   end)
+
+  if qemu then
+    target("qemu-opencl-" .. name, function()
+      add_rules("opencl.qemu")
+      add_deps("opencl-" .. name)
+    end)
+  end
 end
 
 for _, name in ipairs({

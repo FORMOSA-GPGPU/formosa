@@ -5,7 +5,10 @@
 #include <formosa-hal/api.h>
 #include <formosa-hal/hal.h>
 #include <formosa_addr_map.h>
+#include <sys/mman.h>
+#include <unistd.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdint>
 #include <cstdlib>
@@ -244,11 +247,14 @@ int main() {
 
   // Poll leaves terminal ownership with the caller; release then invalidates
   // the token so a later poll cannot observe a recycled slot.
+  // A device-to-host copy also proves its data is in host memory once a poll
+  // reports it terminal, before the release.
   FsaCompletionToken polled = 0;
-  if (submit_copy(kFsaMemoryDomainHost,
-                  reinterpret_cast<uintptr_t>(input.data()),
-                  kFsaMemoryDomainDevice, kOnchipAddress + 0x1c00, input.size(),
-                  &polled) != kFsaCommandSubmitAccepted) {
+  std::array<uint8_t, kCopySize> polled_output{};
+  if (submit_copy(kFsaMemoryDomainDevice, kDdrAddress + 0x100,
+                  kFsaMemoryDomainHost,
+                  reinterpret_cast<uintptr_t>(polled_output.data()),
+                  polled_output.size(), &polled) != kFsaCommandSubmitAccepted) {
     std::cerr << "polled memory-copy submission failed\n";
     return 1;
   }
@@ -260,10 +266,107 @@ int main() {
   }
   if (polled_status != kFsaCompletionPollTerminal ||
       polled_result != FSA_COMPLETION_RESULT_SUCCESS ||
+      polled_output != input ||
       fsa_release_completion(polled) != kFsaCompletionReleaseAccepted ||
       fsa_poll_completion(polled, nullptr) != kFsaCompletionPollInvalidToken) {
     std::cerr << "generic poll/release lifecycle failed\n";
     return 1;
+  }
+
+  // Copies spanning three pages, three in flight, both ways: each host buffer
+  // is mapped whole, and device DMA crosses pages the IOMMU maps apart.
+  {
+    const size_t size = 3 * static_cast<size_t>(sysconf(_SC_PAGESIZE));
+    std::array<std::vector<uint8_t>, 3> inputs;
+    std::array<void *, 3> devices{};
+    std::array<FsaCompletionToken, 3> tokens{};
+    bool passed = true;
+    for (size_t k = 0; k < inputs.size() && passed; ++k) {
+      inputs[k].resize(size);
+      for (size_t i = 0; i < size; ++i)
+        inputs[k][i] = static_cast<uint8_t>((i * 31 + 3 + k) & 0xff);
+      passed = fsa_malloc(&devices[k], size) == 0 &&
+               submit_copy(kFsaMemoryDomainHost,
+                           reinterpret_cast<uintptr_t>(inputs[k].data()),
+                           kFsaMemoryDomainDevice,
+                           reinterpret_cast<uintptr_t>(devices[k]), size,
+                           &tokens[k]) == kFsaCommandSubmitAccepted;
+    }
+    for (size_t k = 0; k < tokens.size() && passed; ++k) {
+      FsaCompletionResult result = FSA_COMPLETION_RESULT_PENDING;
+      passed = fsa_wait_completion(tokens[k], 60000, &result) ==
+                   kFsaCompletionWaitSuccess &&
+               result == FSA_COMPLETION_RESULT_SUCCESS;
+    }
+    for (size_t k = 0; k < inputs.size() && passed; ++k) {
+      std::vector<uint8_t> output(size);
+      passed = submit_memory_copy(kFsaMemoryDomainDevice,
+                                  reinterpret_cast<uintptr_t>(devices[k]),
+                                  kFsaMemoryDomainHost,
+                                  reinterpret_cast<uintptr_t>(output.data()),
+                                  size, FSA_COMPLETION_RESULT_SUCCESS) &&
+               output == inputs[k];
+    }
+    for (void *device : devices)
+      if (device != nullptr) fsa_free(device);
+    if (!passed) {
+      std::cerr << "multi-page memory copy failed\n";
+      return 1;
+    }
+  }
+
+  // Host memory belongs to a copy only until it is terminal, even while its
+  // token stays unreleased: a page replaced at the same address afterwards is
+  // what the next copy reads. Two copies of that page are in flight first.
+  {
+    const size_t page = sysconf(_SC_PAGESIZE);
+    void *const at = mmap(nullptr, page, PROT_READ | PROT_WRITE,
+                          MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+    if (at == MAP_FAILED) return 1;
+    auto *const bytes = static_cast<uint8_t *>(at);
+    std::fill(bytes, bytes + kCopySize, 0xa1);
+    FsaCompletionToken held = 0;
+    FsaCompletionToken alias = 0;
+    FsaCompletionResult held_result = FSA_COMPLETION_RESULT_PENDING;
+    FsaCompletionPollStatus held_status = kFsaCompletionPollPending;
+    bool passed =
+        submit_copy(kFsaMemoryDomainHost, reinterpret_cast<uintptr_t>(at),
+                    kFsaMemoryDomainDevice, kOnchipAddress + 0x2000, kCopySize,
+                    &held) == kFsaCommandSubmitAccepted &&
+        submit_copy(kFsaMemoryDomainHost, reinterpret_cast<uintptr_t>(at),
+                    kFsaMemoryDomainDevice, kOnchipAddress + 0x2040, kCopySize,
+                    &alias) == kFsaCommandSubmitAccepted;
+    for (size_t i = 0;
+         passed && i < 60000 && held_status == kFsaCompletionPollPending; ++i) {
+      held_status = fsa_poll_completion(held, &held_result);
+    }
+    FsaCompletionResult alias_result = FSA_COMPLETION_RESULT_PENDING;
+    passed = passed && held_status == kFsaCompletionPollTerminal &&
+             held_result == FSA_COMPLETION_RESULT_SUCCESS &&
+             fsa_wait_completion(alias, 60000, &alias_result) ==
+                 kFsaCompletionWaitSuccess &&
+             alias_result == FSA_COMPLETION_RESULT_SUCCESS;
+
+    std::array<uint8_t, kCopySize> replaced{};
+    replaced.fill(0xb2);
+    std::array<uint8_t, kCopySize> output{};
+    passed = passed && munmap(at, page) == 0 &&
+             mmap(at, page, PROT_READ | PROT_WRITE,
+                  MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED, -1, 0) == at;
+    if (passed) std::copy(replaced.begin(), replaced.end(), bytes);
+    passed = passed &&
+             submit_memory_copy(kFsaMemoryDomainHost,
+                                reinterpret_cast<uintptr_t>(at),
+                                kFsaMemoryDomainDevice, kDdrAddress + 0x400,
+                                kCopySize, FSA_COMPLETION_RESULT_SUCCESS) &&
+             run_device_to_host_copy(kDdrAddress + 0x400, &output) &&
+             output == replaced &&
+             fsa_release_completion(held) == kFsaCompletionReleaseAccepted;
+    munmap(at, page);
+    if (!passed) {
+      std::cerr << "copy from a replaced host page failed\n";
+      return 1;
+    }
   }
 
   // Fill the shared pool while letting firmware retire the commands.  The

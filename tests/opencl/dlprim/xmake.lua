@@ -43,7 +43,7 @@ target("opencl-smoke-pytorch_dlprim", function()
       DLPRIM_CACHE_DIR = path.join(output, "dlprim-cache"),
     })
     return import("testing").run_with(path.absolute(target:dep("lv"):targetfile()), {
-      path.join(os.projectdir(), "tests/opencl/run_opencl.lua"),
+      path.join(os.projectdir(), opt.qemu and "ilha/qemu.lua" or "tests/opencl/run_opencl.lua"),
       "--sm",
       "simtix.atomic_sm",
       "--config",
@@ -60,3 +60,10 @@ target("opencl-smoke-pytorch_dlprim", function()
     }, opt)
   end)
 end)
+
+if is_plat("linux") and is_arch("x86_64") then
+  target("qemu-opencl-smoke-pytorch_dlprim", function()
+    add_rules("opencl.qemu")
+    add_deps("opencl-smoke-pytorch_dlprim")
+  end)
+end

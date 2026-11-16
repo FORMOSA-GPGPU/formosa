@@ -4,9 +4,6 @@
 local args = { ... }
 local util = require("lv.util")
 local runfile = util.runfile
-local make_agent = ipc.Agent
-local socket_path = os.tmpname()
-os.remove(socket_path)
 
 local ok, err = xpcall(function()
   -- Use the test ROM and a scripted Agent to read capabilities through the
@@ -17,7 +14,8 @@ local ok, err = xpcall(function()
   end
   local config = require("ilha.config"):override({ sm = { module = args[2] } })
   local reader
-  ipc.Agent = function(name)
+  local function scripted_host()
+    local name = "agent"
     local clock =
       sc.clock(name .. "_clock", sc.time(config.system.clock_period_ns, sc.time_unit.NS))
     reader = simple.Initiator(name .. "_reader")
@@ -37,11 +35,8 @@ local ok, err = xpcall(function()
       end,
     })
   end
-  local system = require("ilha.system")("ilha", config, {
-    agent_socket_path = socket_path,
-  })
+  local system = require("ilha.system")("ilha", config, { host = scripted_host })
   util.runfile = runfile
-  ipc.Agent = make_agent
   local addr = require("ilha.addr_map")
   for _, offset in ipairs({
     addr.system_info_off_num_sm,
@@ -66,6 +61,4 @@ end, debug.traceback)
 
 -- Construction and capability assertions must leave no test resources behind.
 util.runfile = runfile
-ipc.Agent = make_agent
-os.remove(socket_path)
 if not ok then error(err, 0) end

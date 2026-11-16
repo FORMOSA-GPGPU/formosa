@@ -7,7 +7,7 @@
 let
   # CI/lint tooling (pre-commit, clang-format, stylua, gcovr, ...) lives in
   # the top-level flake's ciPackages.
-  packages = with pkgs; [ gdb ];
+  packages = with pkgs; [ gdb qemu_kvm ];
 
   nativeBuildInputs = with pkgs; [ git xmake ];
 
@@ -17,6 +17,7 @@ let
     luajitPackages.luaposix
     zlib
     sqlite
+    json_c
   ];
 in pkgs.mkShell.override { stdenv = pkgs.gccStdenv; } {
   name = "lv";

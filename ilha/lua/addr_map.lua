@@ -31,11 +31,17 @@ local AddressMap = {
   -- Host/Agent MMIO aperture (scratch SRAM; HAL fsa_mmio_base)
   fsa_mmio_base = 0x00060000,
   mmio_size = 0x00010000,
+
+  -- Device addresses a PCI host reaches through BAR0, from offset 0. The
+  -- system decides which of them the host may actually access.
+  host_bar_base = 0x00050000,
+  host_bar_size = 0x00020000,
+
   -- SystemInfo ABI v1: individually readable unsigned 64-bit little-endian fields.
   system_info_base = 0x00060000,
   system_info_size = 0x100,
   system_info_version = 1,
-  system_info_length = 0x48,
+  system_info_length = 0x50,
   system_info_off_abi_version = 0x00,
   system_info_off_length = 0x08,
   system_info_off_num_sm = 0x10,
@@ -45,6 +51,7 @@ local AddressMap = {
   system_info_off_shared_cache_size = 0x30,
   system_info_off_cache_block_size = 0x38,
   system_info_off_global_alloc_base = 0x40,
+  system_info_off_timebase_frequency = 0x48,
   cp_csr_base = 0x00060100,
   cp_csr_bank = 0x100,
   cp_csr_size = 0x60,
@@ -144,6 +151,14 @@ function AddressMap.validate()
   assert(AddressMap.host_dma_csr_base >= AddressMap.cp_ctrl_base + AddressMap.cp_ctrl_size)
   assert(AddressMap.device_dma_csr_base + AddressMap.device_dma_csr_size <= AddressMap.cp_tcm_base)
   assert(AddressMap.clint_base + AddressMap.clint_size == AddressMap.fsa_mmio_base)
+  local host_bar_end = AddressMap.host_bar_base + AddressMap.host_bar_size
+  local bar_size = AddressMap.host_bar_size
+  while bar_size > 1 and bar_size % 2 == 0 do
+    bar_size = bar_size / 2
+  end
+  assert(bar_size == 1, "host_bar_size must be a power of two")
+  assert(AddressMap.clint_base >= AddressMap.host_bar_base)
+  assert(AddressMap.fsa_mmio_base + AddressMap.mmio_size <= host_bar_end)
   assert(AddressMap.cp_csr_base >= AddressMap.fsa_mmio_base)
   assert(AddressMap.system_info_base == AddressMap.fsa_mmio_base)
   assert(AddressMap.system_info_length <= AddressMap.system_info_size)

@@ -52,6 +52,7 @@ end)
 -- Only discover the environment's LuaJIT; vendored sources below never download.
 add_requires("pkgconfig::luajit", { alias = "luajit", system = true })
 add_requires("pkgconfig::sqlite3", { alias = "sqlite3", system = true })
+if is_plat("linux") then add_requires("pkgconfig::json-c", { alias = "json-c", system = true }) end
 
 target("dramsys", function()
   add_rules("build.no-coverage")
@@ -189,3 +190,19 @@ target("elfio", function()
   set_kind("headeronly")
   add_sysincludedirs("elfio", { public = true })
 end)
+
+if is_plat("linux") then
+  -- Built from the pinned sources directly instead of upstream's meson recipe.
+  target("libvfio-user", function()
+    add_rules("build.no-coverage")
+    set_kind("static")
+    set_languages("gnu99")
+    add_files("libvfio-user/lib/*.c")
+    remove_files("libvfio-user/lib/tran_pipe.c")
+    add_includedirs("libvfio-user/lib")
+    add_sysincludedirs("libvfio-user/include", { public = true })
+    add_defines("_GNU_SOURCE", "HAVE_LINUX_KCMP_H")
+    add_packages("json-c")
+    add_syslinks("dl", "pthread", { public = true })
+  end)
+end

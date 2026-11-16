@@ -91,6 +91,12 @@ target("lv.bindings", function()
   set_kind("object")
   add_files("src/lv/bindings/**.cc")
   add_deps("liblv", "lv.device", "dramsys", "elfio", "glm", "Vvclint")
+  -- vfio-user serves the device to QEMU on Linux only.
+  if is_plat("linux") then
+    add_deps("libvfio-user")
+  else
+    remove_files("src/lv/bindings/vfio_user/**.cc")
+  end
   add_defines('DRAMSYS_RESOURCE_DIR="third-party/DRAMSys/configs"')
 end)
 

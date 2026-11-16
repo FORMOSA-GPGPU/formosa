@@ -27,6 +27,7 @@ or binaries built from it.
 | `third-party/elfio` | See `third-party/elfio/LICENSE.txt`. |
 | `third-party/fmt` | See `third-party/fmt/LICENSE`. |
 | `third-party/glm` | See `third-party/glm/copying.txt`. |
+| `third-party/libvfio-user` | See `third-party/libvfio-user/LICENSE`. |
 | `third-party/perfetto` | See `third-party/perfetto/LICENSE` and its bundled third-party notices. |
 | `third-party/quill` | See `third-party/quill/LICENSE`. |
 | `third-party/riscv-opcodes` | See `third-party/riscv-opcodes/LICENSE`. |

@@ -11,6 +11,7 @@ trace.settings.output_prefix = "daemon"
 
 ---@type ilha.system
 local System = require("ilha.system")
+local Host = require("ilha.host")
 local argparse = require("argparse")
 local ConfigCli = require("ilha.config_cli")
 
@@ -28,8 +29,7 @@ local args = parser:parse({ ... })
 local config = ConfigCli.load(args)
 
 local system = System("System", config, {
-  agent_socket_path = args.agent_socket_path,
-  keep_alive = args.keep_alive,
+  host = Host.ipc(args.agent_socket_path, { keep_alive = args.keep_alive }),
 })
 
 local function exit_hook()

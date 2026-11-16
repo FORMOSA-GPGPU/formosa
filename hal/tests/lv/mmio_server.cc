@@ -103,6 +103,8 @@ void initialize_mmio_registers() {
   // shows whether HAL uses the reported value.
   mmio_registers[FSA_SYSTEM_INFO_BASE + FSA_SYSTEM_INFO_OFF_GLOBAL_ALLOC_BASE] =
       FSA_STACK_BASE + 0x2000000;
+  mmio_registers[FSA_SYSTEM_INFO_BASE +
+                 FSA_SYSTEM_INFO_OFF_TIMEBASE_FREQUENCY] = 400000000;
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_SIZE] =
       8;  // Example: 8 packets
   mmio_registers[test_fsa_mmio_base() + FSA_CP_OFF_CMD_RING_BASE] =

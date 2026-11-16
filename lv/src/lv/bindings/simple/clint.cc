@@ -204,6 +204,7 @@ class Clint : public sc_module {
           SC_REPORT_ERROR("TLM-2",
                           "Illegal transaction command received by CLINT");
         }
+        trans->set_response_status(tlm::TLM_OK_RESPONSE);
         return len;
       }
 

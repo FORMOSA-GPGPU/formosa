@@ -174,6 +174,13 @@ int fsa_real_mmio(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr) {
   }
 }
 
+// The simulator serves device DMA from this process's own address space.
+int fsa_real_dma_map(void *host_ptr, size_t, uint64_t *dma_addr) {
+  *dma_addr = reinterpret_cast<uintptr_t>(host_ptr);
+  return 0;
+}
+void fsa_real_dma_unmap(uint64_t, size_t) {}
+
 int fsa_real_cp_reset() {
   const auto *config = formosa::real::configuration_snapshot();
   if (config == nullptr) return -1;

@@ -57,6 +57,7 @@ function main(output_file, source_dir, module_name)
     { "FSA_SYSTEM_INFO_OFF_SHARED_CACHE_SIZE", hex(get("system_info_off_shared_cache_size")) },
     { "FSA_SYSTEM_INFO_OFF_CACHE_BLOCK_SIZE", hex(get("system_info_off_cache_block_size")) },
     { "FSA_SYSTEM_INFO_OFF_GLOBAL_ALLOC_BASE", hex(get("system_info_off_global_alloc_base")) },
+    { "FSA_SYSTEM_INFO_OFF_TIMEBASE_FREQUENCY", hex(get("system_info_off_timebase_frequency")) },
     { "FSA_CP_KERNEL_STATE_BUF_SIZE", decimal(get("cp_kernel_state_buf_size"), "u") },
     { "FSA_HOST_DMA_CSR_BASE", hex(get("host_dma_csr_base")) },
     { "FSA_HOST_DMA_CSR_BANK", hex(get("host_dma_csr_bank")) },
@@ -75,6 +76,8 @@ function main(output_file, source_dir, module_name)
     { "FSA_CLINT_MTIMECMP_BASE", "(FSA_CLINT_BASE + FSA_CLINT_MTIMECMP_OFFSET)" },
     { "FSA_MMIO_BASE", hex(get("fsa_mmio_base")) },
     { "FSA_MMIO_SIZE", hex(get("mmio_size")) },
+    { "FSA_HOST_BAR_BASE", hex(get("host_bar_base")) },
+    { "FSA_HOST_BAR_SIZE", hex(get("host_bar_size")) },
     -- Compatibility names for the component-owned LV DMA contract.
     { "FSA_DMA_OFF_START", "LV_DMA_OFF_START" },
     { "FSA_DMA_OFF_ADDR0", "LV_DMA_OFF_ADDR0" },

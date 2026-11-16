@@ -533,6 +533,12 @@ for name, workload in pairs(workloads) do
       end
     end)
   end)
+  if is_plat("linux") and is_arch("x86_64") then
+    target("qemu-" .. target_name(name), function()
+      add_rules("opencl.qemu")
+      add_deps(target_name(name))
+    end)
+  end
 end
 
 target("opencl-rodinia-validation", function()

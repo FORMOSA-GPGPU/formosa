@@ -4,6 +4,7 @@
 
 ---@type ilha.system
 local System = require("ilha.system")
+local Host = require("ilha.host")
 
 local stdlib = require("posix.stdlib")
 local Poll = require("posix.poll")
@@ -111,7 +112,7 @@ if childpid == 0 then
     end
   end
 
-  local system = System("System", config, { agent_socket_path = agent_socket_path })
+  local system = System("System", config, { host = Host.ipc(agent_socket_path) })
   local socket_info = assert(Stat.stat(agent_socket_path), "agent socket was not created")
   assert(Stat.S_ISSOCK(socket_info.st_mode) ~= 0, "agent socket path is not a socket")
   assert(U.write(ready_w, "1"), "failed to signal that the agent socket is ready")

@@ -24,6 +24,20 @@ target("formosa-real.lv", function()
   add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
 end)
 
+-- The device on a PCI bus (e.g. a QEMU guest), driven from user space through
+-- Linux VFIO.
+local backends = is_plat("linux") and { "lv", "pci" } or { "lv" }
+if is_plat("linux") then
+  target("formosa-real.pci", function()
+    set_kind("static")
+    -- SystemInfo parsing is shared with the lv backend.
+    add_files("src/real/pci/pci-driver.cc", "src/real/lv/lv-config.cc")
+    add_includedirs("src")
+    add_deps("hal.protocol", "ilha-platform-data")
+    add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
+  end)
+end
+
 target("gpufw-embedded", function()
   set_kind("object")
   add_deps("gpufw.elf", { inherit = false })
@@ -63,29 +77,34 @@ target("gpufw-embedded", function()
   end)
 end)
 
-target("formosa-hal.lv", function()
-  set_kind("static")
-  add_files("src/hal/hal.cc")
-  add_includedirs("include", { public = true })
-  add_includedirs("src")
-  add_headerfiles("include/(formosa-hal/**.h)")
-  add_deps("formosa-real.lv", "falloc", "ilha-platform-data")
-  add_deps("gpufw-embedded", { inherit = false })
-  after_load(
-    function(target) target:add("includedirs", target:dep("gpufw-embedded"):autogendir()) end
-  )
-  add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
-end)
+for _, backend in ipairs(backends) do
+  target("formosa-hal." .. backend, function()
+    set_kind("static")
+    add_files("src/hal/hal.cc")
+    add_includedirs("include", { public = true })
+    add_includedirs("src")
+    add_headerfiles("include/(formosa-hal/**.h)")
+    add_deps("formosa-real." .. backend, "falloc", "ilha-platform-data")
+    add_deps("gpufw-embedded", { inherit = false })
+    after_load(
+      function(target) target:add("includedirs", target:dep("gpufw-embedded"):autogendir()) end
+    )
+    add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
+  end)
+end
 
 includes("tests/xmake.lua")
 
 target("formosa-sdk", function()
   set_kind("phony")
   add_rules("workflow.install")
-  add_deps("formosa-hal.lv", "formosa-real.lv", "falloc", "libcomm")
+  for _, backend in ipairs(backends) do
+    add_deps("formosa-hal." .. backend, "formosa-real." .. backend)
+  end
+  add_deps("falloc", "libcomm")
   on_install(function(target)
     import("target.action.install", { alias = "install_target" })
-    for _, name in ipairs({ "formosa-hal.lv", "formosa-real.lv", "falloc", "libcomm" }) do
+    for _, name in ipairs(table.wrap(target:get("deps"))) do
       install_target(target:dep(name), {
         installdir = target:installdir(),
         bindir = "bin",

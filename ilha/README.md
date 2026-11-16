@@ -112,6 +112,7 @@ A custom runner can apply overrides directly before constructing the system:
 -- Run inside lv, which supplies sc and the registered component bindings.
 local Config = require("ilha.config")
 local System = require("ilha.system")
+local Host = require("ilha.host")
 
 Config:override({
   system = { num_sm = 2 },
@@ -119,7 +120,7 @@ Config:override({
 })
 
 local system = System("System", Config, {
-  agent_socket_path = "/tmp/formosa.sock",
+  host = Host.ipc("/tmp/formosa.sock"),
 })
 system:start(1000) -- simulation cycles
 sc.stop()
@@ -178,8 +179,9 @@ Config.system.num_sm = 2
 
 SystemInfo is a `simple.ConstantTable` on `fab_agent` at `0x60000`, accessible
 to both the host and CP. ABI v1 contains version, length, SM count, warp/lane
-counts, local-memory size, shared-cache size, cache-block size, and the
-global-allocation base. Its valid length is `0x48`; each field is read
+counts, local-memory size, shared-cache size, cache-block size, the
+global-allocation base, and the timebase frequency (CLINT `mtime` ticks per
+second). Its valid length is `0x50`; each field is read
 individually as an unsigned 64-bit little-endian value using generated offsets.
 HAL validates version and length on connection; there is no
 hardware-configuration environment dump.

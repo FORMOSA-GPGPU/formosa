@@ -44,4 +44,9 @@ target("ilha-daemon", function()
   add_deps("fw.runfiles", { inherit = false })
 end)
 
+target("ilha-qemu", function()
+  add_rules("lv.script", { script = "qemu.lua" })
+  add_deps("fw.runfiles", { inherit = false })
+end)
+
 includes("tests/xmake.lua")

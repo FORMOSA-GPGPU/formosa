@@ -241,4 +241,10 @@ for name, workload in pairs(workloads) do
       end
     end)
   end
+  if is_plat("linux") and is_arch("x86_64") then
+    target("qemu-opencl-parboil-" .. name, function()
+      add_rules("opencl.qemu")
+      add_deps("opencl-parboil-" .. name)
+    end)
+  end
 end

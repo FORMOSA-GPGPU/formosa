@@ -12,8 +12,10 @@ function prepare(cases)
     local tests = {}
     if target:rule("opencl.benchmark") and not target:name():startswith("opencl-smoke-") then
       for _, name in ipairs(table.wrap(target:get("tests"))) do
+        local conf = target:extraconf("tests", name)
         if
-          target:extraconf("tests", name).sm == "simtix.pipelined_sm"
+          conf.sm == "simtix.pipelined_sm"
+          and not conf.qemu
           and (not cases or table.contains(cases, target:name() .. "/" .. name))
         then
           table.insert(tests, name)
@@ -32,7 +34,8 @@ function run(target, opt)
   )
   os.mkdir(output)
   local argv = {
-    path.join(os.scriptdir(), "run_opencl.lua"),
+    opt.qemu and path.join(os.projectdir(), "ilha/qemu.lua")
+      or path.join(os.scriptdir(), "run_opencl.lua"),
     "-s",
     path.join(output, "stats.toml"),
     "-t",

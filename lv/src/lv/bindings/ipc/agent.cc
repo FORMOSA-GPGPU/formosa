@@ -4,6 +4,7 @@
 
 #include <libcomm/libcomm.h>
 #include <liblv/binding.h>
+#include <liblv/common/thread_safe_queue.h>
 #include <liblv/common/tlm_sink.h>
 #include <liblv/common/tlm_source.h>
 #include <liblv/mm/thread_safe_pool.h>
@@ -489,76 +490,16 @@ SC_MODULE(Agent) {
 
   std::condition_variable cv_;
 
-  class thread_safe_event : sc_prim_channel {
-   public:
-    void notify(sc_time delay = SC_ZERO_TIME) {
-      delay_ = delay;
-      async_request_update();
-    }
-    operator const sc_event &(void) const { return event_; }
-
-   protected:
-    virtual void update(void) { event_.notify(delay_); }
-
-   private:
-    sc_event event_;
-    sc_time delay_;
-  };
-
   std::weak_ptr<libcomm::Transceiver> probe_peer_;
   std::weak_ptr<libcomm::Transceiver> terminate_peer_;
   libcomm::Msg probe_msg_{libcomm::Msg::Build(libcomm::Cmd::Probe)};
-  thread_safe_event probe_event_;
+  lv::ThreadSafeEvent probe_event_;
   libcomm::Msg terminate_msg_{libcomm::Msg::Build(libcomm::Cmd::Terminate)};
-  thread_safe_event terminate_event_;
-  thread_safe_event wait_event_;
+  lv::ThreadSafeEvent terminate_event_;
+  lv::ThreadSafeEvent wait_event_;
 
-  // Thread-safe std::queue of tlm_generic_payload, with push event.
-  class PayloadQueue {
-   public:
-    using T = tlm::tlm_generic_payload *;
-
-    void push(const T &payload, bool notify_simulation = true) {
-      std::lock_guard<std::mutex> lock(m_);
-      q_.push(payload);
-      if (notify_simulation) push_event_.notify();
-      cv_.notify_one();
-    }
-
-    T pop() {
-      std::lock_guard<std::mutex> lock(m_);
-      assert(!q_.empty());
-      T tmp = q_.front();
-      q_.pop();
-      return tmp;
-    }
-
-    T wait_pop() {
-      std::unique_lock<std::mutex> lock(m_);
-      cv_.wait(lock, [&] {
-        return !q_.empty();
-      });
-      T result = q_.front();
-      q_.pop();
-      return result;
-    }
-
-    size_t size() const {
-      std::lock_guard<std::mutex> lock(m_);
-      return q_.size();
-    }
-
-    const sc_event &push_event() const { return push_event_; }
-
-   private:
-    thread_safe_event push_event_;
-    mutable std::mutex m_;
-    std::condition_variable cv_;
-    std::queue<tlm::tlm_generic_payload *> q_;
-  };
-
-  PayloadQueue req_q_fw_;
-  PayloadQueue resp_q_fw_;
+  lv::ThreadSafePayloadQueue req_q_fw_;
+  lv::ThreadSafePayloadQueue resp_q_fw_;
 
   struct Meta {
     libcomm::Msg msg;

@@ -20,6 +20,8 @@ int fsa_real_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
 int fsa_real_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr,
                                   size_t size);
 int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size);
+int fsa_real_dma_map(void *host_ptr, size_t size, uint64_t *dma_addr);
+void fsa_real_dma_unmap(uint64_t dma_addr, size_t size);
 int fsa_real_poll_backoff(uint64_t *now_ns);
 int fsa_real_time_ns(uint64_t *now_ns);
 void fsa_real_abort();
@@ -37,6 +39,8 @@ struct ConfigurationSnapshot {
   uint64_t cache_line_size = 0;
   uint64_t global_mem_base = 0;
   uint64_t global_mem_alloc_base = 0;
+  // Ticks per second of the device timer (CLINT mtime).
+  uint64_t timebase_frequency = 0;
   uint64_t global_mem_size = 0;
   uint64_t global_mem_noncache_alloc_base = 0;
   uint64_t global_mem_noncache_alloc_size = 0;

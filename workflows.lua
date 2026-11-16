@@ -100,6 +100,8 @@ local config = {
       paths = {
         "ilha/xmake.lua",
         "ilha/daemon.lua",
+        "ilha/qemu.lua",
+        "tools/qemu-guest.nix",
         "ilha/configs/**",
         "ilha/include/**",
         "ilha/lua/**",
@@ -177,6 +179,10 @@ local config = {
     ["lv.bindings.dma"] = make_lv_binding_component("dma"),
     ["lv.bindings.dramsys"] = make_lv_binding_component("dramsys"),
     ["lv.bindings.ipc"] = make_lv_binding_component("ipc"),
+    ["lv.bindings.vfio_user"] = {
+      paths = { "lv/src/lv/bindings/vfio_user/**" },
+      depends = { "lv.liblv", "lv.bindings.build", "lv.device", "third-party.libvfio-user" },
+    },
     ["lv.bindings.nic"] = make_lv_binding_component("nic"),
     ["lv.bindings.simple"] = make_lv_binding_component("simple"),
     ["lv.bindings.systemc"] = make_lv_binding_component("systemc"),
@@ -192,6 +198,7 @@ local config = {
         "lv.bindings.dma",
         "lv.bindings.dramsys",
         "lv.bindings.ipc",
+        "lv.bindings.vfio_user",
         "lv.bindings.nic",
         "lv.bindings.simple",
         "lv.bindings.systemc",
@@ -354,6 +361,13 @@ local config = {
     },
     ["libcomm.tests"] = {
       paths = { "libcomm/tests/**" },
+    },
+    ["third-party.libvfio-user"] = {
+      paths = {
+        "third-party/libvfio-user",
+        "third-party/libvfio-user/**",
+      },
+      depends = { "repo.build" },
     },
     ["third-party.perfetto"] = {
       paths = {
@@ -521,7 +535,7 @@ local config = {
     ["hal.unit"] = {
       depends = { "hal", "hal.tests" },
       build_options = { ["install-targets"] = { "formosa-sdk" } },
-      selectors = { "hal-lv-tests/*" },
+      selectors = { "hal-unit-test.lv/*" },
     },
     ["libcomm.unit"] = {
       depends = { "libcomm", "libcomm.tests" },
@@ -565,6 +579,28 @@ local config = {
       },
       selectors = { "lv/ilha/integration/**", "ilha-system-test/*" },
     },
+    -- QEMU guest runs against the device on a PCI bus; they need the dev shell's
+    -- guest, and KVM to run fast.
+    ["ilha.qemu"] = {
+      depends = { "ilha.platform", "lv.bindings.vfio_user" },
+      selectors = { "qemu-ilha-test/*" },
+    },
+    ["hal.qemu"] = {
+      depends = { "hal", "hal.tests", "tests.hal", "ilha.platform", "lv.bindings.vfio_user" },
+      selectors = { "hal-integration-test.pci/*" },
+    },
+    ["opencl.qemu"] = {
+      depends = {
+        "formosa-pocl",
+        "tests.opencl",
+        "simtix.atomic_sm",
+        "simtix.pipelined_sm",
+        "hal",
+        "ilha.platform",
+        "lv.bindings.vfio_user",
+      },
+      selectors = { "qemu-opencl-*/**" },
+    },
     ["lv.bindings"] = {
       depends = {
         "lv.tests.unit",
@@ -594,11 +630,11 @@ local config = {
     ["hal.daemon"] = {
       depends = { "hal", "hal.tests", "tests.hal" },
 
-      selectors = { "hal-daemon-tests/*" },
+      selectors = { "hal-integration-test.lv/*" },
     },
     ["hal.integration"] = {
       depends = { "hal", "hal.tests", "tests.hal" },
-      selectors = { "hal-*/*" },
+      selectors = { "hal-*.lv/*" },
     },
   },
   workflows = {
@@ -608,7 +644,7 @@ local config = {
     },
     hal = {
       description = "Validate firmware, HAL, libcomm, and HAL daemon behavior.",
-      test_suites = { "fw.unit", "hal.unit", "libcomm.unit", "hal.daemon" },
+      test_suites = { "fw.unit", "hal.unit", "libcomm.unit", "hal.daemon", "hal.qemu" },
     },
     lv = {
       description = "Validate the complete Lunaverse runtime and bindings.",
@@ -620,7 +656,13 @@ local config = {
     ),
     ["ilha.platform"] = {
       description = "Validate the Ilha platform configuration, bindings, work-group lifecycle, and SM composition.",
-      test_suites = { "ilha.unit", "ilha.integration", "simtix.sm.integration" },
+      test_suites = {
+        "ilha.unit",
+        "ilha.integration",
+        "ilha.qemu",
+        "hal.qemu",
+        "simtix.sm.integration",
+      },
     },
     ["simtix.atomic_sm"] = make_simtix_sm_workflow("atomic_sm", { "simtix.sm.integration" }),
     ["simtix.cache"] = {
@@ -646,10 +688,27 @@ local config = {
         "opencl.simtix.pipelined_sm",
         "opencl.simtix.atomic_sm",
         "opencl.validation",
+        "opencl.qemu",
         "hal.unit",
       },
     },
   },
 }
+
+-- QEMU drives the device over Linux VFIO from an x86_64 guest, so its suites
+-- exist only on x86_64 Linux.
+if
+  (get_config("plat") or os.host()) ~= "linux" or (get_config("arch") or os.arch()) ~= "x86_64"
+then
+  local qemu_suites = { ["ilha.qemu"] = true, ["hal.qemu"] = true, ["opencl.qemu"] = true }
+  for name in pairs(qemu_suites) do
+    config.test_suites[name] = nil
+  end
+  for _, workflow in pairs(config.workflows) do
+    for index = #workflow.test_suites, 1, -1 do
+      if qemu_suites[workflow.test_suites[index]] then table.remove(workflow.test_suites, index) end
+    end
+  end
+end
 
 function main() return config end
