@@ -5,28 +5,29 @@
 { lib, stdenv, fetchurl }:
 
 let
-  version = "57.2";
-
   # Pin to a specific Perfetto release so the hash never changes unless you
   # intentionally bump the version.  Previously this used the launcher script
   # at get.perfetto.dev/trace_processor, which always resolved to the latest
   # release and therefore broke the fixed-output hash on every upstream release.
+  # The version is shared with the SDK that writes the traces.
+  version = import ../third-party/perfetto-version.nix;
+
   artifacts = {
     "x86_64-linux" = {
       arch = "linux-amd64";
-      sha256 = "sha256-VbphP8bU9x34Hu4tv8KTAgBjZVwkGz4xS/91NFuAJoQ=";
+      sha256 = "sha256-JDQSmjr03J4gNKR297dkR7SQl1IT4wF2kxDTvQ1dZFg=";
     };
     "aarch64-linux" = {
       arch = "linux-arm64";
-      sha256 = "sha256-HcwZ2qLvK5LouM8YX1fkTkRWAJS9Yb3Ak0wRGMX/BoY=";
+      sha256 = "sha256-oI5INhcch747pYNO7zSJqogDR2018pLtf+rMriUnR9A=";
     };
     "x86_64-darwin" = {
       arch = "mac-amd64";
-      sha256 = "sha256-wPYTl5AdpHy+G7mghDYk98IDiskhds4V43Ns6aoK/vA=";
+      sha256 = "sha256-3zgDmEUkTDU8OZmUdIWZNFzwj3QEkbWDLn/rmk28xHY=";
     };
     "aarch64-darwin" = {
       arch = "mac-arm64";
-      sha256 = "sha256-mKQbgOn2DaA3PWSv9kVWgfjCa3w5GuVzYySlsR49rMI=";
+      sha256 = "sha256-hIjtvvrfxL4VLNodQtm/zt6LR2OCleuF6zutjNFI/fQ=";
     };
   };
 

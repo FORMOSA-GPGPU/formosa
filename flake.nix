@@ -42,6 +42,9 @@
 
         projectPackages = {
           hal = import ./hal/default.nix { inherit pkgs; };
+          perfetto-sdk = pkgs.callPackage ./third-party/perfetto-sdk.nix {
+            stdenv = pkgs.gccStdenv;
+          };
           pytorch-dlprim =
             import ./pytorch-dlprim/default.nix { inherit pkgs; };
         };
@@ -111,7 +114,10 @@
         projectDevShells = rec {
           libcomm = import ./libcomm/shell.nix { inherit pkgs; };
           simtix = import ./simtix/shell.nix { inherit pkgs; };
-          lv = import ./lv/shell.nix { inherit pkgs; };
+          lv = import ./lv/shell.nix {
+            inherit pkgs;
+            inherit (projectPackages) perfetto-sdk;
+          };
           sw = projectPackages.hal;
         };
 

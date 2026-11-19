@@ -110,7 +110,9 @@ local config = {
         "ilha/src/**",
         "ilha/tests/**",
       },
-      depends = { "lv.liblv", "lv.lua", "lv.bindings.build" },
+      -- ilha.command_packet_abi carries hal/src/hal/command_packet.h, preprocessed
+      -- for the LuaJIT FFI at build time.
+      depends = { "lv.liblv", "lv.lua", "lv.bindings.build", "hal" },
     },
     ["repo.build"] = {
       paths = {
@@ -371,10 +373,10 @@ local config = {
     },
     ["third-party.perfetto"] = {
       paths = {
-        "third-party/perfetto",
-        "third-party/perfetto/**",
+        "third-party/perfetto-sdk.nix",
+        "third-party/perfetto-version.nix",
       },
-      depends = { "repo.build" },
+      depends = { "repo.build", "repo.environment" },
     },
     ["fw"] = {
       paths = {
@@ -551,6 +553,7 @@ local config = {
         "lv-log-test/*",
         "lv-statistics-test/*",
         "lv-schema-test/*",
+        "lv-trace-test/*",
         "lv-address-router-test/*",
         "lv-axi-test/**",
         "lv-axi-rejection-test/**",
@@ -616,6 +619,7 @@ local config = {
         "lv-log-test/*",
         "lv-statistics-test/*",
         "lv-schema-test/*",
+        "lv-trace-test/*",
         "lv-address-router-test/*",
         "lv-axi-test/**",
         "lv-axi-rejection-test/**",
@@ -628,7 +632,8 @@ local config = {
       },
     },
     ["hal.daemon"] = {
-      depends = { "hal", "hal.tests", "tests.hal" },
+      -- The daemon tests run the ilha system, and trace-invariance its tracing.
+      depends = { "hal", "hal.tests", "tests.hal", "ilha.platform" },
 
       selectors = { "hal-integration-test.lv/*" },
     },

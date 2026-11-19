@@ -144,7 +144,7 @@ tlm::tlm_sync_enum BankingRouter::nb_transport_bw(
   switch (phase) {
     case tlm::END_REQ:
       req_end_event_[s_id]->notify();
-      return tlm::TLM_UPDATED;
+      return tlm::TLM_ACCEPTED;
     case tlm::BEGIN_RESP:
       peq_bw_.notify(trans);
       return tlm::TLM_ACCEPTED;

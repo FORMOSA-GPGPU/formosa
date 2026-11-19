@@ -218,6 +218,13 @@ void test_semantic_descriptor_validation() {
   FsaCompletionResult result = FSA_COMPLETION_RESULT_PENDING;
   test_return(fsa_wait_completion(token, 100, &result));
 
+  kernel.label = "labelled_kernel";
+  if (fsa_cmd_start_kernel(&kernel, &token) != kFsaCommandSubmitAccepted) {
+    std::cerr << "[FORMOSA HAL Test] labelled launch rejected\n";
+    exit(-1);
+  }
+  test_return(fsa_wait_completion(token, 100, &result));
+
   FsaMemoryCopyInfo copy{};
   copy.struct_size = sizeof(copy) + 1;
   copy.source.domain = kFsaMemoryDomainHost;

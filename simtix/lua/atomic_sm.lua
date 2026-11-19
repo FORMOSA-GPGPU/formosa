@@ -72,10 +72,13 @@ function AtomicSM.new(name, options)
   self._icache_controller = ilha.CacheController("ICacheController", {
     verbose = false,
     num_banks = 0,
+    -- No cache sits behind it, so its commands are not operations to trace.
+    pftrace = false,
   })
   self._dcache_controller = ilha.CacheController("DCacheController", {
     verbose = false,
     num_banks = 1,
+    pftrace = config.trace.cache_operations,
   })
   self._dcache_controller.bank = self._l1cache.cmd_port
 
@@ -84,7 +87,7 @@ function AtomicSM.new(name, options)
     threads_per_warp = config.threads_per_warp,
     wg_resident_limit = config.wg_resident_limit,
     fifo_size = 4,
-    enable_trace = true,
+    pftrace = config.trace.wg_slots,
   })
 
   self._core_info = simple.ConstantTable("CoreInfo", {

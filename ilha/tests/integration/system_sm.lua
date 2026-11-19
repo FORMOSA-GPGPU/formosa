@@ -12,7 +12,13 @@ local ok, err = xpcall(function()
     if path == "bin/fwrom.elf" then return args[1] end
     return runfile(path)
   end
-  local config = require("ilha.config"):override({ sm = { module = args[2] } })
+  -- A third argument, "command_trace", puts the command-trace watcher on the
+  -- scratch link.
+  local command_trace = args[3] == "command_trace"
+  local config = require("ilha.config"):override({
+    sm = { module = args[2] },
+    system = { trace = { commands = command_trace } },
+  })
   local reader
   local function scripted_host()
     local name = "agent"
@@ -45,6 +51,12 @@ local ok, err = xpcall(function()
   }) do
     reader:add_payload({ addr = addr.system_info_base + offset, size = 8 })
   end
+  -- With the command trace, scratch accesses pass through its watcher.
+  local ring_entry = { 1, 2, 3, 4, 5, 6, 7, 8 }
+  if command_trace then
+    reader:add_payload({ addr = addr.cmd_ring_base, data = ring_entry })
+    reader:add_payload({ addr = addr.cmd_ring_base, size = #ring_entry })
+  end
   system:start(100)
   local function u64(bytes)
     local value = 0
@@ -56,7 +68,16 @@ local ok, err = xpcall(function()
   assert(u64(assert(reader:get_read_data())) == config.system.num_sm)
   assert(u64(assert(reader:get_read_data())) == config.system.threads_per_warp)
   assert(u64(assert(reader:get_read_data())) == config.system:global_alloc_base())
-  print("Ilha system/SM regression PASS: " .. args[2])
+  if command_trace then
+    assert(system._scratch_watcher ~= nil, "system.trace.commands did not add the scratch watcher")
+    local read = assert(reader:get_read_data())
+    for i, byte in ipairs(ring_entry) do
+      assert(read[i] == byte, "the scratch watcher did not pass a write on")
+    end
+  end
+  print(
+    "Ilha system/SM regression PASS: " .. args[2] .. (command_trace and " (command trace)" or "")
+  )
 end, debug.traceback)
 
 -- Construction and capability assertions must leave no test resources behind.

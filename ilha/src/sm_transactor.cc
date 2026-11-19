@@ -20,13 +20,13 @@ namespace {
 struct Param {
   int limit = 16;
   bool delay = true;
-  bool enable_trace = false;
+  bool pftrace = false;
 
   // clang-format off
   LV_SCHEMA(SMTransactor, Param,
             LV_FIELD(limit, "Maximum queued kernel packet count"),
             LV_FIELD(delay, "Randomize dequeue delay"),
-            LV_FIELD(enable_trace, "Enable Perfetto trace"))
+            LV_FIELD(pftrace, "Enable Perfetto trace"))
   // clang-format on
 };
 
@@ -178,7 +178,7 @@ LV_BINDING(ilha, SMTransactor)
     .constructor(
         [](const char *name, const Param &param) {
           return std::make_shared<SMTransactor>(name, param.limit, param.delay,
-                                                param.enable_trace);
+                                                param.pftrace);
         },
         lv::params("name", "param"),
         lv::doc("Create a stream-multiprocessor transactor"))

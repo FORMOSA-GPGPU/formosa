@@ -31,7 +31,7 @@ class WGInitializer : public sc_module {
     unsigned warps_per_core = 32;
     unsigned sink_fifo_size = 1;
     unsigned fifo_size = 4;
-    bool enable_trace = false;
+    bool pftrace = false;
 
     std::optional<sol::safe_function> on_wg_dispatch;
     std::optional<sol::safe_function> on_wg_retire;
@@ -43,7 +43,7 @@ class WGInitializer : public sc_module {
               LV_FIELD(warps_per_core, "Number of warps per core"),
               LV_FIELD(sink_fifo_size, "Sink FIFO size"),
               LV_FIELD(fifo_size, "FIFO size"),
-              LV_FIELD(enable_trace, "Enable perfetto trace or not"),
+              LV_FIELD(pftrace, "Enable perfetto trace or not"),
               LV_FIELD(on_wg_dispatch, "Hook when groups are dispatched"),
               LV_FIELD(on_wg_retire, "Hook when groups are done"))
     // clang-format on

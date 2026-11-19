@@ -4,6 +4,7 @@
 
 #include <libcomm/libcomm.h>
 #include <liblv/binding.h>
+#include <liblv/common/annotation.h>
 #include <liblv/common/thread_safe_queue.h>
 #include <liblv/common/tlm_sink.h>
 #include <liblv/common/tlm_source.h>
@@ -13,7 +14,9 @@
 
 #include <condition_variable>
 #include <memory>
+#include <optional>
 #include <queue>
+#include <string>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -361,8 +364,24 @@ SC_MODULE(Agent) {
       std::lock_guard<std::mutex> lock(transceiver_mutex_);
       previous = std::exchange(transceiver_, peer);
     }
+    // The Annotate text waiting for the next Put to its address. A later
+    // Annotate replaces it and an empty one clears it, so a peer that never
+    // sends the Put cannot make it grow. This peer's messages arrive in
+    // order on its receive thread, the only one that touches it.
+    auto annotation =
+        std::make_shared<std::optional<std::pair<uint64_t, std::string>>>();
     peer->RegisterSyncHandler(
-        [this, origin = std::weak_ptr(peer)](auto *self, libcomm::Msg msg) {
+        [this, origin = std::weak_ptr(peer), annotation](auto *self,
+                                                         libcomm::Msg msg) {
+          if (msg.cmd() == libcomm::Cmd::Annotate) {
+            const auto *text = reinterpret_cast<const char *>(msg.data());
+            if (text == nullptr || msg.size() == 0) {
+              annotation->reset();
+            } else {
+              annotation->emplace(msg.addr(), std::string(text, msg.size()));
+            }
+            return;
+          }
           if (msg.is_request()) {
             if (msg.cmd() == libcomm::Cmd::Wait) {
               QueueIncoming(msg, origin);
@@ -417,6 +436,12 @@ SC_MODULE(Agent) {
             if (msg.cmd() == libcomm::Cmd::Put) {
               payload->set_write();
               std::memcpy(buf.data(), msg.data(), msg.size());
+              if (*annotation && (*annotation)->first == msg.addr()) {
+                // Freed when the pool resets the payload.
+                payload->set_auto_extension(
+                    new lv::Annotation(std::move((*annotation)->second)));
+                annotation->reset();
+              }
             }
 
             req_q_fw_.push(payload, !synchronous_);

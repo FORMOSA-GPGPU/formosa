@@ -240,12 +240,17 @@ typedef struct {
   FsaDeviceAddress kernarg_address;
   FsaDeviceAddress kernel_trampoline;
   FsaDeviceAddress kernel_status;
+  /** Optional display name, such as the kernel name, or NULL. It never
+   *  changes execution. */
+  const char *label;
 } FsaKernelLaunchInfo;
 
 typedef struct {
   uint32_t struct_size;
   FsaMemoryRegion source;
   FsaMemoryRegion destination;
+  /** Optional display name, or NULL. It never changes execution. */
+  const char *label;
 } FsaMemoryCopyInfo;
 
 /**

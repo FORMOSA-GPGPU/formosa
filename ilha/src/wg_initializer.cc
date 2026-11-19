@@ -92,7 +92,7 @@ WGInitializer::WGInitializer(const sc_module_name &name, const Param &param)
   for (uint32_t i = 0; i < param.wg_resident_limit; ++i) {
     std::string track_name = fmt::format("WG slot {}", i);
     pf_packets_.push_back(LV_NEW_MODULE_TRACK(track_name));
-    pf_packets_[i].set_enabled(param.enable_trace);
+    pf_packets_[i].set_enabled(param.pftrace);
   }
 }
 

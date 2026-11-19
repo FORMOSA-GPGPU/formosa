@@ -152,6 +152,54 @@ local sm = make_sm("SM0", {
 The atomic and pipelined simtix compositions instantiate ILHA bindings, so
 those complete compositions require the ILHA plugin to be linked.
 
+## Trace host commands
+
+When lv is built with Perfetto, `system.trace.commands = true` in a
+`--system-config` file records these tracks without changing simulated timing:
+
+| Track | Recorded by | One slice per |
+|---|---|---|
+| `Host commands/Kernels`, `Memory copies`, `Cache commands`, `Barriers` | `ilha.command_trace` on a `dbg.AccessWatcher` in front of `scratch` | Host command, from the CP consuming it to the CP publishing its completion |
+| `Host commands/Submissions` | the same | Host doorbell (instant) |
+
+A command slice starts when the CP's write advancing RD_PTR completes on the
+scratch link, after the CP has read the packet, and ends when its write of the
+command's completion slot completes there. It includes the firmware's own work
+on the command: dispatching a kernel and retiring its last work-group, or, for
+a memory copy, waiting for earlier kernels and cache commands, the cache
+maintenance and the DMA transfer. The time a command waits in the ring shows as
+the gap after its `Submissions` instant; the host noticing the completion is
+not traced. The WG slot tracks show when work-groups run on each SM.
+
+A command slice is named by the `label` the host passed in
+`FsaKernelLaunchInfo` or `FsaMemoryCopyInfo`, such as the kernel name, or else
+by its type, such as `memcpy H2D` or `kernel 0x830030c0` (the kernel's
+trampoline); sizes and geometry are its arguments.
+Overlapping commands of one type open further lanes (`Cache commands #2`).
+With `trace.commands = false`, the default, the watcher is not on the link.
+The decoder reads packets through the LuaJIT FFI, from the declarations of
+`hal/src/hal/command_packet.h` that `ilha.command_packet_abi` carries, preprocessed
+at build time, so it holds no copy of the packet layout. `ilha.command_packet_abi`
+also holds the constants the FFI cannot see: the bytes of the completion token
+and slot fields, the result codes and the kernel dispatch flags.
+
+The firmware phases of a command have their own switches, all true by
+default:
+
+| Track | Switch | Recorded by | One slice per |
+|---|---|---|---|
+| `host_dma/Transfer`, `device_dma/Transfer` | `trace.dma` | `dma.DMA` | DMA transfer; an empty transfer, an invalid descriptor and a bus error are instants |
+| `…CacheController/Operations` | `trace.cache_operations` | `ilha.CacheController` | Flush or invalidate on one cache, including those a memory copy issues internally |
+| `…wg_init/WG slot N` | `trace.wg_slots` | `ilha.WGInitializer` | Work group resident in that slot of one SM, from dispatch to completion |
+
+Module-level Perfetto switches use `pftrace` (default: false). For example,
+`dma.DMA("dma", { pftrace = true })` traces transfers. `simtix.BankedCache` passes
+its `pftrace` to each cache bank, as `simtix.BankedMemory` does, and
+`controller_pftrace` switches its maintenance controller's Operations track. In
+the pipelined SM, `system.trace.cache_operations` sets `controller_pftrace` for
+the D-cache composite. The system-level classification switches above and the
+`lv-enable-perfetto` build option remain separate.
+
 ## Keep software and hardware consistent
 
 [`lua/addr_map.lua`](lua/addr_map.lua) owns the fixed platform address map and

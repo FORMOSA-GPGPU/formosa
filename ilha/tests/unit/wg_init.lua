@@ -25,7 +25,7 @@ local wg_initializer = ilha.WGInitializer("wg_initializer", {
   wg_resident_limit = wg_resident_limit,
   threads_per_warp = threads_per_warp,
   warps_per_core = warps_per_core,
-  enable_trace = false,
+  pftrace = false,
 })
 local core = ilha.StubWarpCtrl("stub_core", {
   warps_per_core = warps_per_core,

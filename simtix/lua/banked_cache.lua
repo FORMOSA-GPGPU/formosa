@@ -19,6 +19,7 @@ local COMPOSITION_KEYS = {
   num_froms = true,
   total_size = true,
   set_index_shift = true,
+  controller_pftrace = true,
 }
 
 ---@param num_banks integer
@@ -92,6 +93,8 @@ end
 ---@field num_banks? integer   Number of interleaved banks (default: 4)
 ---@field num_froms? integer   Number of master (from) ports (default: 1)
 ---@field total_size? integer  Router address-space size in bytes
+---@field pftrace? boolean Enable Perfetto trace on each cache bank (default: false)
+---@field controller_pftrace? boolean Trace the maintenance controller's Operations track (default: false)
 
 ---@class simtix.BankedCache
 ---@field protected _sc_module sc.Module
@@ -163,6 +166,7 @@ function BankedCache.new(name, param)
   })
   self._controller = ilha.CacheController("controller", {
     num_banks = num_banks,
+    pftrace = param.controller_pftrace or false,
   })
 
   self.stats = stats.Group(name)

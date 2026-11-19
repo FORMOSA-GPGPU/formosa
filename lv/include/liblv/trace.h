@@ -126,6 +126,16 @@ void TraceInstant(const Track &track, std::string_view category,
                   std::string_view name, uint64_t timestamp,
                   std::initializer_list<TraceArg>);
 
+/**
+ * @brief Stops tracing, completes the trace file and warns if lv's trace
+ * writer dropped data.
+ *
+ * Call it once the simulation is over, while logging still works; later trace
+ * events are discarded. Without it the trace is completed during static
+ * destruction. Does nothing if no track was created.
+ */
+void Finish();
+
 }  // namespace trace
 }  // namespace lv
 

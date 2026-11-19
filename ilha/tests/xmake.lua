@@ -10,7 +10,7 @@ end)
 
 target("lv", function()
   add_deps("ilha.test-bindings")
-  for _, name in ipairs({ "wg_init", "cache_controller", "sm_transactor" }) do
+  for _, name in ipairs({ "wg_init", "cache_controller", "sm_transactor", "command_trace" }) do
     add_tests("ilha/" .. name, {
       runargs = { path.join(os.scriptdir(), "unit", name .. ".lua") },
       rundir = os.scriptdir(),
@@ -75,6 +75,16 @@ target("ilha-system-test", function()
         run_timeout = 30000,
       })
     end
+    -- The command-trace watcher sits on a system link, whichever SM is chosen.
+    target:add("tests", "simtix.pipelined_sm.command_trace", {
+      runargs = {
+        path.join(target:scriptdir(), "integration/system_sm.lua"),
+        path.absolute(target:targetfile()),
+        "simtix.pipelined_sm",
+        "command_trace",
+      },
+      run_timeout = 30000,
+    })
   end)
 end)
 

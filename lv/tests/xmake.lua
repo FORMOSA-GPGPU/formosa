@@ -2,7 +2,17 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
+-- Test-only Lua bindings, built into lv like ilha.test-bindings, such as
+-- dbg.PassThroughTester.
+target("lv.test-bindings", function()
+  set_kind("object")
+  add_files("unit/dbg/pass_through_tester.cc")
+  add_includedirs("$(projectdir)")
+  add_deps("liblv")
+end)
+
 target("lv", function()
+  add_deps("lv.test-bindings")
   add_tests("docgen", {
     runargs = { "--docgen" },
     pass_outputs = ".*%-%-%-@meta.*",
@@ -55,6 +65,13 @@ end)
 target("lv-schema-test", function()
   set_kind("binary")
   add_files("unit/schema_test.cc")
+  add_deps("liblv")
+  add_tests("test", { run_timeout = 30000 })
+end)
+
+target("lv-trace-test", function()
+  set_kind("binary")
+  add_files("unit/trace_test.cc")
   add_deps("liblv")
   add_tests("test", { run_timeout = 30000 })
 end)

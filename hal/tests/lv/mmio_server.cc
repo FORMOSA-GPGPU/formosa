@@ -320,6 +320,8 @@ void handle_mmio_message(libcomm::Transceiver *self, const libcomm::Msg &msg) {
     // Send is synchronous. Static Transceiver destructors would join this
     // receiver thread if exit() ran them here.
     std::_Exit(0);
+  } else if (msg.cmd() == libcomm::Cmd::Annotate) {
+    // One-way and for observation only; this server observes nothing.
   } else {
     std::cout << "[MMIO Server] Received unknown command: "
               << static_cast<int>(msg.cmd()) << std::endl;

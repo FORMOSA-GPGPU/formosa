@@ -10,10 +10,71 @@ target("libilha", function()
   add_deps("systemc", { public = true })
 end)
 
+-- Preprocesses the Host ABI header for the LuaJIT FFI into a C++ string
+-- literal, which ilha.command_packet_abi carries as its cdef. Stub standard
+-- headers keep the system headers out, since ffi.cdef cannot parse them and
+-- LuaJIT predefines the fixed-width types; the static assertions go too.
+target("ilha.command-packet-cdef", function()
+  set_kind("phony")
+  set_policy("build.fence", true)
+  on_load(
+    function(target)
+      target:add("includedirs", path.join(target:autogendir(), "cdef"), { public = true })
+    end
+  )
+  on_build(function(target)
+    import("core.project.depend")
+    local dir = path.join(target:autogendir(), "cdef")
+    local output = path.join(dir, "command_packet_cdef.inc")
+    local hal = path.join(os.projectdir(), "hal")
+    depend.on_changed(function()
+      local stub = path.join(dir, "stub")
+      os.mkdir(stub)
+      io.writefile(path.join(stub, "stddef.h"), "")
+      io.writefile(
+        path.join(stub, "stdint.h"),
+        table.concat({
+          "#define UINT16_C(c) c",
+          "#define UINT32_C(c) c",
+          "#define UINT64_C(c) c",
+          "#define UINT32_MAX 0xffffffffu",
+          "",
+        }, "\n")
+      )
+      local source = path.join(dir, "command_packet.c")
+      io.writefile(source, '#include "command_packet.h"\n')
+      local compiler = target:compiler("cxx")
+      local cdef = os.iorunv(compiler:program(), {
+        "-E",
+        "-P",
+        "-x",
+        "c",
+        "-nostdinc",
+        "-D_Static_assert(...)=",
+        "-I" .. stub,
+        "-I" .. path.join(hal, "src/hal"),
+        "-I" .. path.join(hal, "include"),
+        source,
+      }, { envs = compiler:runenvs() })
+      io.writefile(output, 'R"cdef(' .. cdef .. ')cdef"\n')
+    end, {
+      files = {
+        path.join(hal, "src/hal/command_packet.h"),
+        path.join(hal, "include/formosa-hal/api.h"),
+        path.join(os.scriptdir(), "xmake.lua"),
+      },
+      dependfile = output .. ".d",
+      lastmtime = os.mtime(output),
+      changed = target:is_rebuilt(),
+    })
+  end)
+end)
+
 target("ilha.bindings", function()
   set_kind("object")
   add_files("src/*.cc")
-  add_deps("libilha", "liblv")
+  add_deps("libilha", "liblv", "hal.protocol")
+  add_deps("ilha.command-packet-cdef")
 end)
 
 target("ilha.lua", function()

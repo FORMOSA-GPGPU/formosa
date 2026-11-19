@@ -52,6 +52,7 @@ end)
 -- Only discover the environment's LuaJIT; vendored sources below never download.
 add_requires("pkgconfig::luajit", { alias = "luajit", system = true })
 add_requires("pkgconfig::sqlite3", { alias = "sqlite3", system = true })
+add_requires("pkgconfig::perfetto", { alias = "perfetto", system = true })
 if is_plat("linux") then add_requires("pkgconfig::json-c", { alias = "json-c", system = true }) end
 
 target("dramsys", function()
@@ -122,41 +123,6 @@ target("fmt", function()
   set_kind("static")
   add_files("fmt/src/format.cc", "fmt/src/os.cc")
   add_sysincludedirs("fmt/include", { public = true })
-end)
-
-target("perfetto", function()
-  add_rules("build.no-coverage")
-  set_kind("static")
-  if is_plat("macosx") then
-    -- Nix uses GCC on Darwin too. Keep Apple's signpost intrinsic Clang-only,
-    -- as in the existing CMake build, without modifying the pinned SDK source.
-    on_load(function(target)
-      local source = path.join(target:scriptdir(), "perfetto/sdk/perfetto.cc")
-      local generated = path.join(target:autogendir(), "perfetto.cc")
-      local contents = io.readfile(source)
-      contents = contents
-        :replace(
-          "#if PERFETTO_BUILDFLAG(PERFETTO_OS_MAC)\n#include <os/signpost.h>",
-          "#if PERFETTO_BUILDFLAG(PERFETTO_OS_MAC) && defined(__clang__)\n#include <os/signpost.h>",
-          { plain = true }
-        )
-        :replace(
-          "#if PERFETTO_BUILDFLAG(PERFETTO_OS_MAC)\n    // Emit a MacOS point-of-interest signpost",
-          "#if PERFETTO_BUILDFLAG(PERFETTO_OS_MAC) && defined(__clang__)\n    // Emit a MacOS point-of-interest signpost",
-          { plain = true }
-        )
-      if not os.isfile(generated) or io.readfile(generated) ~= contents then
-        os.mkdir(path.directory(generated))
-        io.writefile(generated, contents)
-      end
-      target:add("files", generated)
-    end)
-  else
-    add_files("perfetto/sdk/perfetto.cc")
-  end
-  add_sysincludedirs("perfetto/sdk", { public = true })
-  add_syslinks("pthread", { public = true })
-  if is_plat("linux") then add_syslinks("dl", { public = true }) end
 end)
 
 target("quill", function()

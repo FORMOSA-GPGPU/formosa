@@ -14,7 +14,7 @@ trace.settings.output_prefix = "SMTransactor"
 local pf_tb = trace.Track("tb", false)
 
 local initiator = simple.Initiator("initiator")
-local smt = ilha.SMTransactor("SMTransactor", { limit = 4, delay = false, enable_trace = true })
+local smt = ilha.SMTransactor("SMTransactor", { limit = 4, delay = false, pftrace = true })
 
 local period = sc.time(10, sc.time_unit.NS)
 local clock = sc.clock("clock", period)

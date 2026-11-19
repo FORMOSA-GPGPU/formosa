@@ -61,7 +61,7 @@ jobs:
         run: |
           set -euo pipefail
           submodule_re='^third-party/(systemc|sol2|DRAMSys|fmt|argparse|elfio|'
-          submodule_re+='perfetto|glm|tomlplusplus|Catch2|softfloat|FreeRTOS-Kernel|'
+          submodule_re+='glm|tomlplusplus|Catch2|softfloat|FreeRTOS-Kernel|'
           submodule_re+='riscv-opcodes|riscv-tests|quill|DRAMUtils|nlohmann_json)(/|$)'
           blocked=()
           warned=()

@@ -43,7 +43,7 @@ class XBarImpl : public sc_module {
    * register a separate thread to handle transactions from that PEQ.
    */
   explicit XBarImpl(const sc_module_name &name, uint32_t num_masters,
-                    const std::vector<map_entry> &addr_map, bool enable_trace)
+                    const std::vector<map_entry> &addr_map, bool pftrace)
       : sc_module(name) {
     // Create core-side sinks and corresponding backward PEQs
     for (uint32_t i = 0; i < num_masters; ++i) {
@@ -111,7 +111,7 @@ class XBarImpl : public sc_module {
         for (uint32_t j = 0; j < addr_map.size(); ++j) {
           auto track = LV_NEW_MODULE_TRACK(
               fmt::format("CoreSide{}->MemSide{}", i, j).c_str());
-          track.set_enabled(enable_trace);
+          track.set_enabled(pftrace);
           pf_tracks_[i].emplace_back(std::move(track));
         }
       }
@@ -480,15 +480,15 @@ LV_BINDING(simple, XBar)
         lv::doc("Create a TLM crossbar"))
     .constructor(
         [](const char *name, uint32_t num_masters,
-           sol::nested<std::vector<sol::table>> table, bool enable_trace) {
+           sol::nested<std::vector<sol::table>> table, bool pftrace) {
           return std::make_shared<XBar>(name, num_masters,
-                                        ParseAddressMap(table), enable_trace);
+                                        ParseAddressMap(table), pftrace);
         },
         lv::params(lv::param("name"), lv::param("num_masters"),
                    lv::param("addr_map",
                              lv::lua_type("{ addr: integer, size: integer, "
                                           "subtract_start_addr?: boolean }[]")),
-                   lv::param("enable_trace")),
+                   lv::param("pftrace")),
         lv::doc("Create a traced TLM crossbar"))
     .property("clock", &XBar::clock, &XBar::set_clock, lv::doc("SystemC clock"))
     .property("mem_side", &XBar::mem_side, lv::doc("Memory-side source ports"))

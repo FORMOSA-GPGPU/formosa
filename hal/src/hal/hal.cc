@@ -63,6 +63,9 @@ static_assert(FSA_COMPLETION_SLOT_COUNT == FSA_COMPLETION_POOL_ENTRIES,
 
 namespace {
 
+/* A command label is a display name; longer ones are truncated. */
+constexpr size_t kMaxCommandLabelBytes = 256;
+
 bool checked_add(uint64_t lhs, uint64_t rhs, uint64_t &result) {
   if (lhs > std::numeric_limits<uint64_t>::max() - rhs) return false;
   result = lhs + rhs;
@@ -314,9 +317,16 @@ enum class SendCmdStatus {
   WpAttemptedFailure = 2,
 };
 
-SendCmdStatus send_cmd(const Packet &cmd) {
+SendCmdStatus send_cmd(const Packet &cmd, const char *label) {
   uint64_t cmd_wr_addr = dev_cmd_ring_base + (host_wr_ptr * sizeof(cmd.raw));
 
+  // The label annotates the packet write, so it reaches whatever observes
+  // that write. It never changes execution, so a failure to send it is
+  // ignored.
+  if (label != nullptr && label[0] != '\0') {
+    (void)fsa_real_annotate(cmd_wr_addr, label,
+                            strnlen(label, kMaxCommandLabelBytes));
+  }
   if (fsa_real_copy_to_scratchpad(cmd_wr_addr, &cmd, sizeof(cmd.raw)) != 0) {
     return SendCmdStatus::PreWpFailure;
   }
@@ -329,9 +339,10 @@ SendCmdStatus send_cmd(const Packet &cmd) {
   return SendCmdStatus::Ok;
 }
 
+/* label: optional display name for the command, or nullptr. */
 template <typename FillPacket>
 FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
-                                      FillPacket fill,
+                                      const char *label, FillPacket fill,
                                       HostDmaBuffer *host_dma = nullptr) {
   if (completion == nullptr) return kFsaCommandSubmitInvalidArgument;
   *completion = 0;
@@ -384,7 +395,7 @@ FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
          sizeof(metadata.token));
   *completion = metadata.token;
 
-  const SendCmdStatus rc = send_cmd(*pkt);
+  const SendCmdStatus rc = send_cmd(*pkt, label);
   if (rc == SendCmdStatus::PreWpFailure) {
     free_completion_slot(*slot_index);
     *completion = 0;
@@ -392,6 +403,12 @@ FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
   }
   if (rc != SendCmdStatus::Ok) return kFsaCommandSubmitTransportError;
   return kFsaCommandSubmitAccepted;
+}
+
+template <typename FillPacket>
+FsaCommandSubmitStatus submit_command(FsaCompletionToken *completion,
+                                      FillPacket fill) {
+  return submit_command(completion, nullptr, fill);
 }
 
 /* Ensure CP is in ROM Reset before publishing a Boot Descriptor. */
@@ -434,7 +451,8 @@ FsaCommandSubmitStatus send_memory_copy_cmd(FsaMemoryDomain src_domain,
                                             uint64_t src_addr,
                                             FsaMemoryDomain dst_domain,
                                             uint64_t dst_addr, uint64_t size,
-                                            FsaCompletionToken *completion) {
+                                            FsaCompletionToken *completion,
+                                            const char *label) {
   /* Firmware rejects a Host-to-Host pair, so only the host side of a
    * host/device copy is mapped. */
   const bool from_host = src_domain == kFsaMemoryDomainHost &&
@@ -444,7 +462,7 @@ FsaCommandSubmitStatus send_memory_copy_cmd(FsaMemoryDomain src_domain,
   HostDmaBuffer host_dma = {
       reinterpret_cast<void *>(from_host ? src_addr : dst_addr), size};
   return submit_command(
-      completion,
+      completion, label,
       [&](Packet &packet) {
         MemoryCopyPacket &cmd = packet.memory_copy_packet;
         cmd.header = kMemoryCopyPacketHeader;
@@ -601,7 +619,7 @@ FsaCommandSubmitStatus fsa_cmd_start_kernel(const FsaKernelLaunchInfo *info,
     dispatch_flags |= FSA_KERNEL_DISPATCH_STACK_REMAP;
   }
 
-  return submit_command(completion, [=](Packet &packet) {
+  return submit_command(completion, info->label, [=](Packet &packet) {
     KernelDispatchPacket &cmd = packet.kernel_dispatch_packet;
     cmd.header = kKernelDispatchPacketHeader;
     cmd.dim_reserved0 = dispatch_flags;
@@ -654,9 +672,10 @@ FsaCommandSubmitStatus fsa_cmd_memory_copy(const FsaMemoryCopyInfo *info,
     if (completion != nullptr) *completion = 0;
     return kFsaCommandSubmitInvalidArgument;
   }
-  return send_memory_copy_cmd(
-      info->source.domain, info->source.range.address, info->destination.domain,
-      info->destination.range.address, info->source.range.size, completion);
+  return send_memory_copy_cmd(info->source.domain, info->source.range.address,
+                              info->destination.domain,
+                              info->destination.range.address,
+                              info->source.range.size, completion, info->label);
 }
 
 FsaCommandSubmitStatus fsa_cmd_barrier(FsaCompletionToken *completion) {

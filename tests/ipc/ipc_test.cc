@@ -8,6 +8,7 @@
 #include <cassert>
 #include <condition_variable>
 #include <cstdio>
+#include <string>
 #include <vector>
 
 int main(int argc, char *argv[]) {
@@ -49,6 +50,22 @@ int main(int argc, char *argv[]) {
         //    data.
         assert(msg.id() == msg.addr());
         auto addr = 128 + msg.size();
+        // Copies of 8 bytes or more are annotated, but an empty Annotate
+        // clears the 16-byte one's; the device checks that exactly the
+        // others carry their text.
+        if (msg.size() >= 8) {
+          const std::string text = "copy " + std::to_string(msg.size());
+          self->Send(libcomm::Msg::Build(libcomm::Cmd::Annotate)
+                         .addr(addr)
+                         .size(text.size())
+                         .data(reinterpret_cast<const uint8_t *>(text.data())));
+        }
+        if (msg.size() == 16) {
+          self->Send(libcomm::Msg::Build(libcomm::Cmd::Annotate)
+                         .addr(addr)
+                         .size(0)
+                         .data(reinterpret_cast<const uint8_t *>("")));
+        }
         self->Send(libcomm::Msg::Build(libcomm::Cmd::Put)
                        .addr(addr)
                        .size(msg.size())
@@ -92,6 +109,17 @@ int main(int argc, char *argv[]) {
     b = rand();
   }
 
+  // 0b. Annotate 128, which no copy writes. The copies' annotations replace
+  //     this one, so the write to 128 in step 4b must carry none.
+  {
+    const std::string text = "replaced";
+    transceiver->Send(
+        libcomm::Msg::Build(libcomm::Cmd::Annotate)
+            .addr(128)
+            .size(text.size())
+            .data(reinterpret_cast<const uint8_t *>(text.data())));
+  }
+
   // 1. Probe the device.
   {
     transceiver->Send(libcomm::Msg::Build(libcomm::Cmd::Probe).id(probe_id));
@@ -116,6 +144,20 @@ int main(int argc, char *argv[]) {
     std::unique_lock<std::mutex> lock(m);
     completion.wait(lock, [&] {
       return resp_cnt == sizes.size() && terminated;
+    });
+  }
+
+  // 4b. Write 128, whose annotation from step 0b was replaced.
+  {
+    uint8_t byte = 0;
+    transceiver->Send(libcomm::Msg::Build(libcomm::Cmd::Put)
+                          .addr(128)
+                          .size(1)
+                          .id(128)
+                          .data(&byte));
+    std::unique_lock<std::mutex> lock(m);
+    completion.wait(lock, [&] {
+      return resp_cnt == sizes.size() + 1;
     });
   }
 

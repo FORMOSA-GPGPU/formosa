@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <limits>
 #include <memory>
+#include <string_view>
 #include <systemc>
 
 namespace dma {
@@ -27,18 +28,22 @@ constexpr uint64_t kStatusOffset = LV_DMA_OFF_STATUS;
 
 struct Param {
   int fifo_size = 16;
+  bool pftrace = false;
 
-  LV_SCHEMA(DMA, Param, LV_FIELD(fifo_size, "Internal transaction FIFO size"))
+  LV_SCHEMA(DMA, Param, LV_FIELD(fifo_size, "Internal transaction FIFO size"),
+            LV_FIELD(pftrace, "Trace each transfer on a Perfetto track"))
 };
 
 }  // namespace
 
-DMA::DMA(const sc_core::sc_module_name &name, int fifo_size)
+DMA::DMA(const sc_core::sc_module_name &name, int fifo_size, bool pftrace)
     : sc_core::sc_module(name),
       port0_master_("port0_master"),
       port1_master_("port1_master"),
       slave_("slave", nullptr),
-      trans_fifo_(fifo_size) {
+      trans_fifo_(fifo_size),
+      transfer_track_(LV_NEW_MODULE_TRACK("Transfer")) {
+  transfer_track_.set_enabled(pftrace);
   SC_THREAD(mmio_proc);
   SC_THREAD(read_proc);
   SC_THREAD(write_proc);
@@ -125,11 +130,17 @@ void DMA::mmio_proc() {
 
 bool DMA::start_transfer() {
   if (size_ == 0) {
+    LV_TRACE_INSTANT(transfer_track_, "DMA", "Empty transfer",
+                     LV_TRACE_ARG("addr0", addr0_),
+                     LV_TRACE_ARG("addr1", addr1_));
     start_ = 0;
     status_ = Status::kDone;
     return true;
   }
   if (size_ == std::numeric_limits<int64_t>::min()) {
+    LV_TRACE_INSTANT(transfer_track_, "DMA", "Invalid descriptor",
+                     LV_TRACE_ARG("addr0", addr0_),
+                     LV_TRACE_ARG("addr1", addr1_));
     start_ = 0;
     status_ = Status::kInvalidDescriptor;
     return false;
@@ -148,6 +159,12 @@ bool DMA::start_transfer() {
     size_ = -size_;
   }
 
+  LV_TRACE_BEGIN(
+      transfer_track_, "DMA", "Transfer", LV_TRACE_ARG("src", *read_ptr_),
+      LV_TRACE_ARG("dst", *write_ptr_), LV_TRACE_ARG("bytes", size_),
+      LV_TRACE_ARG("direction", std::string_view(read_master_ == &port0_master_
+                                                     ? "port0->port1"
+                                                     : "port1->port0")));
   transfer_failed_ = false;
   status_ = Status::kBusy;
   is_processing_ = true;
@@ -156,6 +173,13 @@ bool DMA::start_transfer() {
 }
 
 void DMA::finish_transfer(Status terminal_status) {
+  // A late read error can finish a transfer the write side already failed.
+  if (is_processing_) {
+    if (terminal_status == Status::kBusError) {
+      LV_TRACE_INSTANT(transfer_track_, "DMA", "Bus error");
+    }
+    LV_TRACE_END(transfer_track_);
+  }
   status_ = terminal_status;
   is_processing_ = false;
   start_ = 0;
@@ -287,7 +311,7 @@ DMA::Source *DMA::slave_port() const { return &slave_.port; }
 LV_BINDING(dma, DMA)
     .constructor(
         [](const char *name, const Param &param) {
-          return std::make_shared<DMA>(name, param.fifo_size);
+          return std::make_shared<DMA>(name, param.fifo_size, param.pftrace);
         },
         lv::params("name", "param"), lv::doc("Create a dual-port DMA engine"))
     .property("port0_target", &DMA::port0_target, &DMA::set_port0_target,

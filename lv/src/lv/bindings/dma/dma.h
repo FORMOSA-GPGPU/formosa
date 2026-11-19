@@ -8,6 +8,7 @@
 
 #include <liblv/common/tlm_sink.h>
 #include <liblv/common/tlm_source.h>
+#include <liblv/trace.h>
 #include <lv/mmio/dma/dma.h>
 #include <tlm.h>
 #include <tlm_utils/simple_initiator_socket.h>
@@ -32,7 +33,7 @@ class DMA : public sc_core::sc_module {
       tlm_utils::simple_initiator_socket<DMA>::base_target_socket_type;
   using Source = const tlm_utils::simple_target_socket<lv::TlmSink>;
 
-  DMA(const sc_core::sc_module_name &name, int fifo_size);
+  DMA(const sc_core::sc_module_name &name, int fifo_size, bool pftrace);
 
   void set_port0_target(Target *t);
   Target *port0_target() const;
@@ -80,6 +81,8 @@ class DMA : public sc_core::sc_module {
 
   Target *port0_target_ = nullptr;
   Target *port1_target_ = nullptr;
+
+  lv::trace::Track transfer_track_;
 };
 
 }  // namespace dma

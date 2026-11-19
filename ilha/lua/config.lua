@@ -4,6 +4,64 @@
 
 local addr = require("ilha.addr_map")
 
+---@class ilha.system_config
+local SystemConfig = {
+  dram_config = require("lv.util").runfile("configs/dram/apccas2026-lpddr4.json"),
+  clock_period_ns = 2.5,
+  num_sm = 1,
+  threads_per_warp = 4,
+  warps_per_core = 16,
+  wg_resident_limit = 8,
+  stack_remap_entries = 8,
+  -- 0 selects threads_per_core; positive values explicitly override it.
+  stack_remap_group_size = 0,
+  shared_cache = {
+    cache_size_bytes = 0x20000,
+    ways = 8,
+    mshr_entries = 16,
+    write_hit_policy = "WriteBack",
+    atomic_linearization = true,
+    set_index_function = "ipoly",
+  },
+  cache_block_size = 64,
+  non_cacheable_regions = {},
+  -- Perfetto tracks to record when lv is built with Perfetto. None of them
+  -- changes simulated timing.
+  trace = {
+    -- Each Host command, decoded from the scratch link; false keeps the
+    -- watcher off the link.
+    commands = false,
+    -- Each host_dma and device_dma transfer.
+    dma = true,
+    -- Each flush or invalidate an SM's cache controllers perform.
+    cache_operations = true,
+    -- Each work group's stay in a resident slot of an SM.
+    wg_slots = true,
+  },
+}
+-- Each primary miss reserves a victim slot, so fewer slots cap MSHR use.
+SystemConfig.shared_cache.victim_buffer_entries = SystemConfig.shared_cache.mshr_entries
+SystemConfig.__index = SystemConfig
+
+--- APCCAS2026 is the complete default configuration. Runners apply file and
+--- command-line overrides to this singleton before constructing one system.
+---@class ilha.config
+local Config = {
+  ---@type ilha.system_config
+  system = SystemConfig,
+  sm = {
+    module = "simtix.pipelined_sm",
+    ---@type simtix.pipelined_sm.param
+    param = {
+      dcache = {
+        cache_size_bytes = 0x4000,
+        write_hit_policy = "WriteThrough",
+        mshr_entries = 8,
+      },
+    },
+  },
+}
+
 local function copy(value)
   if type(value) ~= "table" then return value end
   local result = {}
@@ -45,32 +103,6 @@ local function merge(target, overrides, path, allow_new)
     end
   end
 end
-
----@class ilha.system_config
-local SystemConfig = {
-  dram_config = require("lv.util").runfile("configs/dram/apccas2026-lpddr4.json"),
-  clock_period_ns = 2.5,
-  num_sm = 1,
-  threads_per_warp = 4,
-  warps_per_core = 16,
-  wg_resident_limit = 8,
-  stack_remap_entries = 8,
-  -- 0 selects threads_per_core; positive values explicitly override it.
-  stack_remap_group_size = 0,
-  shared_cache = {
-    cache_size_bytes = 0x20000,
-    ways = 8,
-    mshr_entries = 16,
-    write_hit_policy = "WriteBack",
-    atomic_linearization = true,
-    set_index_function = "ipoly",
-  },
-  cache_block_size = 64,
-  non_cacheable_regions = {},
-}
--- Each primary miss reserves a victim slot, so fewer slots cap MSHR use.
-SystemConfig.shared_cache.victim_buffer_entries = SystemConfig.shared_cache.mshr_entries
-SystemConfig.__index = SystemConfig
 
 function SystemConfig:threads_per_core() return self.threads_per_warp * self.warps_per_core end
 
@@ -117,6 +149,9 @@ function SystemConfig:validate()
     "system.num_sm must fit the fixed SM MMIO aperture"
   )
   assert(self.threads_per_warp > 0 and self.warps_per_core > 0)
+  for name, enabled in pairs(self.trace) do
+    assert(type(enabled) == "boolean", "system.trace." .. name .. " must be a boolean")
+  end
   local group_size = self:effective_stack_remap_group_size()
   assert(is_power_of_two(group_size), "system.stack_remap_group_size must be a power of two")
   assert(
@@ -136,25 +171,6 @@ function SystemConfig:validate()
     "system.num_sm * wg_resident_limit * threads_per_core stacks must leave global memory"
   )
 end
-
---- APCCAS2026 is the complete default configuration. Runners apply file and
---- command-line overrides to this singleton before constructing one system.
----@class ilha.config
-local Config = {
-  ---@type ilha.system_config
-  system = SystemConfig,
-  sm = {
-    module = "simtix.pipelined_sm",
-    ---@type simtix.pipelined_sm.param
-    param = {
-      dcache = {
-        cache_size_bytes = 0x4000,
-        write_hit_policy = "WriteThrough",
-        mshr_entries = 8,
-      },
-    },
-  },
-}
 
 ---@param overrides {system?: ilha.system_config, sm?: {module?: string, param?: table<string, any>}}
 ---@return ilha.config

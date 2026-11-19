@@ -9,7 +9,10 @@
 -- blocks from [addr] to [128 + addr]. They test different transaction sizes, ranging from 1 byte to
 -- 64 bytes, incremented by the power of 2, as specified by `sizes`. At the end of the test, both
 -- device and host expect that their memory contains duplicated data at [addr] and [128 + addr], as
--- they are already moved by each other.
+-- they are already moved by each other. The host annotates its copies of 8 bytes or more and clears
+-- the 16-byte copy's annotation with an empty one; the device checks that exactly the others carry
+-- their annotation, and that the host's last write, to 128, carries none: the copies' annotations
+-- replaced the one the host sent for 128 first.
 
 local args = { ... }
 local agent_socket_path = os.tmpname()
@@ -73,8 +76,16 @@ local function test_dev(ready_fd)
 
   tick_agent.clock = clock
 
+  -- The host's writes cross this watcher, which records what each one carries.
+  local annotations = {}
+  local watcher = dbg.AccessWatcher("watcher", {
+    watch = { { addr = 128, size = 128 } },
+    on_write = function(addr, _, _, annotation) annotations[addr] = annotation or false end,
+  })
+
   initiator.target = agent.port
-  agent.target = memory.port
+  agent.target = watcher.from
+  watcher.to = memory.port
   assert(U.write(ready_fd, "1"), "failed to signal that the agent is ready")
   U.close(ready_fd)
 
@@ -86,6 +97,24 @@ local function test_dev(ready_fd)
     local addr = i + 1 -- Lua table index starts from 1
     print(string.format("Dev:  0x%02x: 0x%02x == 0x%02x", i, m[addr], m[128 + addr]))
     if m[addr] ~= m[128 + addr] then return false end
+  end
+  for _, size in ipairs(sizes) do
+    local want = size >= 8 and size ~= 16 and ("copy " .. size) or false
+    if annotations[128 + size] ~= want then
+      print(
+        string.format(
+          "Dev:  write to 0x%02x carried %s, want %s",
+          128 + size,
+          tostring(annotations[128 + size]),
+          tostring(want)
+        )
+      )
+      return false
+    end
+  end
+  if annotations[128] ~= false then
+    print("Dev:  the write to 0x80 carried " .. tostring(annotations[128]) .. ", want nothing")
+    return false
   end
 
   print("Dev: pass!!")

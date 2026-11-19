@@ -10,10 +10,24 @@ for _, name in ipairs({ "memory-copy", "reboot" }) do
   end)
 end
 
+-- Decodes a Perfetto trace for a slice of a given name on a track of a
+-- given name; trace-invariance runs it in a Perfetto build.
+target("hal-trace-slice-check", function()
+  set_kind("binary")
+  add_files("trace_slice_check.cc")
+  add_packages("perfetto")
+end)
+
 target("hal-integration-test.lv", function()
   set_kind("phony")
-  add_deps("lv", "fw.runfiles", "hal-memory-copy-test.lv", "hal-reboot-test.lv")
-  for _, name in ipairs({ "memory-copy", "large-sm-capabilities", "reboot" }) do
+  add_deps(
+    "lv",
+    "fw.runfiles",
+    "hal-memory-copy-test.lv",
+    "hal-reboot-test.lv",
+    "hal-trace-slice-check"
+  )
+  for _, name in ipairs({ "memory-copy", "large-sm-capabilities", "reboot", "trace-invariance" }) do
     -- Coverage plus shared-runner contention can exceed two minutes for the
     -- complete daemon scenario; HAL operations retain their own deadlines.
     add_tests(name, { run_timeout = 300000 })
@@ -21,12 +35,22 @@ target("hal-integration-test.lv", function()
   on_test(function(target, opt)
     local case = path.filename(opt.name)
     local binary = case == "reboot" and "hal-reboot-test.lv" or "hal-memory-copy-test.lv"
+    local runner = case == "trace-invariance" and "run_trace_invariance_test.sh"
+      or "run_daemon_test.sh"
     local argv = {
-      path.join(target:scriptdir(), "run_daemon_test.sh"),
+      path.join(target:scriptdir(), runner),
       path.absolute(target:dep("lv"):targetfile()),
       path.join(os.projectdir(), "ilha/daemon.lua"),
       path.absolute(target:dep(binary):targetfile()),
     }
+    if case == "trace-invariance" then
+      -- Only a Perfetto build records the slices the checker decodes.
+      local perfetto = import("workflow.backends.xmake").enabled("lv-enable-perfetto", false)
+      table.insert(
+        argv,
+        perfetto and path.absolute(target:dep("hal-trace-slice-check"):targetfile()) or ""
+      )
+    end
     opt.runenvs = opt.runenvs or {}
     if case == "large-sm-capabilities" then
       opt.runenvs.FORMOSA_DAEMON_CONFIG = "large_sm"

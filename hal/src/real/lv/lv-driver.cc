@@ -110,6 +110,19 @@ static int wait_device_time(uint64_t duration_ns, uint64_t *now_ns) {
 
 int fsa_real_time_ns(uint64_t *now_ns) { return wait_device_time(0, now_ns); }
 
+int fsa_real_annotate(uintptr_t dev_addr, const char *text, size_t size) {
+  if (!client.transceiver || !client.transceiver->IsConnectionAlive())
+    return -1;
+  // The Agent attaches the text to the next Put to dev_addr. Both travel in
+  // order on this connection, so no reply is needed.
+  libcomm::Msg msg = libcomm::Msg::Build(libcomm::Cmd::Annotate)
+                         .addr(dev_addr)
+                         .size(size)
+                         .data(reinterpret_cast<const uint8_t *>(text));
+  std::lock_guard<std::mutex> lk(client.send_mtx);
+  return client.transceiver->Send(msg) == 0 ? 0 : -1;
+}
+
 int fsa_real_poll_backoff(uint64_t *now_ns) {
   return wait_device_time(1000, now_ns);
 }

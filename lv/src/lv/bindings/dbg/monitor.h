@@ -8,35 +8,50 @@
 
 #include <systemc.h>
 #include <tlm.h>
-#include <tlm_utils/simple_initiator_socket.h>
 #include <tlm_utils/simple_target_socket.h>
+
+#include <optional>
+
+#include "pass_through.h"
 
 namespace dbg {
 
+/** @brief Logs each phase and TLM_COMPLETED return that crosses a TLM link. */
 class Monitor : public sc_module {
  public:
-  using Target =
-      tlm_utils::simple_initiator_socket<Monitor>::base_target_socket_type;
+  /** @brief Target socket type that the outgoing socket binds to. */
+  using Target = PassThrough::Target;
 
+  /**
+   * @brief Create a monitor.
+   *
+   * @param name Module name.
+   */
   explicit Monitor(const sc_module_name &name);
-  ~Monitor() = default;
 
-  void set_to(Target *target);
-  Target *to() const;
+  /** @brief Return the incoming socket that initiators bind to. */
+  tlm_utils::simple_target_socket<PassThrough> *from() { return &link_.from; }
 
-  tlm_utils::simple_target_socket<Monitor> from_;
-  tlm_utils::simple_initiator_socket<Monitor> to_;
+  /**
+   * @brief Bind the outgoing socket to a target.
+   *
+   * @param target Target socket that receives the passed-on calls.
+   */
+  void set_to(Target *target) { link_.bind(target); }
 
- protected:
-  virtual tlm::tlm_sync_enum nb_transport_fw(tlm::tlm_generic_payload &trans,
-                                             tlm::tlm_phase &phase, sc_time &);
-  virtual tlm::tlm_sync_enum nb_transport_bw(tlm::tlm_generic_payload &trans,
-                                             tlm::tlm_phase &phase, sc_time &);
+  /**
+   * @brief Return the target given to set_to().
+   *
+   * @return The bound target, or nullptr before set_to().
+   */
+  Target *to() const { return link_.target(); }
 
-  virtual unsigned int transport_dbg(tlm::tlm_generic_payload &trans);
-  void PrintPayload(tlm::tlm_generic_payload &trans, tlm::tlm_phase &phase,
-                    sc_time &delay);
-  Target *target_;
+ private:
+  void PrintPayload(const tlm::tlm_generic_payload &trans,
+                    const tlm::tlm_phase &phase,
+                    std::optional<tlm::tlm_sync_enum> status);
+
+  PassThrough link_;
 };
 
 }  // namespace dbg

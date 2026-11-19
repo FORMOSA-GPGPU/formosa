@@ -24,6 +24,10 @@ int fsa_real_dma_map(void *host_ptr, size_t size, uint64_t *dma_addr);
 void fsa_real_dma_unmap(uint64_t dma_addr, size_t size);
 int fsa_real_poll_backoff(uint64_t *now_ns);
 int fsa_real_time_ns(uint64_t *now_ns);
+// Annotate the next write to dev_addr with text for whatever observes it on
+// the device side. One-way and for observation only: it performs no device
+// access, consumes no simulated time and waits for no reply.
+int fsa_real_annotate(uintptr_t dev_addr, const char *text, size_t size);
 void fsa_real_abort();
 void fsa_real_cleanup();
 }

@@ -7,6 +7,7 @@
 #include <liblv/common/tlm_sink.h>
 #include <liblv/output.h>
 #include <liblv/schema.h>
+#include <liblv/trace.h>
 #include <systemc.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_core_ifs.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_master_slave_ifs.h>
@@ -33,8 +34,11 @@ class CacheController : public sc_module {
   struct Param {
     bool verbose = false;
     int64_t num_banks = 0;
+    bool pftrace = false;
     LV_SCHEMA(CacheController, Param,
               LV_FIELD(verbose, "Whether or not to output debug info"),
+              LV_FIELD(pftrace,
+                       "Trace each command on the Operations Perfetto track"),
               LV_FIELD(num_banks,
                        "Number of downstream maintenance ports. 0 degenerates "
                        "to a dummy MMIO component"))
@@ -98,6 +102,7 @@ class CacheController : public sc_module {
   std::size_t next_bank_ = 0;
   bool cmd_prepared_ = false;
   bool cmd_dispatched_ = false;
+  lv::trace::Track operations_track_;
 };
 
 CacheController::CacheController(const sc_module_name &name, const Param &param)
@@ -106,7 +111,9 @@ CacheController::CacheController(const sc_module_name &name, const Param &param)
       num_banks_(param.num_banks),
       csr_mem_(reinterpret_cast<uint8_t *>(&csr_)),
       mmio_sink_("mmio_port"),
-      banks_("banks") {
+      banks_("banks"),
+      operations_track_(LV_NEW_MODULE_TRACK("Operations")) {
+  operations_track_.set_enabled(param.pftrace);
   if (num_banks_ < 0) {
     lv::Fatal("CacheController num_banks must be >= 0, got {}", num_banks_);
   }
@@ -185,6 +192,13 @@ void CacheController::HandleMmioReq() {
           if (csr_.start == 0 && data[0] == 1) {
             cmd_start_event_.notify();
             csr_.start = 1;
+            LV_TRACE_BEGIN(operations_track_, "CacheController",
+                           csr_.opcode < kOpcodeNames.size()
+                               ? kOpcodeNames[csr_.opcode]
+                               : std::string_view("Invalid"),
+                           LV_TRACE_ARG("addr", csr_.addr),
+                           LV_TRACE_ARG("size", csr_.size),
+                           LV_TRACE_ARG("opcode", csr_.opcode));
           }
         } else {
           std::memcpy(&csr_mem_[addr], data, size);
@@ -287,6 +301,7 @@ void CacheController::HandleCommands() {
     csr_.start = 0;
     cmd_prepared_ = false;
     cmd_dispatched_ = false;
+    LV_TRACE_END(operations_track_);
   }
 
   // Wait for another request

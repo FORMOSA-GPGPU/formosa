@@ -70,6 +70,12 @@ function PipelinedSM.new(name, options)
   local dcache_param = copy_parameters(sm_param.dcache)
   dcache_param.write_hit_policy = dcache_param.write_hit_policy or "WriteThrough"
   dcache_param.block_size_bytes = dcache_param.block_size_bytes or config.cache_block_size
+  -- system.trace.cache_operations owns every cache controller's Operations track.
+  assert(
+    dcache_param.controller_pftrace == nil,
+    "PipelinedSM: set system.trace.cache_operations, not sm.param.dcache.controller_pftrace"
+  )
+  dcache_param.controller_pftrace = config.trace.cache_operations
   dcache_param.non_cacheable_regions = config:effective_non_cacheable_regions()
   dcache_param.victim_buffer_entries = dcache_param.victim_buffer_entries
     or dcache_param.mshr_entries
@@ -106,6 +112,7 @@ function PipelinedSM.new(name, options)
   self._icache = simtix.Cache("ICache", icache_param)
   self._icache_controller = ilha.CacheController("ICacheController", {
     num_banks = 1,
+    pftrace = config.trace.cache_operations,
   })
   self._icache_controller.bank = self._icache.cmd_port
   self._dcache = BankedCache("DCache", dcache_param)
@@ -137,7 +144,7 @@ function PipelinedSM.new(name, options)
     threads_per_warp = config.threads_per_warp,
     wg_resident_limit = config.wg_resident_limit,
     fifo_size = 4,
-    enable_trace = true,
+    pftrace = config.trace.wg_slots,
   })
 
   self._core_info = simple.ConstantTable("CoreInfo", {

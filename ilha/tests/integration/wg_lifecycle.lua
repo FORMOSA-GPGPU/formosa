@@ -16,7 +16,7 @@ local wgi = ilha.WGInitializer("wgi", {
   warps_per_core = arch.num_warps,
   threads_per_warp = lanes_per_warp,
   wg_resident_limit = 3,
-  enable_trace = false,
+  pftrace = false,
 })
 
 local cores = {

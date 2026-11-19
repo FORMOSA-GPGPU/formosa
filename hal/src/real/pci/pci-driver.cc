@@ -323,6 +323,10 @@ int fsa_real_time_ns(uint64_t *now_ns) {
   return 0;
 }
 
+// A device on a PCI bus has no channel for annotations, so labels are not
+// sent; HAL submits the command without its label.
+int fsa_real_annotate(uintptr_t, const char *, size_t) { return -1; }
+
 int fsa_real_poll_backoff(uint64_t *now_ns) {
   const timespec backoff = {0, 1000};
   nanosleep(&backoff, nullptr);

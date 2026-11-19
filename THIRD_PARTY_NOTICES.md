@@ -28,7 +28,6 @@ or binaries built from it.
 | `third-party/fmt` | See `third-party/fmt/LICENSE`. |
 | `third-party/glm` | See `third-party/glm/copying.txt`. |
 | `third-party/libvfio-user` | See `third-party/libvfio-user/LICENSE`. |
-| `third-party/perfetto` | See `third-party/perfetto/LICENSE` and its bundled third-party notices. |
 | `third-party/quill` | See `third-party/quill/LICENSE`. |
 | `third-party/riscv-opcodes` | See `third-party/riscv-opcodes/LICENSE`. |
 | `third-party/riscv-tests` | See `third-party/riscv-tests/LICENSE`; nested `env` content may carry additional notices. |
@@ -37,6 +36,15 @@ or binaries built from it.
 | `third-party/stb` | `stb_image.h` and `stb_image_write.h` carry their own notice text and are available under either MIT License or public domain/Unlicense terms, at the recipient's option. |
 | `third-party/systemc` | See `third-party/systemc/LICENSE` and `third-party/systemc/NOTICE`. |
 | `third-party/tomlplusplus` | See `third-party/tomlplusplus/LICENSE`. |
+
+## Fetched third-party sources
+
+These sources are not kept in the repository. The Nix dev shell fetches them,
+and binaries built from them carry their license.
+
+| Source | License notice |
+| --- | --- |
+| Perfetto C++ SDK, built by `third-party/perfetto-sdk.nix` and linked into FORMOSA binaries | Apache-2.0; see `share/licenses/perfetto/LICENSE` in the Nix package output. |
 
 ## In-Tree Third-Party and Adapted Source Files
 

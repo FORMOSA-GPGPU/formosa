@@ -45,10 +45,15 @@ namespace libcomm {
   }
 
 ENUM(Cmd, Get, Put, Probe, Terminate, AccessAckData, AccessAck, ProbeAck,
-     TerminateAck, Wait, WaitAck);
+     TerminateAck, Wait, WaitAck, Annotate);
 
 // Wait carries a duration in nanoseconds in addr (size must be zero).
 // WaitAck carries the peer's elapsed time in nanoseconds in addr.
+// Annotate carries text as data for the next Put the sender issues to addr.
+// A receiver keeps one pending annotation per sender: a later Annotate
+// replaces it and an empty one clears it. Annotate is one-way, neither a
+// request nor a response, and has no reply. It is for observation only: the
+// peer must not change simulated state or time because of it.
 
 ENUM(Status, Okay, AddrErr, CmdErr, GenericErr);
 
@@ -86,7 +91,8 @@ class Msg {
   }
 
   bool has_data() const {
-    return cmd() == Cmd::Put || cmd() == Cmd::AccessAckData;
+    return cmd() == Cmd::Put || cmd() == Cmd::AccessAckData ||
+           cmd() == Cmd::Annotate;
   }
 
   bool operator==(const Msg &other) const {

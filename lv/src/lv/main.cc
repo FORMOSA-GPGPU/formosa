@@ -5,6 +5,7 @@
 #include <liblv/binding.h>
 #include <liblv/output.h>
 #include <liblv/time.h>
+#include <liblv/trace.h>
 #include <systemc.h>
 
 #include <algorithm>
@@ -113,9 +114,12 @@ int main(int argc, char *argv[]) {
       Fatal("{}", err.what());
     }
   } catch (const lv::fatal_error &) {
+    lv::trace::Finish();
     lv::log::flush();
     return EXIT_FAILURE;
   }
+  // Finish the trace while its warnings can still be logged.
+  lv::trace::Finish();
   lv::log::flush();  // drain async logs before exit (Quill backend teardown)
   return EXIT_SUCCESS;
 }

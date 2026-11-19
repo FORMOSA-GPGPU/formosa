@@ -33,6 +33,8 @@ FsaMemoryCopyInfo make_copy(FsaMemoryDomain src_domain, uint64_t src_addr,
   info.destination.domain = dst_domain;
   info.destination.range.address = dst_addr;
   info.destination.range.size = size;
+  // The trace-invariance test labels the copies of one of its two runs.
+  info.label = std::getenv("FORMOSA_HAL_TEST_LABEL");
   return info;
 }
 

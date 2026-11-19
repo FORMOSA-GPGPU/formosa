@@ -42,6 +42,8 @@
 ---@field protected _host_dma dma.DMA
 ---@field protected _device_dma dma.DMA
 ---@field protected _scratch simple.Memory
+---@field protected _scratch_watcher dbg.AccessWatcher|nil
+---@field protected _command_trace ilha.command_trace|nil
 ---@field protected _fab_agent simple.XBar
 ---@field protected _aligner simple.BlockAligner
 ---@field protected _l2cache simtix.Cache
@@ -265,8 +267,8 @@ function System.new(name, config, opts)
     },
   })
   self._host = assert(opts.host, "opts.host: a host interface from ilha.host")()
-  self._host_dma = dma.DMA("host_dma", { fifo_size = 2 })
-  self._device_dma = dma.DMA("device_dma", { fifo_size = 2 })
+  self._host_dma = dma.DMA("host_dma", { fifo_size = 2, pftrace = system.trace.dma })
+  self._device_dma = dma.DMA("device_dma", { fifo_size = 2, pftrace = system.trace.dma })
   local function u64_le(value)
     local bytes = {}
     for i = 1, 8 do
@@ -359,7 +361,25 @@ function System.new(name, config, opts)
   self._device_dma.port1_target = sys_core_side[4 + system.num_sm].port
   self._fab_agent.mem_side[1].target = self._clint.port
   self._fab_agent.mem_side[2].target = self._system_info.port
-  self._fab_agent.mem_side[3].target = self._scratch.port
+  if system.trace.commands then
+    -- Host-command trace: decode the Host ABI traffic on the scratch link.
+    -- The watcher forwards every transport call without consuming time.
+    local command_trace = require("ilha.command_trace")({
+      addr = addr,
+      base = scratch_mem_base,
+    })
+    self._command_trace = command_trace
+    self._scratch_watcher = dbg.AccessWatcher("scratch_watcher", {
+      watch = command_trace:watch_ranges(),
+      on_write = function(link_addr, data, enables, annotation)
+        command_trace:on_write(link_addr, data, enables, annotation)
+      end,
+    })
+    self._fab_agent.mem_side[3].target = self._scratch_watcher.from
+    self._scratch_watcher.to = self._scratch.port
+  else
+    self._fab_agent.mem_side[3].target = self._scratch.port
+  end
   self._scratch.clock = self._clock
   self._fab_agent.clock = self._clock
 

@@ -25,16 +25,8 @@ target("liblv", function()
     end
   end)
   add_includedirs("include", { public = true })
-  add_deps(
-    "systemc",
-    "fmt",
-    "quill",
-    "tomlplusplus",
-    "sol2",
-    "perfetto",
-    "libcomm",
-    { public = true }
-  )
+  add_packages("perfetto", { public = true })
+  add_deps("systemc", "fmt", "quill", "tomlplusplus", "sol2", "libcomm", { public = true })
   if is_mode("debug", "coverage") then
     add_defines(
       "QUILL_COMPILE_ACTIVE_LOG_LEVEL=QUILL_COMPILE_ACTIVE_LOG_LEVEL_TRACE_L3",
