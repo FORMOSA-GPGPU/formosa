@@ -60,7 +60,12 @@ if args[-2] != "no-stats":
         )
         launcher.chmod(0o755)
         # Native targets and the production on_test adapter are used.
-        cases = {"kmeans": "1", "shoc-scan": "2", "extra": "3", "smoke-probe": "4"}
+        cases = {
+            "rodinia-kmeans": "1",
+            "shoc-scan": "2",
+            "extra": "3",
+            "smoke-probe": "4",
+        }
         timeout = 2000
 
         def save():
@@ -93,7 +98,7 @@ if args[-2] != "no-stats":
                             'add_tests("variant/simtix.pipelined_sm"',
                         )
                     ]
-                if name == "kmeans":
+                if name == "rodinia-kmeans":
                     declarations += [
                         'add_tests("simtix.atomic_sm", {sm="simtix.atomic_sm"})'
                     ]
@@ -142,41 +147,41 @@ if args[-2] != "no-stats":
         def names():
             return {key.split("/")[0].removeprefix("opencl-") for key in collect(out)}
 
-        def argv(name="kmeans"):
+        def argv(name="rodinia-kmeans"):
             return json.loads(
                 (out / f"opencl-{name}/simtix.pipelined_sm/stats.argv").read_text()
             )
 
         run()
-        assert names() == {"kmeans", "shoc-scan", "extra"}
+        assert names() == {"rodinia-kmeans", "shoc-scan", "extra"}
         assert "opencl-extra/variant/simtix.pipelined_sm" in collect(out)
         assert argv()[-3:] == [str(data), "1", "result.txt"]
         assert not list(
             build.rglob("*smoke-probe*")
         ), "Unselected targets must not be built"
         run("-g", "opencl/rodinia")
-        assert names() == {"kmeans", "extra"}
+        assert names() == {"rodinia-kmeans", "extra"}
         run("--ci", "-g", "opencl/rodinia")
-        assert names() == {"kmeans"}
+        assert names() == {"rodinia-kmeans"}
         run("--ci", "-g", "opencl/shoc")
         assert names() == {"shoc-scan"}
         run("--ci", "opencl-extra/*", success=False)
-        run("--ci", "-g", "opencl/shoc", "opencl-kmeans/*", success=False)
+        run("--ci", "-g", "opencl/shoc", "opencl-rodinia-kmeans/*", success=False)
         run("--ci")
-        assert names() == {"kmeans", "shoc-scan"}
+        assert names() == {"rodinia-kmeans", "shoc-scan"}
         baseline = build_result(out)
         written = json.loads((out / "result.json").read_text())
         assert written["commit"] == "fixture"
         assert written["branch"] == "fixture-branch"
         run("opencl-extra/*")
         assert names() == {"extra"}
-        run("--ci", "-g", "opencl/rodinia", "opencl-kmeans/*")
-        assert names() == {"kmeans"}
-        run("opencl-kmeans/*", "opencl-extra/*")
-        assert names() == {"kmeans", "extra"}
+        run("--ci", "-g", "opencl/rodinia", "opencl-rodinia-kmeans/*")
+        assert names() == {"rodinia-kmeans"}
+        run("opencl-rodinia-kmeans/*", "opencl-extra/*")
+        assert names() == {"rodinia-kmeans", "extra"}
         run("missing/*", success=False)
         run("opencl-smoke-*/*", success=False)
-        run("opencl-kmeans/simtix.atomic_sm", success=False)
+        run("opencl-rodinia-kmeans/simtix.atomic_sm", success=False)
         (build / "bin").mkdir(exist_ok=True)
         help_runner = build / "bin/run_opencl.lua"
         help_runner.write_text("#!/bin/sh\necho runner-help\n")
@@ -195,7 +200,7 @@ if args[-2] != "no-stats":
         current = build_result(out)
         assert baseline["suite"] == current["suite"]
         assert current["run"]["runner_inputs"]["1"]["sha256"]
-        key = "opencl-kmeans/simtix.pipelined_sm"
+        key = "opencl-rodinia-kmeans/simtix.pipelined_sm"
         assert current["metrics"][key]["Custom.counter"] == 42
         assert current["metrics"][key]["Custom.scalar"] == -2
         assert "Custom.flag" not in current["metrics"][key]
@@ -206,15 +211,15 @@ if args[-2] != "no-stats":
         run("--", "--stats=override.toml", success=False)
         run("--", "-tunsafe", success=False)
         for arg in ("wrong-result", "fail", "no-stats", "empty-metrics", "timeout"):
-            cases["kmeans"] = arg
+            cases["rodinia-kmeans"] = arg
             timeout = 100 if arg == "timeout" else 2000
-            run("opencl-kmeans/*", success=False)
+            run("opencl-rodinia-kmeans/*", success=False)
             assert not (out / "result.json").exists()
         import time
 
         time.sleep(1.1)
         assert not (cwd / "orphan").exists(), "Timeout left a validator child alive"
-        cases["kmeans"], timeout = "1", 2000
+        cases["rodinia-kmeans"], timeout = "1", 2000
         run("--ci")
 
         def refused(result):
@@ -229,7 +234,7 @@ if args[-2] != "no-stats":
         del missing["metrics"]["opencl-shoc-scan/simtix.pipelined_sm"]
         refused(missing)
         missing = copy.deepcopy(current)
-        missing["metrics"]["opencl-kmeans/simtix.pipelined_sm"]["ipc"] = None
+        missing["metrics"]["opencl-rodinia-kmeans/simtix.pipelined_sm"]["ipc"] = None
         refused(missing)
         # Recollection must retain the original run's input hashes after edits.
         (cwd / "kernel.cl").write_text("later local edit\n")
@@ -295,7 +300,7 @@ if args[-2] != "no-stats":
         assert result["metrics"]["opencl-extra/simtix.pipelined_sm"][metric] is None
         assert len(comparable_deltas(result, result, metric)) == 2
         # Missing numeric fields still fail rather than silently dropping cases.
-        del result["metrics"]["opencl-kmeans/simtix.pipelined_sm"][metric]
+        del result["metrics"]["opencl-rodinia-kmeans/simtix.pipelined_sm"][metric]
         missing_metric = root / "missing-metric.json"
         missing_metric.write_text(json.dumps(result))
         invoke("compare", mixed, missing_metric, "--metric=" + metric, success=False)
@@ -303,10 +308,10 @@ if args[-2] != "no-stats":
         result["metrics"]["opencl-extra/simtix.pipelined_sm"][metric] = "invalid"
         missing_metric.write_text(json.dumps(result))
         invoke("compare", mixed, missing_metric, "--metric=" + metric, success=False)
-        nested = out / "gto/opencl-kmeans/simtix.pipelined_sm"
+        nested = out / "gto/opencl-rodinia-kmeans/simtix.pipelined_sm"
         nested.mkdir(parents=True)
         (nested / "stats.toml").write_bytes(
-            (out / "opencl-kmeans/simtix.pipelined_sm/stats.toml").read_bytes()
+            (out / "opencl-rodinia-kmeans/simtix.pipelined_sm/stats.toml").read_bytes()
         )
         assert build_result(out)["metrics"] == json.loads(mixed.read_text())["metrics"]
         assert "N/A" in (comparison / "comparison.md").read_text()
@@ -319,7 +324,7 @@ if args[-2] != "no-stats":
         )
         (probe / "timeout").chmod(0o755)
         env["PATH"] = str(probe) + os.pathsep + env["PATH"]
-        run("opencl-kmeans/*")
+        run("opencl-rodinia-kmeans/*")
         native = subprocess.run(
             ["xmake", "test", "-j1", "-g", "opencl/rodinia", "*/simtix.pipelined_sm"],
             cwd=root,
@@ -332,7 +337,7 @@ if args[-2] != "no-stats":
         env["PATH"] = env["PATH"].split(os.pathsep, 1)[1]
         timeout = 2000
         # Native Xmake schedules both tiny hosts; the serial run must time out.
-        cases = {"kmeans": "parallel", "shoc-scan": "parallel"}
+        cases = {"rodinia-kmeans": "parallel", "shoc-scan": "parallel"}
         run(jobs=1, success=False)
         for marker in out.rglob("*.started"):
             marker.unlink()

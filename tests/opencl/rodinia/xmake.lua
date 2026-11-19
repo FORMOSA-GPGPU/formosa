@@ -337,11 +337,7 @@ do
   })
 end
 
-local function target_name(name)
-  return "opencl-"
-    .. (table.contains({ "bfs", "gaussian", "kmeans", "nn" }, name) and "" or "rodinia-")
-    .. name
-end
+local function target_name(name) return "opencl-rodinia-" .. name end
 
 target("opencl.rodinia-data", function()
   set_kind("phony")

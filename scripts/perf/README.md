@@ -24,10 +24,10 @@ Selection uses native test-name patterns (multiple patterns are ORed) and
 
 ```sh
 xmake perf --ci -o outputs/perf/ci
-xmake perf -j1 -o outputs/perf/kmeans 'opencl-kmeans/*'
+xmake perf -j1 -o outputs/perf/kmeans 'opencl-rodinia-kmeans/*'
 xmake perf -g opencl/parboil -o outputs/perf/parboil
 xmake perf --ci -g opencl/shoc -o outputs/perf/ci-shoc
-xmake perf -o outputs/perf/gto 'opencl-kmeans/*' -- --sm-param=/absolute/path/gto.lua
+xmake perf -o outputs/perf/gto 'opencl-rodinia-kmeans/*' -- --sm-param=/absolute/path/gto.lua
 ```
 
 `--ci` restricts the candidates to `xmake/modules/perf/ci_cases.lua`,

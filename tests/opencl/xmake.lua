@@ -29,6 +29,31 @@ rule("opencl.benchmark", function()
   )
 end)
 
+option("opencl-qemu-all-tests", function()
+  set_default(false)
+  set_showmenu(true)
+  set_description("Run every OpenCL test in the QEMU guest, not only the sample")
+end)
+
+-- Each guest run competes for the host's CPUs and slows the other tests, so by
+-- default the guest runs a sample on one SM model: every smoke test, vecadd,
+-- and a few programs (some with several kernels) from each suite.
+local qemu_sample = {
+  "opencl-vecadd",
+  "opencl-activation",
+  "opencl-batched_gemm",
+  "opencl-rodinia-hotspot",
+  "opencl-rodinia-kmeans",
+  "opencl-rodinia-lud",
+  "opencl-parboil-sgemm",
+  "opencl-parboil-mri-q",
+  "opencl-parboil-stencil",
+  "opencl-shoc-scan",
+  "opencl-shoc-reduction",
+  "opencl-shoc-busspeeddownload",
+  "opencl-shoc-busspeedreadback",
+}
+
 -- Runs the cases of the one OpenCL test target it depends on in a QEMU guest
 -- against the device on a PCI bus (ilha/qemu.lua, x86_64 Linux only): the
 -- target's own test script runs each case with `qemu` set. A case staged under
@@ -41,14 +66,19 @@ rule("opencl.qemu", function()
     import("core.project.config")
     local source = target:dep(table.wrap(target:get("deps"))[1])
     local builddir = path.absolute(config.builddir()) .. "/"
+    local all = config.get("opencl-qemu-all-tests")
+    local sampled = source:name():startswith("opencl-smoke-")
+      or table.contains(qemu_sample, source:name())
     for _, name in ipairs(table.wrap(source:get("tests"))) do
       local conf = table.join(source:extraconf("tests", name) or {}, { qemu = true })
-      -- Under CI's load the guest run took a median 3.6 times the original's.
-      if conf.run_timeout then conf.run_timeout = conf.run_timeout * 4 end
-      if conf.rundir and conf.rundir:startswith(builddir) then
-        conf.staged, conf.rundir = conf.rundir, conf.rundir .. ".qemu"
+      if all or (sampled and conf.sm == "simtix.pipelined_sm") then
+        -- Under CI's load the guest run took a median 3.6 times the original's.
+        if conf.run_timeout then conf.run_timeout = conf.run_timeout * 4 end
+        if conf.rundir and conf.rundir:startswith(builddir) then
+          conf.staged, conf.rundir = conf.rundir, conf.rundir .. ".qemu"
+        end
+        target:add("tests", name, conf)
       end
-      target:add("tests", name, conf)
     end
   end)
   on_build(function(target)

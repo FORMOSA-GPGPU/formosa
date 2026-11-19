@@ -4,8 +4,8 @@
 
 function main()
   return {
-    "opencl-bfs/4k/simtix.pipelined_sm",
-    "opencl-kmeans/simtix.pipelined_sm",
+    "opencl-rodinia-bfs/4k/simtix.pipelined_sm",
+    "opencl-rodinia-kmeans/simtix.pipelined_sm",
     "opencl-rodinia-hotspot/simtix.pipelined_sm",
     "opencl-parboil-sgemm/simtix.pipelined_sm",
     "opencl-parboil-spmv/simtix.pipelined_sm",

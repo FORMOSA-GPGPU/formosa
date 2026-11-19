@@ -12,7 +12,7 @@ Selected targets are built automatically. Default: all non-smoke pipelined bench
 
   xmake perf -o outputs/perf/base
   xmake perf --ci -o outputs/perf/ci
-  xmake perf -j1 'opencl-kmeans/*'
+  xmake perf -j1 'opencl-rodinia-kmeans/*'
   xmake perf --ci -g opencl/shoc
   xmake perf --ci -o outputs/perf/gto -- --sm-param=/tmp/gto.lua
   xmake perf collect -i outputs/perf/base -o outputs/perf/base/result.json

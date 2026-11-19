@@ -33,8 +33,8 @@ When a workflow is configured, `-g` further filters its enabled cases.
 
 Full native names combine the host target, optional case and full SM module
 name. A quoted case glob such as `xmake test 'opencl-vecadd/**'` selects cases
-without changing suite membership. The original BFS, Gaussian, Kmeans and NN
-targets use `opencl-bfs`, `opencl-gaussian`, `opencl-kmeans` and `opencl-nn`.
+without changing suite membership. Every Rodinia target is named
+`opencl-rodinia-<benchmark>`.
 
 Run an already built host directly through the Lua launcher:
 
@@ -46,6 +46,15 @@ For coverage, configure with `xmake f -m coverage --workflow=opencl`, then run
 the same `xmake test` commands. Input sizes and numerical checks are the same
 in both profiles. Tests run on atomic and pipelined SMs. The runner needs
 permission to bind a local Unix socket for host/simulator communication.
+
+On x86_64 Linux each program also has a `qemu-opencl-*` target that runs its
+cases in a QEMU guest. By default only a sample runs there, on the pipelined
+SM: every smoke test, vecadd, and a few programs from each suite (listed in
+`xmake.lua`). To run every case in the guest:
+
+```sh
+xmake f -m release --workflow=opencl --opencl-qemu-all-tests=y
+```
 
 For performance runs and comparisons, use
 [`xmake perf`](../../scripts/perf/README.md).
