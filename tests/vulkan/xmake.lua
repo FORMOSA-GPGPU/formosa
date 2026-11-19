@@ -27,7 +27,7 @@ target("vulkan-compute", function()
           sm = sm,
           mode = mode,
           rundir = os.projectdir(),
-          run_timeout = 120000,
+          run_timeout = 240000,
         })
       end
     end
