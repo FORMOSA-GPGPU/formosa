@@ -15,19 +15,19 @@ let
   dlprimitives = pkgs.fetchFromGitHub {
     owner = "artyom-beilis";
     repo = "dlprimitives";
-    rev = "3fb233e6e83ee6c793fdc6bc58ef71995eced7a4";
-    hash = "sha256-2NM9eZ6fCfiQ72B3QdjT1rYvWs76oO6a+8cZn6XS114=";
+    rev = "331118d3af1892aad1b089e4964101e3269af2ce";
+    hash = "sha256-5js6Xab2oYgV6zAOVVDU1dhpT5m1EQtfFR5xUINP9wo=";
   };
 in python.pkgs.buildPythonPackage {
   pname = "pytorch-dlprim";
-  version = "0.2.0-unstable-2026-10-02";
+  version = "0.2.0-unstable-2026-11-03";
   pyproject = false;
 
   src = pkgs.fetchFromGitHub {
     owner = "artyom-beilis";
     repo = "pytorch_dlprim";
-    rev = "47305aa87aeb8dc450c9a91b559d5784c171b960";
-    hash = "sha256-0smcSDGL8cEGsZXQr+CYZbO4Hrb1M7NUdKeB9txq1/E=";
+    rev = "ae2d35eb09398cb22489b5b164475c6327e48e2b";
+    hash = "sha256-v32u5Zex4kZuydr4ofCNJvsstfvEjG5RM12hghOAAP8=";
   };
   postUnpack = ''
     mkdir -p "$sourceRoot/dlprimitives"

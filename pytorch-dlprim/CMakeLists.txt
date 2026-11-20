@@ -18,7 +18,7 @@ add_subdirectory("${PYTORCH_DLPRIM_SOURCE_DIR}/dlprimitives" dlprimitives)
 # Build upstream sources and Formosa's extra ATen operators into a single module.
 set(upstream_sources
   pointwise_ops.cpp tensor_ops.cpp vision_ops.cpp loss_ops.cpp random_ops.cpp
-  norm_ops.cpp utils.cpp registeration.cpp CLTensor.cpp guard.cpp
+  norm_ops.cpp select_ops.cpp utils.cpp registeration.cpp CLTensor.cpp guard.cpp
   python_iface.cpp)
 list(TRANSFORM upstream_sources PREPEND "${PYTORCH_DLPRIM_SOURCE_DIR}/src/")
 pybind11_add_module(pt_ocl ${upstream_sources} ops.cc)
