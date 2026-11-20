@@ -95,7 +95,6 @@ class GhostSchedulerTester : public sc_module, private ToGhostSchedulerIntf {
 
   void finish(Packet *packet) {
     CheckIssued(packet);
-    scoreboard_.RegReadDone(packet);
     scoreboard_.Commit(packet);
     issued_packets_.erase(packet);
     ReleasePacket(packet);
@@ -109,7 +108,6 @@ class GhostSchedulerTester : public sc_module, private ToGhostSchedulerIntf {
 
   void scoreboard_finish(uint32_t wid, uint32_t iword) {
     WithTemporaryPacket(wid, iword, [this](Packet *packet) {
-      scoreboard_.RegReadDone(packet);
       scoreboard_.Commit(packet);
     });
   }

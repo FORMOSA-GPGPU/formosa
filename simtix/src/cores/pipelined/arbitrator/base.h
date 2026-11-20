@@ -13,7 +13,6 @@
 #include <sol/forward.hpp>
 
 #include "cores/pipelined/packet.h"
-#include "cores/pipelined/scoreboard.h"
 #include "konata/konata.h"
 
 namespace simtix::pipelined {
@@ -42,15 +41,11 @@ class ArbitratorIntf : public sc_module {
   virtual ~ArbitratorIntf() = default;
 
   virtual void set_core(ToArbitratorIntf *core) { core_ = core; }
-  virtual void set_scoreboard(Scoreboard *scoreboard) {
-    scoreboard_ = scoreboard;
-  }
 
   virtual lv::stats::Group *stats() const { return nullptr; }
 
  protected:
   ToArbitratorIntf *core_;
-  Scoreboard *scoreboard_ = nullptr;
 };
 
 }  // namespace simtix::pipelined

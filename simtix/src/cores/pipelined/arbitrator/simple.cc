@@ -24,7 +24,6 @@ void SimpleArbitrator::HandleOperandCollectReq() {
       core_->ReadRegFile(packet->rs3_data.data(), packet->wid,
                          packet->instr.rs3());
     }
-    if (scoreboard_) scoreboard_->RegReadDone(packet);
     operand_collect_resp->put(packet);
   }
   next_trigger(operand_collect_req->ok_to_get() |

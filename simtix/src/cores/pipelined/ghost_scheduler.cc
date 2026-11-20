@@ -154,8 +154,6 @@ void GhostScheduler::RecordWarpStats(uint32_t local_wid) {
   bool has_scoreboard_blocker = false;
   bool has_scoreboard_control_blocker = false;
   bool has_scoreboard_data_blocker = false;
-  bool has_scoreboard_memory_blocker = false;
-  bool has_scoreboard_readbin_blocker = false;
 
   for (const IsbEntry &entry : warp.isb) {
     const IsbIssueStatus status = EvaluateIsbIssueStatus(entry);
@@ -177,14 +175,6 @@ void GhostScheduler::RecordWarpStats(uint32_t local_wid) {
       case IsbIssueStatus::kScoreboardData:
         has_scoreboard_blocker = true;
         has_scoreboard_data_blocker = true;
-        break;
-      case IsbIssueStatus::kScoreboardMemory:
-        has_scoreboard_blocker = true;
-        has_scoreboard_memory_blocker = true;
-        break;
-      case IsbIssueStatus::kScoreboardReadBinFull:
-        has_scoreboard_blocker = true;
-        has_scoreboard_readbin_blocker = true;
         break;
       case IsbIssueStatus::kReady:
         has_ready = true;
@@ -220,10 +210,6 @@ void GhostScheduler::RecordWarpStats(uint32_t local_wid) {
   stats_.isb_scoreboard_control_blocked_warp_cycles +=
       has_scoreboard_control_blocker;
   stats_.isb_scoreboard_data_blocked_warp_cycles += has_scoreboard_data_blocker;
-  stats_.isb_scoreboard_memory_blocked_warp_cycles +=
-      has_scoreboard_memory_blocker;
-  stats_.isb_scoreboard_readbin_blocked_warp_cycles +=
-      has_scoreboard_readbin_blocker;
 }
 
 void GhostScheduler::DispatchToIssueBuffer() {
@@ -526,10 +512,6 @@ GhostScheduler::IsbIssueStatus GhostScheduler::EvaluateIsbIssueStatus(
         return IsbIssueStatus::kScoreboardControl;
       case IssueStallReason::kDataHazard:
         return IsbIssueStatus::kScoreboardData;
-      case IssueStallReason::kMemHazard:
-        return IsbIssueStatus::kScoreboardMemory;
-      case IssueStallReason::kReadBinFull:
-        return IsbIssueStatus::kScoreboardReadBinFull;
       case IssueStallReason::kNone:
         assert(false && "Scoreboard rejected issue without a stall reason");
         return IsbIssueStatus::kScoreboardData;
@@ -794,12 +776,6 @@ GhostScheduler::Stats::Stats(const char *name)
       LV_STAT(isb_scoreboard_data_blocked_warp_cycles,
               "Number of no-ready GhOST IsB warp cycles with a scoreboard "
               "data-hazard blocker"),
-      LV_STAT(isb_scoreboard_memory_blocked_warp_cycles,
-              "Number of no-ready GhOST IsB warp cycles with a scoreboard "
-              "memory-hazard blocker"),
-      LV_STAT(isb_scoreboard_readbin_blocked_warp_cycles,
-              "Number of no-ready GhOST IsB warp cycles with a scoreboard "
-              "read-bin-full blocker"),
       LV_STAT(control_pending_warp_cycles,
               "Number of active GhOST warp cycles with unresolved control"),
       LV_STAT(itab_update_pending_warp_cycles,
@@ -858,12 +834,6 @@ GhostScheduler::Stats::Stats(const char *name)
       LV_STAT(isb_scoreboard_data_blocked_warp_ratio,
               "Fraction of scoreboard-blocked GhOST IsB warp cycles with a "
               "data hazard"),
-      LV_STAT(isb_scoreboard_memory_blocked_warp_ratio,
-              "Fraction of scoreboard-blocked GhOST IsB warp cycles with a "
-              "memory hazard"),
-      LV_STAT(isb_scoreboard_readbin_blocked_warp_ratio,
-              "Fraction of scoreboard-blocked GhOST IsB warp cycles with a "
-              "full read bin"),
       LV_STAT(control_pending_warp_ratio,
               "Fraction of active GhOST warp cycles with unresolved control"),
       LV_STAT(itab_update_pending_warp_ratio,
@@ -900,12 +870,6 @@ GhostScheduler::Stats::Stats(const char *name)
       isb_scoreboard_blocked_warp_cycles;
   isb_scoreboard_data_blocked_warp_ratio =
       isb_scoreboard_data_blocked_warp_cycles /
-      isb_scoreboard_blocked_warp_cycles;
-  isb_scoreboard_memory_blocked_warp_ratio =
-      isb_scoreboard_memory_blocked_warp_cycles /
-      isb_scoreboard_blocked_warp_cycles;
-  isb_scoreboard_readbin_blocked_warp_ratio =
-      isb_scoreboard_readbin_blocked_warp_cycles /
       isb_scoreboard_blocked_warp_cycles;
   control_pending_warp_ratio = control_pending_warp_cycles / active_warp_cycles;
   itab_update_pending_warp_ratio =

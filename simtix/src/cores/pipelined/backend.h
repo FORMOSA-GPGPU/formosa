@@ -122,7 +122,6 @@ class Backend : public sc_module {
         arbitrator_init_("arbitrator").get<std::shared_ptr<ArbitratorIntf>>();
     arbitrator_init_ = sol::lua_nil;
     arbitrator_->set_core(core_);
-    arbitrator_->set_scoreboard(&scoreboard_);
     arbitrator_->clock.bind(clock);
     arbitrator_->operand_collect_req.bind(collect_q_);
     arbitrator_->operand_collect_resp.bind(execute1_q_);

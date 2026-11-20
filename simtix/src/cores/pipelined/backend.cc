@@ -412,8 +412,6 @@ void Backend::UpdateReadyWarps() {
 
   bool has_control_hazards = false;
   bool has_data_hazards = false;
-  bool has_mem_hazards = false;
-  bool has_readbin_full = false;
 
   for (uint32_t local_wid = 0; local_wid < num_local_warps_; ++local_wid) {
     uint32_t wid = get_wid(local_wid);
@@ -443,8 +441,6 @@ void Backend::UpdateReadyWarps() {
         has_scoreboard_blocked_warp = true;
         has_control_hazards |= reason == IssueStallReason::kControlHazard;
         has_data_hazards |= reason == IssueStallReason::kDataHazard;
-        has_mem_hazards |= reason == IssueStallReason::kMemHazard;
-        has_readbin_full |= reason == IssueStallReason::kReadBinFull;
       }
     }
   }
@@ -468,8 +464,6 @@ void Backend::UpdateReadyWarps() {
     stats->scoreboard_stall_cycles++;
     stats->scoreboard_stall_with_control_hazard_cycles += has_control_hazards;
     stats->scoreboard_stall_with_data_hazard_cycles += has_data_hazards;
-    stats->scoreboard_stall_with_mem_hazard_cycles += has_mem_hazards;
-    stats->scoreboard_stall_with_readbin_full_cycles += has_readbin_full;
   }
 }
 

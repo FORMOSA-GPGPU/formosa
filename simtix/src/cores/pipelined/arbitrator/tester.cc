@@ -5,12 +5,14 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <liblv/binding.h>
+#include <liblv/output.h>
 #include <systemc.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_core_ifs.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_channels/tlm_fifo/tlm_fifo.h>
 
 #include <cassert>
 #include <cstdlib>
+#include <queue>
 #include <sol/types.hpp>
 
 #include "cores/pipelined/arbitrator/base.h"
@@ -70,6 +72,7 @@ class ArbitratorTester : public sc_module, private ToArbitratorIntf {
     });
 
     scoreboards_.reserve(num_subcores_);
+    collect_order_.resize(num_subcores_);
     arbitrators_.resize(num_subcores_);
     for (uint32_t i = 0; i < num_subcores_; ++i) {
       scoreboards_.emplace_back(num_warps_ / num_subcores_, num_subcores_);
@@ -96,7 +99,6 @@ class ArbitratorTester : public sc_module, private ToArbitratorIntf {
       arbitrators_[i] = arb.get<std::shared_ptr<ArbitratorIntf>>();
       arbitrators_[i]->clock.bind(clk);
       arbitrators_[i]->set_core(this);
-      arbitrators_[i]->set_scoreboard(&scoreboards_[i]);
       arbitrators_[i]->operand_collect_req.bind(operand_collect_reqs_[i]);
       arbitrators_[i]->operand_collect_resp.bind(operand_collect_resps_[i]);
       arbitrators_[i]->writeback_req.bind(writeback_reqs_[i]);
@@ -201,6 +203,7 @@ class ArbitratorTester : public sc_module, private ToArbitratorIntf {
       WITH_TRACER(AddComment(
           packet, fmt::format("tmask = {}", fmt::streamed(packet->tmask))));
 
+      collect_order_[subcore_id].push(packet);
       operand_collect_reqs_[subcore_id].put(packet);
     }
   }
@@ -209,6 +212,14 @@ class ArbitratorTester : public sc_module, private ToArbitratorIntf {
     while (true) {
       Packet *packet = operand_collect_resps_[subcore_id].get();
       WITH_TRACER(StartStage(packet, 0, "X"));
+
+      /* Each subcore's collected packets must leave in the order they entered
+       */
+      if (collect_order_[subcore_id].front() != packet) {
+        LV_FATAL("subcore {}: operand collector released packet out of order",
+                 subcore_id);
+      }
+      collect_order_[subcore_id].pop();
 
       /* Check consistency of collected operand data */
       if (packet->instr.rs1() != Instr::kNullReg) {
@@ -354,6 +365,7 @@ class ArbitratorTester : public sc_module, private ToArbitratorIntf {
 
   std::shared_ptr<sc_clock> clock_;
   std::vector<Scoreboard> scoreboards_;
+  std::vector<std::queue<Packet *>> collect_order_;
   std::vector<uint32_t> committed_counts_;
   uint32_t target_count_ = 0;
   std::vector<std::shared_ptr<ArbitratorIntf>> arbitrators_;

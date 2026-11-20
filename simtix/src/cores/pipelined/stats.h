@@ -114,8 +114,6 @@ struct Stats : public BaseCore::Stats {
   Metric ready_warp_count_sum;
   Metric scoreboard_stall_with_control_hazard_cycles;
   Metric scoreboard_stall_with_data_hazard_cycles;
-  Metric scoreboard_stall_with_mem_hazard_cycles;
-  Metric scoreboard_stall_with_readbin_full_cycles;
 
   Formula<Real> avg_ready_warps;
   Formula<Real> issue_rate;
@@ -126,8 +124,6 @@ struct Stats : public BaseCore::Stats {
   Formula<Real> scoreboard_stall_ratio;
   Formula<Real> scoreboard_stall_with_control_hazard_ratio;
   Formula<Real> scoreboard_stall_with_data_hazard_ratio;
-  Formula<Real> scoreboard_stall_with_mem_hazard_ratio;
-  Formula<Real> scoreboard_stall_with_readbin_full_ratio;
 
   // Execution time
   Array arithmetic_instr_time;
@@ -191,14 +187,6 @@ struct Stats : public BaseCore::Stats {
             "Number of scheduler cycles blocked only by scoreboard involving "
             "data hazard"),
         LV_STAT(
-            scoreboard_stall_with_mem_hazard_cycles,
-            "Number of scheduler cycles blocked only by scoreboard involving "
-            "memory access hazard"),
-        LV_STAT(
-            scoreboard_stall_with_readbin_full_cycles,
-            "Number of scheduler cycles blocked only by scoreboard involving "
-            "read bin is full"),
-        LV_STAT(
             collect_queue_full_stall_cycles,
             "Number of scheduler cycles blocked by collect queue backpressure"),
         LV_STAT(ready_warp_count_sum,
@@ -223,11 +211,6 @@ struct Stats : public BaseCore::Stats {
                 "Fraction of scoreboard stall cycles with control hazard"),
         LV_STAT(scoreboard_stall_with_data_hazard_ratio,
                 "Fraction of scoreboard stall cycles with data hazard"),
-        LV_STAT(
-            scoreboard_stall_with_mem_hazard_ratio,
-            "Fraction of scoreboard stall cycles with memory access hazard"),
-        LV_STAT(scoreboard_stall_with_readbin_full_ratio,
-                "Fraction of scoreboard stall cycles with read bin is full"),
         LV_STAT(fetch_due_to_starving,
                 "Number of fetch requests due to warp starving"),
         LV_STAT(fetch_due_to_issuing,
@@ -371,10 +354,6 @@ struct Stats : public BaseCore::Stats {
         scoreboard_stall_with_control_hazard_cycles / scoreboard_stall_cycles;
     scoreboard_stall_with_data_hazard_ratio =
         scoreboard_stall_with_data_hazard_cycles / scoreboard_stall_cycles;
-    scoreboard_stall_with_mem_hazard_ratio =
-        scoreboard_stall_with_mem_hazard_cycles / scoreboard_stall_cycles;
-    scoreboard_stall_with_readbin_full_ratio =
-        scoreboard_stall_with_readbin_full_cycles / scoreboard_stall_cycles;
     avg_instr_shared = instr_shared / instr_filled;
     instr_sharing_opp = can_share_instr / instr_filled;
     instr_control_flow_flushed = flush_jb_others + flush_jal_forward +

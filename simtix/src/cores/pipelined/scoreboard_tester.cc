@@ -45,26 +45,6 @@ class ScoreboardTester {
     pool_.Release(p);
   }
 
-  void reg_read_done(uint32_t wid, const Instr &instr) {
-    Packet *p = pool_.Acquire();
-    p->wid = wid;
-    p->instr = instr;
-    scoreboards_[get_subcore_id(wid)].RegReadDone(p);
-    pool_.Release(p);
-  }
-
-  uint32_t get_num_read_bins() const {
-    return scoreboards_.empty() ? 0 : scoreboards_[0].get_num_read_bins();
-  }
-
-  uint32_t get_max_bin_count() const {
-    return scoreboards_.empty() ? 0 : scoreboards_[0].get_max_bin_count();
-  }
-
-  uint32_t get_max_inflight_load() const {
-    return scoreboards_.empty() ? 0 : scoreboards_[0].get_max_inflight_load();
-  }
-
  private:
   uint32_t get_subcore_id(uint32_t wid) const { return wid % num_subcores_; }
 
@@ -86,15 +66,6 @@ LV_BINDING(simtix, ScoreboardTester)
     .method("issue", &ScoreboardTester::issue, lv::params("wid", "instr"),
             lv::doc("Mark an instruction as issued"))
     .method("commit", &ScoreboardTester::commit, lv::params("wid", "instr"),
-            lv::doc("Mark an instruction as committed"))
-    .method("reg_read_done", &ScoreboardTester::reg_read_done,
-            lv::params("wid", "instr"),
-            lv::doc("Mark register reads as complete"))
-    .property("num_read_bins", &ScoreboardTester::get_num_read_bins,
-              lv::doc("Number of read dependency bins"))
-    .property("max_bin_count", &ScoreboardTester::get_max_bin_count,
-              lv::doc("Maximum scoreboard bin occupancy"))
-    .property("max_inflight_load", &ScoreboardTester::get_max_inflight_load,
-              lv::doc("Maximum number of in-flight loads per warp"));
+            lv::doc("Mark an instruction as committed"));
 
 }  // namespace simtix::pipelined

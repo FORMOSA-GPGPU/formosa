@@ -101,59 +101,28 @@ local function random_instr()
   return simtix.decode(iword), memory_kind
 end
 
--- Check if register d is busy for instruction second
-local NUM_BINS = tester.num_read_bins
-local MAX_BIN_COUNT = tester.max_bin_count
-local MAX_INFLIGHT_LOAD = tester.max_inflight_load
-
-local function get_bin(rid) return rid % NUM_BINS end
-
 local function is_valid(rid) return rid ~= kNullReg and rid ~= 0 end
 
 local function check_hw_can_issue(instr1, memory_kind1, instr2, memory_kind2)
   if instr1.is_cti then return false, "instr1 is CTI", 3 end
 
-  if
-    memory_kind1 ~= "none"
-    and memory_kind2 ~= "none"
-    and (memory_kind1 ~= "load" or memory_kind2 ~= "load" or MAX_INFLIGHT_LOAD == 1)
-  then
-    return false, "memory hazard", 4
+  local function is_being_written(rid)
+    return is_valid(rid) and is_valid(instr1.rd) and rid == instr1.rd
   end
-
-  local rd_busy = {}
-  local rs_busy = {}
-  for i = 0, 31 do
-    rd_busy[i] = false
-  end
-  for i = 0, NUM_BINS - 1 do
-    rs_busy[i] = 0
-  end
-
-  if is_valid(instr1.rd) then rd_busy[instr1.rd] = true end
-
-  local unique_bins = {}
-  if is_valid(instr1.rs1) then unique_bins[get_bin(instr1.rs1)] = true end
-  if is_valid(instr1.rs2) then unique_bins[get_bin(instr1.rs2)] = true end
-  if is_valid(instr1.rs3) then unique_bins[get_bin(instr1.rs3)] = true end
-
-  for bin, _ in pairs(unique_bins) do
-    rs_busy[bin] = rs_busy[bin] + 1
-  end
-
-  local function is_being_written(rid) return is_valid(rid) and rd_busy[rid] end
-  local function is_being_read(rid) return is_valid(rid) and rs_busy[get_bin(rid)] > 0 end
-  local function is_rd_busy(rid) return is_being_written(rid) or is_being_read(rid) end
-  local function is_bin_full(rid) return is_valid(rid) and rs_busy[get_bin(rid)] >= MAX_BIN_COUNT end
-  local function is_rs_busy(rid) return is_being_written(rid) or is_bin_full(rid) end
 
   if
-    is_rs_busy(instr2.rs1)
-    or is_rs_busy(instr2.rs2)
-    or is_rs_busy(instr2.rs3)
-    or is_rd_busy(instr2.rd)
+    is_being_written(instr2.rs1)
+    or is_being_written(instr2.rs2)
+    or is_being_written(instr2.rs3)
+    or is_being_written(instr2.rd)
   then
     return false, "data dependencies", 2
+  end
+
+  -- The in-order operand collector keeps memory order, so memory pairs need no
+  -- scoreboard stall.
+  if memory_kind1 ~= "none" and memory_kind2 ~= "none" then
+    return true, "memory pair, no stall", 4
   end
 
   return true, "same warp, but no dependencies", 1
@@ -215,7 +184,6 @@ local function check_dependencies(wid1, instr1, memory_kind1, wid2, instr2, memo
   end
 
   -- Commit first instruction. Second one should then be able to issue.
-  tester:reg_read_done(wid1, instr1)
   tester:commit(wid1, instr1)
 
   if not tester:can_issue(wid2, instr2) then
@@ -224,7 +192,6 @@ local function check_dependencies(wid1, instr1, memory_kind1, wid2, instr2, memo
 
   -- Clean up by issuing and committing second instruction
   tester:issue(wid2, instr2)
-  tester:reg_read_done(wid2, instr2)
   tester:commit(wid2, instr2)
 
   return type
@@ -262,7 +229,8 @@ while true do
   if finished then break end
 end
 
--- Load -> store -> atomic must wait for the preceding memory instruction.
+-- Independent load, store and atomic may overlap: the in-order operand collector
+-- delivers them to the LSU in issue order.
 do
   local wid = 0
   local load1 = simtix.decode(make_lw(1, 2, 0))
@@ -270,41 +238,36 @@ do
   local atomic1 =
     simtix.decode(bit.bor(bit.lshift(6, 20), bit.lshift(5, 15), bit.lshift(3, 7), 0x202f)) -- amoadd.w x3, x6, (x5)
 
-  assert(tester:can_issue(wid, load1), "Load 1 should issue")
   tester:issue(wid, load1)
-  tester:reg_read_done(wid, load1)
-  assert(not tester:can_issue(wid, store1), "Store 1 must wait for load 1")
-  assert(not tester:can_issue(wid, atomic1), "Atomic 1 must wait for load 1")
-  tester:commit(wid, load1)
-
-  assert(tester:can_issue(wid, store1), "Store 1 should issue after load 1 commits")
+  assert(tester:can_issue(wid, store1), "Store must not wait for an in-flight load")
   tester:issue(wid, store1)
-  tester:reg_read_done(wid, store1)
-  assert(not tester:can_issue(wid, atomic1), "Atomic 1 must wait for store 1")
-  tester:commit(wid, store1)
-
-  assert(tester:can_issue(wid, atomic1), "Atomic 1 should issue after store 1 commits")
+  assert(tester:can_issue(wid, atomic1), "Atomic must not wait for in-flight memory")
   tester:issue(wid, atomic1)
-  tester:reg_read_done(wid, atomic1)
+  tester:commit(wid, load1)
+  tester:commit(wid, store1)
   tester:commit(wid, atomic1)
 end
 
--- Issue max_inflight_load independent loads; the next load must be blocked.
+-- A writer may issue while an earlier reader of its destination is still in the
+-- collector (no WAR stall).
+do
+  local wid = 0
+  local reader = simtix.decode(make_r_type(1, 5, 6))
+  local writer = simtix.decode(make_r_type(5, 7, 8))
+  tester:issue(wid, reader)
+  assert(tester:can_issue(wid, writer), "WAR must not stall issue")
+  tester:commit(wid, reader)
+end
+
+-- More loads than any per-warp limit may be in flight.
 do
   local wid = 0
   local loads = {}
-  for i = 0, MAX_INFLIGHT_LOAD do
-    local rd = i + 1 -- Distinct nonzero destination for every load attempt.
-    assert(rd < 32, "Load destination register must be less than 32")
+  for rd = 1, 16 do
     local load = simtix.decode(make_lw(rd, 31, 0))
-    if i < MAX_INFLIGHT_LOAD then
-      assert(tester:can_issue(wid, load), "Loads below the limit should issue")
-      tester:issue(wid, load)
-      tester:reg_read_done(wid, load)
-      loads[#loads + 1] = load
-    else
-      assert(not tester:can_issue(wid, load), "The load beyond max_inflight_load must wait")
-    end
+    assert(tester:can_issue(wid, load), "Independent loads must not be limited per warp")
+    tester:issue(wid, load)
+    loads[#loads + 1] = load
   end
   for _, load in ipairs(loads) do
     tester:commit(wid, load)
@@ -316,7 +279,7 @@ lv.println(string.format("  Type 0 (Different warp):      %d", counts[0]))
 lv.println(string.format("  Type 1 (Same warp, no dep):   %d", counts[1]))
 lv.println(string.format("  Type 2 (Same warp, data dep): %d", counts[2]))
 lv.println(string.format("  Type 3 (Same warp, CTI dep):  %d", counts[3]))
-lv.println(string.format("  Type 4 (Same warp, Mem dep):  %d", counts[4]))
+lv.println(string.format("  Type 4 (Same warp, Mem pair): %d", counts[4]))
 lv.println(string.format("Total tests run: %d", total))
 
 lv.info("All tests passed!")

@@ -125,8 +125,6 @@ class GhostScheduler : public sc_module {
     kIsbDependency,
     kScoreboardControl,
     kScoreboardData,
-    kScoreboardMemory,
-    kScoreboardReadBinFull,
     kSerializing,
     kReady,
   };
@@ -286,8 +284,6 @@ class GhostScheduler : public sc_module {
     Metric isb_scoreboard_blocked_warp_cycles;
     Metric isb_scoreboard_control_blocked_warp_cycles;
     Metric isb_scoreboard_data_blocked_warp_cycles;
-    Metric isb_scoreboard_memory_blocked_warp_cycles;
-    Metric isb_scoreboard_readbin_blocked_warp_cycles;
     Metric control_pending_warp_cycles;
     Metric itab_update_pending_warp_cycles;
 
@@ -312,8 +308,6 @@ class GhostScheduler : public sc_module {
     Formula<Real> isb_scoreboard_blocked_warp_ratio;
     Formula<Real> isb_scoreboard_control_blocked_warp_ratio;
     Formula<Real> isb_scoreboard_data_blocked_warp_ratio;
-    Formula<Real> isb_scoreboard_memory_blocked_warp_ratio;
-    Formula<Real> isb_scoreboard_readbin_blocked_warp_ratio;
     Formula<Real> control_pending_warp_ratio;
     Formula<Real> itab_update_pending_warp_ratio;
 

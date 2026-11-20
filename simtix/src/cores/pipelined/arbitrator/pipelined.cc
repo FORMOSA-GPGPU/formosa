@@ -401,15 +401,13 @@ void PipelinedArbitrator::ForwardReadPacket() {
     return;
   }
 
-  auto it = std::find_if(working_read_collect_unit_ids_.begin(),
-                         working_read_collect_unit_ids_.end(),
-                         [this](uint32_t cu_id) {
-                           return read_collect_units_[cu_id].IsReady();
-                         });
-  if (it == working_read_collect_unit_ids_.end()) {
+  // Collect units gather operands in parallel but release in allocation order,
+  // so instructions reach execution in the order this subcore issued them; an
+  // unfinished oldest unit holds back every younger unit, from any warp.
+  auto it = working_read_collect_unit_ids_.begin();
+  if (!read_collect_units_[*it].IsReady()) {
     return;
   }
-
   const uint32_t cu_id = *it;
   auto &cu = read_collect_units_[cu_id];
 
@@ -424,7 +422,6 @@ void PipelinedArbitrator::ForwardReadPacket() {
   free_read_collect_unit_ids_.push(cu_id);
   working_read_collect_unit_ids_.erase(it);
 
-  if (scoreboard_) scoreboard_->RegReadDone(packet);
   operand_collect_resp->nb_put(packet);
 }
 
