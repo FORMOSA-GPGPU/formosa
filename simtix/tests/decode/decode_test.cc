@@ -100,7 +100,9 @@ TEST_CASE("Disassembly formatters print instruction operands") {
         Case{MATCH_CSRRSI | (10 << 7) | (17 << 15) | (1 << 20),
              "csrrsi a0, 0x001, 17"},
         Case{MATCH_FCLASS_S | (10 << 7) | (11 << 15), "fclass.s a0, a1"},
-        Case{MATCH_ECALL, "ecall"}, Case{MATCH_FSA_BAR, "fsa.bar"},
+        Case{MATCH_ECALL, "ecall"}, Case{MATCH_FSA_BAR, "fsa.bar 0, 0"},
+        Case{MATCH_FSA_BAR | (1u << 20), "fsa.bar 0, 1"},
+        Case{MATCH_FSA_BAR | (0xfffu << 20), "fsa.bar 63, 63"},
         Case{MATCH_FSA_PRI_RAISE | (7 << 20), "fsa.pri.raise 7"},
         Case{MATCH_FMADD_S | (10 << 7) | (11 << 15) | (12 << 20) | (13 << 27),
              "fmadd.s a0, a1, a2, a3, rne"}}) {
@@ -436,6 +438,7 @@ TEST_CASE("Primitive properties determine instruction classifications") {
            Case{MATCH_FSA_PRI_RAISE, &Instr::affects_scheduling},
            Case{MATCH_FSA_PRI_LOWER, &Instr::affects_scheduling},
            Case{MATCH_FSA_BAR, &Instr::affects_scheduling},
+           Case{MATCH_FSA_BAR | (1u << 20), &Instr::affects_scheduling},
            Case{MATCH_FADD_S, nullptr},
            Case{MATCH_NTL_P1, nullptr},
            Case{0xffffffff, nullptr},

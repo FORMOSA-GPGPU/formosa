@@ -33,6 +33,12 @@ void kernel(void *args) {
       // address.
       asm volatile("sh zero, 1(%0)" : : "r"(fault_base) : "memory");
       break;
+    case 4:
+      asm volatile("fsa.bar 0, 2" ::: "memory");
+      break;
+    case 5:
+      asm volatile("fsa.bar 1, 1" ::: "memory");
+      break;
     default:
       break;
   }

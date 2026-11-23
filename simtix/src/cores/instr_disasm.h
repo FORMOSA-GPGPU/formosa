@@ -37,88 +37,93 @@ namespace simtix::disasm {
 
 // Formatters describe assembly text only; Fields independently define decoding.
 // Reg counts source operands, excluding rd. All fmt strings compile in C++17.
-inline std::string None(const Instr&, std::string_view mnemonic) {
+inline std::string None(const Instr &, std::string_view mnemonic) {
   return std::string(mnemonic);
 }
 
-inline std::string Reg(const Instr& instr, std::string_view mnemonic) {
+inline std::string Reg(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}"), mnemonic,
                      detail::RegName(instr.rd()), detail::RegName(instr.rs1()));
 }
 
-inline std::string RegReg(const Instr& instr, std::string_view mnemonic) {
+inline std::string RegReg(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}, {}"), mnemonic,
                      detail::RegName(instr.rd()), detail::RegName(instr.rs1()),
                      detail::RegName(instr.rs2()));
 }
 
-inline std::string RegImm(const Instr& instr, std::string_view mnemonic) {
+inline std::string RegImm(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}, {}"), mnemonic,
                      detail::RegName(instr.rd()), detail::RegName(instr.rs1()),
                      instr.imm());
 }
 
-inline std::string Imm(const Instr& instr, std::string_view mnemonic) {
+inline std::string Imm(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}"), mnemonic,
                      detail::RegName(instr.rd()), instr.imm());
 }
 
-inline std::string Load(const Instr& instr, std::string_view mnemonic) {
+inline std::string Load(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}({})"), mnemonic,
                      detail::RegName(instr.rd()), instr.imm(),
                      detail::RegName(instr.rs1()));
 }
 
-inline std::string Store(const Instr& instr, std::string_view mnemonic) {
+inline std::string Store(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}({})"), mnemonic,
                      detail::RegName(instr.rs2()), instr.imm(),
                      detail::RegName(instr.rs1()));
 }
 
-inline std::string Atomic(const Instr& instr, std::string_view mnemonic) {
+inline std::string Atomic(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}, ({})"), mnemonic,
                      detail::RegName(instr.rd()), detail::RegName(instr.rs2()),
                      detail::RegName(instr.rs1()));
 }
 
-inline std::string Branch(const Instr& instr, std::string_view mnemonic) {
+inline std::string Branch(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}, {}"), mnemonic,
                      detail::RegName(instr.rs1()), detail::RegName(instr.rs2()),
                      instr.imm());
 }
 
-inline std::string CsrReg(const Instr& instr, std::string_view mnemonic) {
+inline std::string CsrReg(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {:#05x}, {}"), mnemonic,
                      detail::RegName(instr.rd()), instr.csr(),
                      detail::RegName(instr.rs1()));
 }
 
-inline std::string CsrImm(const Instr& instr, std::string_view mnemonic) {
+inline std::string CsrImm(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {:#05x}, {}"), mnemonic,
                      detail::RegName(instr.rd()), instr.csr(), instr.uimm());
 }
 
-inline std::string Pri(const Instr& instr, std::string_view mnemonic) {
+inline std::string Pri(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}"), mnemonic, instr.pri());
+}
+
+inline std::string Barrier(const Instr &instr, std::string_view mnemonic) {
+  return fmt::format(FMT_COMPILE("{} {}, {}"), mnemonic, instr.imm() >> 6,
+                     instr.imm() & 0x3f);
 }
 
 // Dynamic rounding (7) is implicit for ordinary FP operations. Exact widening
 // conversions use RegRm<0> to omit their default RNE instead.
 template <unsigned Omitted = 7>
-inline std::string RegRm(const Instr& instr, std::string_view mnemonic) {
+inline std::string RegRm(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}{}"), mnemonic,
                      detail::RegName(instr.rd()), detail::RegName(instr.rs1()),
                      detail::RmSuffix<Omitted>(instr.rm()));
 }
 
-inline std::string RegRegRm(const Instr& instr, std::string_view mnemonic) {
+inline std::string RegRegRm(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}, {}{}"), mnemonic,
                      detail::RegName(instr.rd()), detail::RegName(instr.rs1()),
                      detail::RegName(instr.rs2()),
                      detail::RmSuffix<7>(instr.rm()));
 }
 
-inline std::string RegRegRegRm(const Instr& instr, std::string_view mnemonic) {
+inline std::string RegRegRegRm(const Instr &instr, std::string_view mnemonic) {
   return fmt::format(FMT_COMPILE("{} {}, {}, {}, {}{}"), mnemonic,
                      detail::RegName(instr.rd()), detail::RegName(instr.rs1()),
                      detail::RegName(instr.rs2()), detail::RegName(instr.rs3()),

@@ -200,7 +200,8 @@ void AtomicCore::MainProc() {
     }
 
     if (HasFlag(flag, ExecFlag::BARRIER)) {
-      if (auto earlier_pc = lane_state_.ArriveBarrier(wid, tmask_, wpc)) {
+      if (auto earlier_pc =
+              lane_state_.ArriveBarrier(wid, tmask_, wpc, instr.imm() == 1)) {
         LV_WARNING(
             "{}: warp {} has lanes waiting at different barriers "
             "(pc {:#x} and {:#x})",
@@ -228,7 +229,11 @@ void AtomicCore::MainProc() {
       mtval_[wid] = 0;
       WarpStateTransition(&exception_mask_, &active_mask_, wmask_);
     } else if (lane_state_.BarrierReady(wid)) {
-      WarpStateTransition(&barrier_mask_, &active_mask_, wmask_);
+      if (lane_state_.IsWarpBarrier(wid)) {
+        lane_state_.ClearBarrier(wid);
+      } else {
+        WarpStateTransition(&barrier_mask_, &active_mask_, wmask_);
+      }
     }
 
     // Done

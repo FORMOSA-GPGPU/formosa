@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <utility>
 #include <vector>
 
@@ -42,9 +43,10 @@ class ToBackendIntf : public ToArbitratorIntf {
   virtual void NotifyAborted(uint32_t wid) = 0;
   virtual void NoteFlush(uint32_t wid, FlushReason reason, uint64_t wpc,
                          uint64_t producer_id) = 0;
-  // X2 completed and the warp still has runnable lanes. Memory operations and
-  // register writeback may remain pending; this is not a retirement event.
-  virtual void NotifyInstructionExecuted(uint32_t wid, uint64_t unique_id) = 0;
+  // At X2 the ID matches the pending instruction, even if memory operations
+  // or writeback remain. A resumed barrier releases the hold without an ID.
+  virtual void NotifyControlResolved(uint32_t wid,
+                                     std::optional<uint64_t> unique_id) = 0;
   virtual void RequestSchedulerFlush(uint32_t wid) = 0;
   virtual void CaptureThreadMask(Packet *packet) = 0;
   virtual void Redirect(uint32_t wid, uint64_t wpc) = 0;

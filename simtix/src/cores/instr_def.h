@@ -157,11 +157,11 @@
 #define FOREACH_INSTR_ZIFENCEI(V) \
   V(FENCE_I, disasm::None, kFetchFence)
 
-#define FOREACH_INSTR_FORMOSA(V)                   \
-  V(FSA_PRI_RESET, disasm::None, kScheduling)      \
-  V(FSA_PRI_RAISE, disasm::Pri,  kScheduling, Pri) \
-  V(FSA_PRI_LOWER, disasm::Pri,  kScheduling, Pri) \
-  V(FSA_BAR,       disasm::None, kScheduling)
+#define FOREACH_INSTR_FORMOSA(V)                         \
+  V(FSA_PRI_RESET, disasm::None,    kScheduling)         \
+  V(FSA_PRI_RAISE, disasm::Pri,     kScheduling, Pri)    \
+  V(FSA_PRI_LOWER, disasm::Pri,     kScheduling, Pri)    \
+  V(FSA_BAR,       disasm::Barrier, kScheduling, Uimm12)
 
 #define FOREACH_INSTR_OPFP(V)                             \
   V(FADD_S,    disasm::RegRegRm, kNone, Rd, Rs1, Rs2, Rm) \

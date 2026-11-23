@@ -174,7 +174,8 @@ class PipelinedCore : public BaseCore,
     UpdateExecutableWarps();
   }
 
-  void NotifyInstructionExecuted(uint32_t wid, uint64_t unique_id) override {
+  void NotifyControlResolved(uint32_t wid,
+                             std::optional<uint64_t> unique_id) override {
     if (!enable_ghost_scheduler_) {
       return;
     }

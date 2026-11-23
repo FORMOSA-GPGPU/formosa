@@ -9,6 +9,7 @@ local cases = {
     "barrier deadlock in WG slot 0 .*: 1 of %d+ warps exited .*warp@pc: 1@0x11008",
   },
   ["exited-lanes"] = { "Kernel completed" },
+  ["warp-local"] = { "Kernel completed" },
   ["divergent-lanes"] = {
     "has lanes waiting at different barriers %(pc 0x11010 and 0x1100c%).*Kernel completed",
     "has lanes waiting at different barriers %(pc 0x1100c and 0x11010%).*Kernel completed",
@@ -45,7 +46,7 @@ for name, patterns in pairs(cases) do
         if log:match(pattern) then matched = true end
       end
       if
-        name == "exited-lanes"
+        (name == "exited-lanes" or name == "warp-local")
         and (log:find("different barriers", 1, true) or log:find("barrier deadlock", 1, true))
       then
         matched = false

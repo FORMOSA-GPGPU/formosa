@@ -18,7 +18,7 @@ namespace simtix {
 // publish the warp state (including pipeline drain and exception priority).
 //
 // Exited lanes stay excluded until Reset. Barrier arrivals remain stopped until
-// the core receives Resume from WGI and calls ClearBarrier.
+// the core calls ClearBarrier, locally or after Resume from WGI.
 class WarpLaneState {
  public:
   WarpLaneState(uint32_t num_warps, uint32_t num_lanes)
@@ -28,6 +28,7 @@ class WarpLaneState {
                 sc_dt::sc_bv_base{false, static_cast<int>(num_lanes)}),
         states_(num_warps, State::kRunnable),
         first_barrier_pc_(num_warps, 0),
+        warp_barrier_(num_warps, false),
         divergence_reported_(num_warps, false) {}
 
   // Records lanes arriving at the barrier at pc. OpenCL requires every
@@ -35,11 +36,12 @@ class WarpLaneState {
   // wait at another PC, returns that PC, once per warp until Reset.
   std::optional<uint64_t> ArriveBarrier(uint32_t wid,
                                         const sc_dt::sc_bv_base &lanes,
-                                        uint64_t pc) {
+                                        uint64_t pc, bool warp_barrier) {
     assert(lanes != 0);
     std::optional<uint64_t> divergent_pc;
     if (barrier_[wid] == 0) {
       first_barrier_pc_[wid] = pc;
+      warp_barrier_[wid] = warp_barrier;
     } else if (first_barrier_pc_[wid] != pc && !divergence_reported_[wid]) {
       divergence_reported_[wid] = true;
       divergent_pc = first_barrier_pc_[wid];
@@ -81,6 +83,8 @@ class WarpLaneState {
     return states_[wid] == State::kBarrier;
   }
 
+  bool IsWarpBarrier(uint32_t wid) const { return warp_barrier_[wid]; }
+
  private:
   enum class State : uint8_t { kRunnable, kBarrier, kExited };
 
@@ -105,6 +109,7 @@ class WarpLaneState {
   std::vector<State> states_;
   // PC of the first barrier arrival in the current round.
   std::vector<uint64_t> first_barrier_pc_;
+  std::vector<bool> warp_barrier_;
   std::vector<bool> divergence_reported_;
 };
 

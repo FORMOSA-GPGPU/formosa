@@ -9,7 +9,7 @@
 namespace simtix {
 
 #define DEFINE_DISASSEMBLY(NAME, FORMATTER, FLAGS, ...)   \
-  std::string NAME::Disassemble(const Instr& instr) {     \
+  std::string NAME::Disassemble(const Instr &instr) {     \
     return FORMATTER(instr, std::string_view(kMnemonic)); \
   }
 FOREACH_INSTR(DEFINE_DISASSEMBLY)

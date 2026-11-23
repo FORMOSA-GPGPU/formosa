@@ -57,6 +57,18 @@ local cases = {
     mcause = CAUSE_MISALIGNED_STORE,
     mtval = fault_base + 1,
   },
+  {
+    name = "unsupported_barrier_count",
+    case_id = 4,
+    mcause = CAUSE_ILLEGAL_INSTRUCTION,
+    mtval = 0x0020102b,
+  },
+  {
+    name = "unsupported_barrier_id",
+    case_id = 5,
+    mcause = CAUSE_ILLEGAL_INSTRUCTION,
+    mtval = 0x0410102b,
+  },
 }
 
 for _, case in ipairs(cases) do

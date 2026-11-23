@@ -1218,7 +1218,7 @@
 #define MATCH_FROUNDNX_S 0x40500053
 #define MASK_FROUNDNX_S 0xfff0007f
 #define MATCH_FSA_BAR 0x102b
-#define MASK_FSA_BAR 0xffffffff
+#define MASK_FSA_BAR 0xfffff
 #define MATCH_FSA_PRI_LOWER 0x302b
 #define MASK_FSA_PRI_LOWER 0xfc0fffff
 #define MATCH_FSA_PRI_RAISE 0x502b

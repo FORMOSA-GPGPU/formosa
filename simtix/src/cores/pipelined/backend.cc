@@ -244,8 +244,8 @@ void Backend::Execute2() {
   if (HasFlag(flag, ExecFlag::BARRIER)) {
     uint32_t local_wid = get_local_wid(packet->wid);
     pending_barrier_wpc_[local_wid] = packet->wpc;
-    if (auto earlier_pc =
-            lane_state_.ArriveBarrier(local_wid, packet->tmask, packet->wpc)) {
+    if (auto earlier_pc = lane_state_.ArriveBarrier(
+            local_wid, packet->tmask, packet->wpc, packet->instr.imm() == 1)) {
       LV_WARNING(
           "{}: warp {} has lanes waiting at different barriers "
           "(pc {:#x} and {:#x})",
@@ -290,7 +290,7 @@ void Backend::Execute2() {
   // The scheduler owns the blocking policy and matches this ID against its
   // pending instruction; execution does not need to repeat that classification.
   if (lane_state_.HasRunnableLanes(get_local_wid(packet->wid))) {
-    core_->NotifyInstructionExecuted(packet->wid, packet->unique_id);
+    core_->NotifyControlResolved(packet->wid, packet->unique_id);
   }
 
   WITH_TRACER(StartStage(packet, 0, "X2"));
@@ -384,8 +384,11 @@ void Backend::ProcessWarpStates() {
     if (lane_state_.AllExited(local_wid)) {
       core_->NotifyEcall(wid, pending_ecall_wpc_[local_wid]);
     } else if (lane_state_.BarrierReady(local_wid)) {
-      // Keep arrivals stopped until WGI resumes this warp.
-      core_->NotifyBarrier(wid, pending_barrier_wpc_[local_wid]);
+      if (lane_state_.IsWarpBarrier(local_wid)) {
+        ResumeFromBarrier(wid);
+      } else {
+        core_->NotifyBarrier(wid, pending_barrier_wpc_[local_wid]);
+      }
     }
   }
 }
@@ -489,11 +492,13 @@ void Backend::UpdatePC(Packet *packet) {
 
 void Backend::ResumeFromBarrier(uint32_t wid) {
   lane_state_.ClearBarrier(get_local_wid(wid));
+  core_->NotifyControlResolved(wid, std::nullopt);
   // Lanes that exited or waited elsewhere may have run last, so the frontend's
   // next PC can be on no released lane's path.
   uint64_t next_pc = ArbitratePC(wid);
   core_->NoteFlush(wid, FlushReason::kMisc, next_pc, 0);
   core_->Redirect(wid, next_pc);
+  issue_suppressed_warps_[wid] = 1;
 }
 
 uint64_t Backend::ArbitratePC(uint32_t wid) {

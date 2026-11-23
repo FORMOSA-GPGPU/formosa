@@ -21,8 +21,9 @@ ExecFlag FSA_PRI_LOWER::Execute(ExecContext *ctx, const Instr &instr) {
   return ExecFlag::PRIORITY | ExecFlag::PRI_LOWER;
 }
 
-ExecFlag FSA_BAR::Execute(ExecContext *, const Instr &) {
-  return ExecFlag::BARRIER;
+ExecFlag FSA_BAR::Execute(ExecContext *, const Instr &instr) {
+  // Only id 0 is supported: count 0 waits for the work-group, 1 for this warp.
+  return instr.imm() <= 1 ? ExecFlag::BARRIER : ExecFlag::ILLEGAL;
 }
 
 }  // namespace simtix

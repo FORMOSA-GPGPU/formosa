@@ -63,7 +63,7 @@ template <auto Member, class Extraction>
 struct Field {
   using Value =
       std::remove_reference_t<decltype(std::declval<Instr>().*Member)>;
-  static void Fill(Instr* instr, uint32_t word) {
+  static void Fill(Instr *instr, uint32_t word) {
     instr->*Member = Extraction::Get(word);
   }
 };
@@ -77,6 +77,7 @@ struct Field {
   V(Rm, rm_, UnsignedBits<INSN_FIELD_RM>)         \
   V(Csr, csr_, UnsignedBits<INSN_FIELD_CSR>)      \
   V(Uimm, uimm_, UnsignedBits<INSN_FIELD_ZIMM5>)  \
+  V(Uimm12, imm_, UnsignedBits<INSN_FIELD_IMM12>) \
   V(Pri, pri_, UnsignedBits<INSN_FIELD_RS2>)      \
   V(ImmI, imm_, ImmediateI)                       \
   V(ImmS, imm_, ImmediateS)                       \
@@ -115,7 +116,7 @@ template <class... F>
 struct FieldList {
   static_assert(DisjointFields<F...>::value,
                 "Operand fields overlap in Instr storage");
-  static void Fill(Instr* instr, uint32_t word) { (F::Fill(instr, word), ...); }
+  static void Fill(Instr *instr, uint32_t word) { (F::Fill(instr, word), ...); }
 };
 
 #define FIELD_TUPLE(NAME, MEMBER, EXTRACTION) std::tuple<NAME>{},
