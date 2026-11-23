@@ -242,9 +242,9 @@ void ScalarCore::Decode() {
   if (!packet_d_->decoded) {
     packet_d_->instr = simtix::Decode(packet_d_->iword);
     packet_d_->decoded = true;
-    WITH_TRACER(AddMnemonic(
+    WITH_TRACER(AddLabel(
         packet_d_,
-        fmt::format("{:#x} {}", packet_d_->pc, Mnemonic(packet_d_->instr))));
+        fmt::format("{:#x} {}", packet_d_->pc, Disassemble(packet_d_->instr))));
   }
 
   auto get_source_op = [&](uint8_t reg_id, int64_t &data_buf) {

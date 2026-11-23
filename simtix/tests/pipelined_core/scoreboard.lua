@@ -197,6 +197,25 @@ local function check_dependencies(wid1, instr1, memory_kind1, wid2, instr2, memo
   return type
 end
 
+-- Execution-state operations are not CTIs, but still block subsequent issue.
+-- fsa.pri.reset / raise / lower and fsa.bar encodings.
+for _, word in ipairs({ 0x0200002b, 0x502b, 0x302b, 0x102b }) do
+  local control = simtix.decode(word)
+  local next_instr = simtix.decode(make_r_type(3, 4, 5))
+  assert(not control.is_cti, "Execution-state operation must not be classified as CTI")
+  assert(tester:can_issue(0, control))
+  tester:issue(0, control)
+  assert(
+    not tester:can_issue(0, next_instr),
+    "Execution-state operation must block same-warp issue"
+  )
+  if NUM_WARPS > 1 then
+    assert(tester:can_issue(1, next_instr), "Other warps must remain issuable")
+  end
+  tester:commit(0, control)
+  assert(tester:can_issue(0, next_instr), "Commit must release execution-state dependency")
+end
+
 -- Run random tests
 math.randomseed(args.seed)
 lv.info("Starting Scoreboard constrained random tests...")

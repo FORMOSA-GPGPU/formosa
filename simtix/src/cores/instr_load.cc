@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -60,8 +59,5 @@ ExecFlag LWU::Execute(ExecContext *ctx, const Instr &instr) {
 ExecFlag LD::Execute(ExecContext *ctx, const Instr &instr) {
   return ExecuteLoad(ctx, instr, ExecFlag::WIDTH_8, ExecFlag::SIGNED);
 }
-
-template <>
-class Decoder<InstrLoad>;
 
 }  // namespace simtix

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -72,8 +71,5 @@ ExecFlag BGEU::Execute(ExecContext *ctx, const Instr &instr) {
     return static_cast<uint64_t>(a) >= static_cast<uint64_t>(b);
   });
 }
-
-template <>
-class Decoder<InstrBranch>;
 
 }  // namespace simtix

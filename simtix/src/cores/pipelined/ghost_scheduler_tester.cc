@@ -95,6 +95,9 @@ class GhostSchedulerTester : public sc_module, private ToGhostSchedulerIntf {
 
   void finish(Packet *packet) {
     CheckIssued(packet);
+    // Stand in for backend execution before releasing the packet. The scheduler
+    // decides whether this ID resolves its pending instruction.
+    scheduler_.ResolveControl(packet->wid, packet->unique_id);
     scoreboard_.Commit(packet);
     issued_packets_.erase(packet);
     ReleasePacket(packet);

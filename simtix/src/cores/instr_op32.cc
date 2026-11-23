@@ -4,7 +4,6 @@
 
 #include <climits>
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -133,8 +132,5 @@ ExecFlag REMUW::Execute(ExecContext *ctx, const Instr &) {
   }
   return ExecFlag::RD_DATA | ExecFlag::MDU;
 }
-
-template <>
-class Decoder<InstrOp32>;
 
 }  // namespace simtix

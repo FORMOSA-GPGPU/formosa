@@ -15,6 +15,7 @@
 #include <queue>
 #include <sol/types.hpp>
 
+#include "cores/instr_fields.h"
 #include "cores/pipelined/arbitrator/base.h"
 #include "cores/pipelined/param.h"
 #include "cores/pipelined/scoreboard.h"
@@ -29,6 +30,13 @@
   } while (0)
 
 namespace simtix::pipelined {
+
+namespace {
+using RType = Fields<Rd, Rs1, Rs2>;
+using IType = Fields<Rd, Rs1, ImmI>;
+using R4Type = Fields<Rd, Rs1, Rs2, Rs3, Rm>;
+using UType = Fields<Rd, ImmU>;
+}  // namespace
 
 class ArbitratorTester : public sc_module, private ToArbitratorIntf {
  public:
@@ -159,25 +167,25 @@ class ArbitratorTester : public sc_module, private ToArbitratorIntf {
        * combinations */
       int type = rand() % 4;
       if (type == 0) {
-        simtix::RType::Fill(&packet->instr, iword);
-        WITH_TRACER(AddMnemonic(
+        RType::Fill(&packet->instr, iword);
+        WITH_TRACER(AddLabel(
             packet, fmt::format("r{} <- r{}, r{}", packet->instr.rd(),
                                 packet->instr.rs1(), packet->instr.rs2())));
       } else if (type == 1) {
-        simtix::IType::Fill(&packet->instr, iword);
+        IType::Fill(&packet->instr, iword);
         WITH_TRACER(
-            AddMnemonic(packet, fmt::format("r{} <- r{}", packet->instr.rd(),
-                                            packet->instr.rs1())));
+            AddLabel(packet, fmt::format("r{} <- r{}", packet->instr.rd(),
+                                         packet->instr.rs1())));
       } else if (type == 2) {
-        simtix::R4Type::Fill(&packet->instr, iword);
-        WITH_TRACER(AddMnemonic(
+        R4Type::Fill(&packet->instr, iword);
+        WITH_TRACER(AddLabel(
             packet, fmt::format("r{} <- r{}, r{}, r{}", packet->instr.rd(),
                                 packet->instr.rs1(), packet->instr.rs2(),
                                 packet->instr.rs3())));
       } else if (type == 3) {
-        simtix::UType::Fill(&packet->instr, iword);
+        UType::Fill(&packet->instr, iword);
         WITH_TRACER(
-            AddMnemonic(packet, fmt::format("r{} <- ??", packet->instr.rd())));
+            AddLabel(packet, fmt::format("r{} <- ??", packet->instr.rd())));
       }
 
       /* Check RAW, WAW, and WAR dependencies */

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 #include "cores/softfloat_util.h"
@@ -64,8 +63,5 @@ ExecFlag FNMADD_S::Execute(ExecContext *ctx, const Instr &instr) {
 ExecFlag FNMADD_D::Execute(ExecContext *ctx, const Instr &instr) {
   return ExecuteFpFused<float64_t, true, true>(ctx, instr, f64_mulAdd);
 }
-
-template <>
-class Decoder<InstrOpFused>;
 
 }  // namespace simtix

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -58,8 +57,5 @@ DEF_AMO_EXEC(AMOCAS_W, AMO_CAS, WIDTH_4)
 DEF_AMO_EXEC(AMOCAS_D, AMO_CAS, WIDTH_8)
 
 #undef DEF_AMO_EXEC
-
-template <>
-class Decoder<InstrAmo>;
 
 }  // namespace simtix

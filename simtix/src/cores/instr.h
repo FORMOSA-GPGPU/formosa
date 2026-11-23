@@ -8,7 +8,6 @@
 
 #include <cstdint>
 #include <string>
-#include <string_view>
 #include <tuple>
 #include <type_traits>
 #include <utility>
@@ -23,31 +22,41 @@ class Instr;
 struct Illegal;
 
 using ExecFunc = ExecFlag (*)(ExecContext *, const Instr &);
-using MnemonicFunc = std::string (*)(const Instr &);
+using DisassembleFunc = std::string (*)(const Instr &);
 
 struct InstrFlags {
-  using Bits = uint8_t;
+  using Bits = uint16_t;
 
+  static constexpr Bits kNone = 0;
+
+  // Instruction declarations contain only primitive semantic properties.
+  // Combining bits asserts every property; query unions belong in Instr.
+  // None means none of these properties, not an absence of side effects.
+  // Load/store denote ordinary accesses; AMOs have their own classification.
   static constexpr Bits kLoad = 1u << 0;
   static constexpr Bits kStore = 1u << 1;
-  static constexpr Bits kAtomic = 1u << 2;
-  static constexpr Bits kSerializing = 1u << 3;
-  static constexpr Bits kCti = 1u << 4;
-  static constexpr Bits kBranch = 1u << 5;
-  static constexpr Bits kJump = 1u << 6;
-  static constexpr Bits kFence = 1u << 7;
-
-  static constexpr Bits kMemory = kLoad | kStore | kAtomic | kFence;
-  static constexpr Bits kControl = kCti | kSerializing;
+  static constexpr Bits kAmo = 1u << 2;
+  static constexpr Bits kBranch = 1u << 3;  // Conditional branch.
+  static constexpr Bits kJump = 1u << 4;    // Unconditional jump.
+  // Explicit trap request/return, not an incidental execution fault.
+  static constexpr Bits kTrapRequest = 1u << 5;
+  static constexpr Bits kTrapReturn = 1u << 6;
+  static constexpr Bits kCsr = 1u << 7;
+  static constexpr Bits kMemoryFence = 1u << 8;  // Data and I/O ordering.
+  static constexpr Bits kFetchFence = 1u << 9;   // Instruction-fetch sync.
+  static constexpr Bits kWait = 1u << 10;        // Wait-for-event instruction.
+  // Execution-group priority or participation, including barrier arrival.
+  // This is a SIMT property; resolving it may redirect the group's PC.
+  static constexpr Bits kScheduling = 1u << 11;
 };
 
 enum Opcode : uint8_t {
   // clang-format off
   kLoad    = 0b0000011,
-  kMiscMem = 0b0001111,
   kFLoad   = 0b0000111,
   kAmo     = 0b0101111,
   kStore   = 0b0100011,
+  kMiscMem = 0b0001111,
   kFStore  = 0b0100111,
   kBranch  = 0b1100011,
   kCustom1 = 0b0101011,
@@ -79,15 +88,25 @@ class Instr {
   inline uint8_t uimm() const { return uimm_; }
   inline uint32_t pri() const { return pri_; }
   inline uint8_t rm() const { return rm_; }
-  inline bool is_cti() const { return (instr_flags_ & InstrFlags::kCti) != 0; }
+  // Explicit control transfers, including trap requests and returns. A branch
+  // need not be taken; an incidental fault does not turn a load into a CTI.
+  inline bool is_cti() const {
+    constexpr auto kMask = InstrFlags::kBranch | InstrFlags::kJump |
+                           InstrFlags::kTrapRequest | InstrFlags::kTrapReturn;
+    return (instr_flags_ & kMask) != 0;
+  }
   inline bool is_branch() const {
     return (instr_flags_ & InstrFlags::kBranch) != 0;
   }
   inline bool is_jump() const {
     return (instr_flags_ & InstrFlags::kJump) != 0;
   }
-  inline bool is_mem() const {
-    return (instr_flags_ & InstrFlags::kMemory) != 0;
+  // Data accesses only; fences order accesses but do not themselves access
+  // data.
+  inline bool is_memory_access() const {
+    constexpr auto kMask =
+        InstrFlags::kLoad | InstrFlags::kStore | InstrFlags::kAmo;
+    return (instr_flags_ & kMask) != 0;
   }
   inline bool is_load() const {
     return (instr_flags_ & InstrFlags::kLoad) != 0;
@@ -95,14 +114,25 @@ class Instr {
   inline bool is_store() const {
     return (instr_flags_ & InstrFlags::kStore) != 0;
   }
-  inline bool is_atomic() const {
-    return (instr_flags_ & InstrFlags::kAtomic) != 0;
+  inline bool is_amo() const { return (instr_flags_ & InstrFlags::kAmo) != 0; }
+  inline bool is_trap_request() const {
+    return (instr_flags_ & InstrFlags::kTrapRequest) != 0;
   }
-  inline bool is_serializing() const {
-    return (instr_flags_ & InstrFlags::kSerializing) != 0;
+  inline bool is_trap_return() const {
+    return (instr_flags_ & InstrFlags::kTrapReturn) != 0;
   }
-  inline bool is_control() const {
-    return (instr_flags_ & InstrFlags::kControl) != 0;
+  inline bool is_csr() const { return (instr_flags_ & InstrFlags::kCsr) != 0; }
+  inline bool is_memory_fence() const {
+    return (instr_flags_ & InstrFlags::kMemoryFence) != 0;
+  }
+  inline bool is_fetch_fence() const {
+    return (instr_flags_ & InstrFlags::kFetchFence) != 0;
+  }
+  inline bool is_wait() const {
+    return (instr_flags_ & InstrFlags::kWait) != 0;
+  }
+  inline bool affects_scheduling() const {
+    return (instr_flags_ & InstrFlags::kScheduling) != 0;
   }
   // Call/return classification depends on operands, so it is not cached.
   bool is_call() const;
@@ -124,9 +154,9 @@ class Instr {
     rs2_ = kNullReg;
     rs3_ = kNullReg;
     imm_ = 0;
-    instr_flags_ = 0;
+    instr_flags_ = InstrFlags::kNone;
     exec_ = nullptr;
-    mnemonic_ = nullptr;
+    disassemble_ = nullptr;
   }
 
   static constexpr uint8_t kNullReg = 0xff;
@@ -154,28 +184,18 @@ class Instr {
     uint8_t rm_;
   };
 
-  InstrFlags::Bits instr_flags_ = 0;
+  InstrFlags::Bits instr_flags_ = InstrFlags::kNone;
 
   ExecFunc exec_ = nullptr;
-  MnemonicFunc mnemonic_ = nullptr;
+  DisassembleFunc disassemble_ = nullptr;
 
-  friend struct RType;
-  friend struct IType;
-  friend struct SType;
-  friend struct BType;
-  friend struct UType;
-  friend struct JType;
-  friend struct SystemType;
-  friend struct AmoCasType;
-  friend struct FormosaType;
-  friend struct FPType;
-  friend struct R4Type;
+  friend struct InstrFields;
 
   template <typename T>
   friend class Decoder;
 
   friend ExecFlag Execute(ExecContext *ctx, const Instr &instr);
-  friend std::string Mnemonic(const Instr &instr);
+  friend std::string Disassemble(const Instr &instr);
 };
 
 // Execute an instruction on a given context.
@@ -183,78 +203,14 @@ inline ExecFlag Execute(ExecContext *ctx, const Instr &instr) {
   return instr.exec_(ctx, instr);
 }
 
-// Get the mnemonic of an instruction.
-inline std::string Mnemonic(const Instr &instr) {
-  return instr.mnemonic_(instr);
+// Disassemble an instruction, including its operands.
+inline std::string Disassemble(const Instr &instr) {
+  return instr.disassemble_(instr);
 }
 
 // Ostream support for the instruction
 inline std::ostream &operator<<(std::ostream &os, const Instr &instr) {
-  return os << Mnemonic(instr);
+  return os << Disassemble(instr);
 }
-
-/////////////////////////
-// Instruction formats //
-/////////////////////////
-struct NoType {
-  static void Fill(Instr *, uint32_t) {}
-};
-
-struct RType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct IType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct SType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct BType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct UType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct JType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct SystemType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-// Zacas reads the comparison value from rd before replacing it with memory.
-// Model that dependency with the existing third source operand.
-struct AmoCasType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct FormosaType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct FPType {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
-
-struct R4Type {
-  static void Fill(Instr *instr, uint32_t iword);
-  static std::string Disasm(std::string_view name, const Instr &instr);
-};
 
 }  // namespace simtix

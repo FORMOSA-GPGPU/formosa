@@ -104,6 +104,46 @@ tester:finish(older)
 local dependent = issue_tag(11)
 tester:finish(dependent)
 
+-- Ordered instructions must wait for older issue, but not older completion.
+-- Once dispatched, they also hold back independent younger instructions until
+-- the backend resolves them. No register dependency enforces either ordering.
+for _, word in ipairs({
+  0x00102073, -- csrrs x0, fflags, x0
+  0x0ff0000f, -- fence iorw, iorw
+  0x00000073, -- ecall
+  0x0200002b, -- fsa.pri.reset
+  0x0000502b, -- fsa.pri.raise
+  0x0000302b, -- fsa.pri.lower
+  0x0000102b, -- fsa.bar
+}) do
+  tester:scoreboard_issue(WID, BLOCKER)
+  tester:enqueue(WID, OLDER_BLOCKED, 20)
+  tester:enqueue(WID, word, 21)
+  tester:enqueue(WID, YOUNGER_READY, 22)
+  step(4)
+  -- The in-order fallback may nominate the blocked oldest instruction; the
+  -- backend checks its scoreboard before issuing it.
+  local candidate = tester:peek(WID)
+  assert(
+    not candidate or candidate.wpc == 20,
+    "Ordered instruction bypassed an unissued older instruction"
+  )
+
+  tester:scoreboard_finish(WID, BLOCKER)
+  local pending_older = issue_tag(20)
+  local ordered = issue_tag(21)
+  step(4)
+  assert(not tester:peek(WID), "Younger instruction bypassed unresolved ordered instruction")
+  -- Backend execution notifications are not prefiltered by instruction class.
+  -- A different instruction's ID must not release the pending dispatch block.
+  tester:finish(pending_older)
+  step(4)
+  assert(not tester:peek(WID), "Older instruction incorrectly resolved the dispatch block")
+  tester:finish(ordered)
+  local younger = issue_tag(22)
+  tester:finish(younger)
+end
+
 assert(tester.outstanding_packets == 0)
 
 lv.info("GhOST scheduler out-of-order issue test passed")

@@ -156,11 +156,11 @@ void PipelinedArbitrator::AllocateReadCollectUnit() {
 
   auto &cu = read_collect_units_[cu_id];
   cu.Allocate(packet);
-  LV_TRACE_BEGIN(
-      rcu_tracks_[cu_id], "Arbitrator", "Arbitrate",
-      LV_TRACE_ARG("unique_id", packet->unique_id),
-      LV_TRACE_ARG("wid", packet->wid),
-      LV_TRACE_ARG("mnemonic", fmt::format("{}", Mnemonic(packet->instr))));
+  LV_TRACE_BEGIN(rcu_tracks_[cu_id], "Arbitrator", "Arbitrate",
+                 LV_TRACE_ARG("unique_id", packet->unique_id),
+                 LV_TRACE_ARG("wid", packet->wid),
+                 LV_TRACE_ARG("disassembly",
+                              fmt::format("{}", Disassemble(packet->instr))));
 
   if (rf_arch_ == RFArch::kDuplicateSRF) {
     assert(scalar_regfile_ != nullptr);
@@ -231,11 +231,11 @@ void PipelinedArbitrator::AllocateWriteCollectUnit() {
 
   auto &cu = write_collect_units_[cu_id];
   cu.Allocate(packet);
-  LV_TRACE_BEGIN(
-      wcu_tracks_[cu_id], "Arbitrator", "Arbitrate",
-      LV_TRACE_ARG("unique_id", packet->unique_id),
-      LV_TRACE_ARG("wid", packet->wid),
-      LV_TRACE_ARG("mnemonic", fmt::format("{}", Mnemonic(packet->instr))));
+  LV_TRACE_BEGIN(wcu_tracks_[cu_id], "Arbitrator", "Arbitrate",
+                 LV_TRACE_ARG("unique_id", packet->unique_id),
+                 LV_TRACE_ARG("wid", packet->wid),
+                 LV_TRACE_ARG("disassembly",
+                              fmt::format("{}", Disassemble(packet->instr))));
 
   const uint32_t wid = packet->wid;
   const uint8_t rd = packet->instr.rd();

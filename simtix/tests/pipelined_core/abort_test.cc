@@ -75,6 +75,7 @@ class AbortTest : public sc_module {
   static constexpr uint64_t kLoadPC = 0x100;
   static constexpr uint64_t kExitPC = 0x200;
   static constexpr uint64_t kBarrierPC = 0x300;
+  static constexpr uint64_t kHintsPC = 0x400;
 
   void CheckStates() {
     for (unsigned wid = 0; wid < Arch().num_warps; ++wid) {
@@ -123,6 +124,11 @@ class AbortTest : public sc_module {
         if (pc == kLoadPC + 4) word = 0xffffffff;  // illegal
         if (pc == kExitPC) word = 0x00000073;      // ecall
         if (pc == kBarrierPC) word = 0x0000102b;   // fsa.bar 0, 0
+        // NTL.P1, NTL.PALL, NTL.S1 and NTL.ALL, followed by ECALL.
+        if (pc >= kHintsPC && pc < kHintsPC + 16) {
+          word = 0x00200033 + ((pc - kHintsPC) / 4 << 20);
+        }
+        if (pc == kHintsPC + 16) word = 0x00000073;
         trans->get_data_ptr()[i] = word >> (8 * (addr % 4));
       }
       trans->set_response_status(tlm::TLM_OK_RESPONSE);
@@ -217,6 +223,26 @@ class AbortTest : public sc_module {
           "drained warp could not be reused");
     Check(core_.warp_ctrl()->mcause()[0] == 11,
           "reused warp inherited an old exception");
+    // No-effect instructions must retire too: otherwise ECALL cannot drain,
+    // and releasing/restarting the same warp cannot complete.
+    for (unsigned repeat = 0; repeat < 2; ++repeat) {
+      core_.warp_cmd->put(WarpCtrlCommand::Release(Mask(0)));
+      Check(Until([this] {
+              return core_.idle_mask()[0].to_bool();
+            }),
+            "hint warp did not release");
+      core_.warp_cmd->put(WarpCtrlCommand::Activate(Mask(0), kHintsPC, 0, 0));
+      if (!Until([this] {
+            return core_.exception_mask()[0].to_bool();
+          })) {
+        Check(false, "no-effect instructions prevented ECALL from draining");
+        sc_stop();
+        return;
+      }
+      Check(core_.warp_ctrl()->mcause()[0] == 11 &&
+                core_.warp_ctrl()->mepc()[0] == kHintsPC + 16,
+            "hint program must complete at its final ECALL");
+    }
     sc_stop();
   }
 

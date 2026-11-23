@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -224,8 +223,5 @@ ExecFlag CZERO_NEZ::Execute(ExecContext *ctx, const Instr &) {
   }
   return ExecFlag::RD_DATA;
 }
-
-template <>
-class Decoder<InstrOp>;
 
 }  // namespace simtix

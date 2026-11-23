@@ -92,7 +92,7 @@ void Frontend::Decode() {
     decode_q_.put(p);
     WITH_TRACER(StartStage(p, 0, "D"));
     WITH_TRACER(
-        AddMnemonic(p, fmt::format("{:#x} {}", p->wpc, Mnemonic(p->instr))));
+        AddLabel(p, fmt::format("{:#x} {}", p->wpc, Disassemble(p->instr))));
   }
 }
 
@@ -152,8 +152,8 @@ void Frontend::Broadcast() {
         p->instr = packet->instr;
         p->is_shared = true;
         WITH_TRACER(Declare(p));
-        WITH_TRACER(AddMnemonic(
-            p, fmt::format("{:#x} {}", p->wpc, Mnemonic(p->instr))));
+        WITH_TRACER(AddLabel(
+            p, fmt::format("{:#x} {}", p->wpc, Disassemble(p->instr))));
         WITH_TRACER(
             AddComment(p, fmt::format("Shared from {}\\n", packet->unique_id)));
         core_->stats()->instr_shared++;

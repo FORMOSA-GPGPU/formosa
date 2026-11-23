@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -25,8 +24,5 @@ ExecFlag FSA_PRI_LOWER::Execute(ExecContext *ctx, const Instr &instr) {
 ExecFlag FSA_BAR::Execute(ExecContext *, const Instr &) {
   return ExecFlag::BARRIER;
 }
-
-template <>
-class Decoder<InstrFormosa>;
 
 }  // namespace simtix

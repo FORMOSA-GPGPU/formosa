@@ -71,6 +71,7 @@ end
 ---@return Workflow
 local function make_simtix_sm_workflow(sm_model, extra_test_suites)
   local test_suites = {
+    "simtix.decode.unit",
     "opencl.simtix." .. sm_model,
     "opencl.validation",
     "kernel-sim.simtix." .. sm_model,
@@ -287,6 +288,10 @@ local config = {
     ["simtix.tests.build"] = {
       paths = { "simtix/tests/xmake.lua" },
     },
+    ["simtix.tests.decode"] = {
+      paths = { "simtix/tests/decode/**" },
+      depends = { "simtix.tests.build" },
+    },
     ["simtix.tests.pipelined_core"] = {
       paths = { "simtix/tests/pipelined_core/**" },
       depends = { "simtix.tests.build" },
@@ -480,6 +485,10 @@ local config = {
     ["opencl.simtix.atomic_sm"] = make_simtix_sm_test_suite("opencl", "atomic_sm"),
     ["kernel-sim.simtix.pipelined_sm"] = make_simtix_sm_test_suite("kernel-sim", "pipelined_sm"),
     ["kernel-sim.simtix.atomic_sm"] = make_simtix_sm_test_suite("kernel-sim", "atomic_sm"),
+    ["simtix.decode.unit"] = {
+      depends = { "simtix.core_base", "simtix.tests.decode" },
+      selectors = { "simtix-decode-test/*" },
+    },
     ["simtix.pipelined_core.unit"] = {
       depends = {
         "simtix.pipelined_core",
@@ -683,6 +692,7 @@ local config = {
     ["simtix.scalar_core"] = {
       description = "Validate the simtix scalar core with the CPU test programs.",
       test_suites = {
+        "simtix.decode.unit",
         "simtix.scalar_core",
       },
     },

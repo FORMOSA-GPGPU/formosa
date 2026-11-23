@@ -165,7 +165,8 @@ void Backend::Execute2() {
 
   uint32_t wid = packet->wid;
   ExecFlag flag = packet->flag;
-  bool retire = false;
+  // No execution effects remain after X1; retire at X2.
+  bool retire = (flag == ExecFlag::NONE);
 
   if (HasFlag(flag, ExecFlag::RD_DATA)) {
     // Route the packet to the function unit selected by its flags. FPU and MDU
@@ -286,9 +287,10 @@ void Backend::Execute2() {
 
   // Keep dispatch stopped while every lane is waiting at a barrier or has
   // exited, including the drain interval before the warp state is published.
-  if (packet->instr.is_control() &&
-      lane_state_.HasRunnableLanes(get_local_wid(packet->wid))) {
-    core_->NotifyControlResolved(packet->wid, packet->unique_id);
+  // The scheduler owns the blocking policy and matches this ID against its
+  // pending instruction; execution does not need to repeat that classification.
+  if (lane_state_.HasRunnableLanes(get_local_wid(packet->wid))) {
+    core_->NotifyInstructionExecuted(packet->wid, packet->unique_id);
   }
 
   WITH_TRACER(StartStage(packet, 0, "X2"));

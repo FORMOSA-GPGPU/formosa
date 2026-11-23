@@ -2,6 +2,13 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
+target("simtix-decode-test", function()
+  set_kind("binary")
+  add_files("decode/decode_test.cc")
+  add_deps("simtix", "catch2")
+  add_tests("test", { run_timeout = 30000 })
+end)
+
 target("simtix-pipelined-abort-test", function()
   set_kind("binary")
   add_files("pipelined_core/abort_test.cc")

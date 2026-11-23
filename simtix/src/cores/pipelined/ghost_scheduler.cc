@@ -13,6 +13,18 @@
 
 namespace simtix::pipelined {
 
+namespace {
+
+// GhOST admits these operations only after older instructions have issued.
+// Completion and data-memory ordering are checked separately by the scoreboard.
+bool RequiresOrderedIssue(const Instr &instr) {
+  return instr.is_csr() || instr.is_trap_request() || instr.is_trap_return() ||
+         instr.is_memory_fence() || instr.is_fetch_fence() || instr.is_wait() ||
+         instr.affects_scheduling();
+}
+
+}  // namespace
+
 GhostScheduler::GhostScheduler(const sc_module_name &name,
                                const ArchParam &param, const Param &pipe_param,
                                const GhostParam &ghost_param,
@@ -163,7 +175,7 @@ void GhostScheduler::RecordWarpStats(uint32_t local_wid) {
 
     switch (status) {
       case IsbIssueStatus::kEmpty:
-      case IsbIssueStatus::kSerializing:
+      case IsbIssueStatus::kIssueOrder:
         break;
       case IsbIssueStatus::kIsbDependency:
         has_isb_dep_blocker = true;
@@ -249,7 +261,7 @@ void GhostScheduler::DispatchToIssueBuffer() {
         stats_.dispatch_rejected_frontend_empty_warps +=
             rejected_count(DispatchRejectReason::kFrontendEmpty);
         stats_.dispatch_rejected_serializing_warps +=
-            rejected_count(DispatchRejectReason::kSerializing);
+            rejected_count(DispatchRejectReason::kIssueOrder);
         stats_.dispatch_rejected_warp_counts += num_local_warps_;
       }
       break;
@@ -335,8 +347,8 @@ GhostScheduler::SelectDispatchTarget(
       continue;
     }
 
-    if (!CanDispatchSerializing(local_wid, packet)) {
-      reject(DispatchRejectReason::kSerializing);
+    if (!CanDispatchOrderedInstruction(local_wid, packet)) {
+      reject(DispatchRejectReason::kIssueOrder);
       continue;
     }
 
@@ -379,7 +391,7 @@ bool GhostScheduler::InsertIntoIssueBuffer(Packet *packet, uint32_t local_wid,
   inserted->inst_order = inst_order;
   inserted->isb_dep = 0;
 
-  if (packet->instr.is_control()) {
+  if (packet->instr.is_cti() || RequiresOrderedIssue(packet->instr)) {
     warp->control_pending = true;
     warp->control_unique_id = packet->unique_id;
   }
@@ -416,7 +428,13 @@ bool GhostScheduler::CheckRegisterDependency(const Instr *older,
 
 bool GhostScheduler::CheckMemoryDependency(const Instr *older,
                                            const Instr *newer) const {
-  if (!older->is_mem() || !newer->is_mem()) {
+  // Preserve data-memory ordering in the IsB, allowing loads to pass loads.
+  // Instruction-fetch synchronization is handled by the execution path.
+  const bool older_memory =
+      older->is_memory_access() || older->is_memory_fence();
+  const bool newer_memory =
+      newer->is_memory_access() || newer->is_memory_fence();
+  if (!older_memory || !newer_memory) {
     return false;
   }
 
@@ -433,13 +451,13 @@ bool GhostScheduler::CheckMemoryDependency(const Instr *older,
   //   load/store-atomic
 }
 
-bool GhostScheduler::CanDispatchSerializing(uint32_t local_wid,
-                                            const Packet *packet) const {
-  if (!packet->instr.is_serializing()) {
+bool GhostScheduler::CanDispatchOrderedInstruction(uint32_t local_wid,
+                                                   const Packet *packet) const {
+  if (!RequiresOrderedIssue(packet->instr)) {
     return true;
   }
 
-  // Serializing instructions wait until all older instructions have issued.
+  // Ordered instructions wait until all older instructions have issued.
   return CountOccupiedIsbEntries(local_wid) == 0;
 }
 
@@ -518,8 +536,8 @@ GhostScheduler::IsbIssueStatus GhostScheduler::EvaluateIsbIssueStatus(
     }
   }
 
-  if (entry.packet->instr.is_serializing() && entry.inst_order != 0) {
-    return IsbIssueStatus::kSerializing;
+  if (RequiresOrderedIssue(entry.packet->instr) && entry.inst_order != 0) {
+    return IsbIssueStatus::kIssueOrder;
   }
 
   return IsbIssueStatus::kReady;
@@ -753,7 +771,7 @@ GhostScheduler::Stats::Stats(const char *name)
               "Failed-selection warp rejections because the frontend is "
               "empty"),
       LV_STAT(dispatch_rejected_serializing_warps,
-              "Failed-selection warp rejections because a serializing "
+              "Failed-selection warp rejections because an ordered "
               "instruction cannot dispatch"),
       LV_STAT(isb_occupancy_sum,
               "Accumulated number of valid GhOST IsB entries"),

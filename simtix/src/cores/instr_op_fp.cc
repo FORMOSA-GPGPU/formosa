@@ -5,7 +5,6 @@
 #include <cstring>
 #include <type_traits>
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 #include "cores/softfloat_util.h"
@@ -402,8 +401,5 @@ ExecFlag FCLASS_S::Execute(ExecContext *ctx, const Instr &) {
 ExecFlag FCLASS_D::Execute(ExecContext *ctx, const Instr &) {
   return ExecuteFclass<float64_t>(ctx);
 }
-
-template <>
-class Decoder<InstrOpFp>;
 
 }  // namespace simtix

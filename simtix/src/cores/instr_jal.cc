@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -28,8 +27,5 @@ ExecFlag JAL::Execute(ExecContext *ctx, const Instr &instr) {
 
   return ExecFlag::RD_DATA | ExecFlag::NEXT_PC;
 }
-
-template <>
-class Decoder<InstrJal>;
 
 }  // namespace simtix

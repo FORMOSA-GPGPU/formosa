@@ -48,8 +48,8 @@ class KonataTracer : public sc_module {
     LV_FTRACER_PRINTLN(tracer_, "L\t{}\t1\t{}", GetUniqueId(instr), comment);
   }
 
-  void AddMnemonic(const T *instr, std::string_view mnemonic) {
-    LV_FTRACER_PRINTLN(tracer_, "L\t{}\t0\t{}", GetUniqueId(instr), mnemonic);
+  void AddLabel(const T *instr, std::string_view label) {
+    LV_FTRACER_PRINTLN(tracer_, "L\t{}\t0\t{}", GetUniqueId(instr), label);
   }
 
   void Retire(const T *instr) {

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -16,8 +15,5 @@ ExecFlag AUIPC::Execute(ExecContext *ctx, const Instr &instr) {
   }
   return ExecFlag::RD_DATA;
 }
-
-template <>
-class Decoder<InstrAuipc>;
 
 }  // namespace simtix

@@ -2,7 +2,6 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-#include "cores/decode.h"
 #include "cores/exec_context.h"
 #include "cores/instr_def.h"
 
@@ -49,8 +48,5 @@ ExecFlag SW::Execute(ExecContext *ctx, const Instr &instr) {
 ExecFlag SD::Execute(ExecContext *ctx, const Instr &instr) {
   return ExecuteStore(ctx, instr, ExecFlag::WIDTH_8);
 }
-
-template <>
-class Decoder<InstrStore>;
 
 }  // namespace simtix

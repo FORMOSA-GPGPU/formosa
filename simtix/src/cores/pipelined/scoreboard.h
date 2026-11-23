@@ -26,14 +26,14 @@ class Scoreboard {
 
   Scoreboard(uint32_t num_warps_per_subcores, uint32_t num_subcores)
       : num_subcores_(num_subcores),
-        pc_busy_(num_warps_per_subcores, false),
+        control_busy_(num_warps_per_subcores, false),
         rd_busy_(num_warps_per_subcores * 32, false) {}
 
   bool CanIssue(const Packet *packet,
                 IssueStallReason *stall_reason = nullptr) const {
     uint32_t local_wid = get_local_wid(packet->wid);
 
-    if (pc_busy_[local_wid]) {
+    if (control_busy_[local_wid]) {
       if (stall_reason) *stall_reason = IssueStallReason::kControlHazard;
       return false;
     }
@@ -80,14 +80,16 @@ class Scoreboard {
       rd_busy_[local_wid * 32 + packet->instr.rd()] = flag;
     }
 
-    if (packet->instr.is_cti()) {
-      pc_busy_[local_wid] = flag;
+    // Both control transfers and scheduling operations must resolve before the
+    // warp can issue another instruction.
+    if (packet->instr.is_cti() || packet->instr.affects_scheduling()) {
+      control_busy_[local_wid] = flag;
     }
   }
 
   const uint32_t num_subcores_;
 
-  std::vector<bool> pc_busy_;
+  std::vector<bool> control_busy_;
   std::vector<bool> rd_busy_;
   ChangeCallback on_change_;
 };

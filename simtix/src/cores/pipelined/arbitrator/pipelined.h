@@ -141,9 +141,11 @@ class PipelinedArbitrator : public ArbitratorIntf {
         return false;
       }
 
-      // 2. The current instruction must be non-divergent and
-      //    does not support load/store instructions in the scalar pipeline.
-      if (packet_->instr.is_cti() || packet_->instr.is_mem()) {
+      // 2. Control transfers, scheduling operations and data-memory ordering
+      //    require the vector execution path.
+      if (packet_->instr.is_cti() || packet_->instr.affects_scheduling() ||
+          packet_->instr.is_memory_access() ||
+          packet_->instr.is_memory_fence()) {
         return false;
       }
 

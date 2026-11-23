@@ -125,7 +125,7 @@ class GhostScheduler : public sc_module {
     kIsbDependency,
     kScoreboardControl,
     kScoreboardData,
-    kSerializing,
+    kIssueOrder,
     kReady,
   };
 
@@ -135,7 +135,7 @@ class GhostScheduler : public sc_module {
     kControlPending,
     kIsbFull,
     kFrontendEmpty,
-    kSerializing,
+    kIssueOrder,
     kCount,
   };
 
@@ -202,8 +202,9 @@ class GhostScheduler : public sc_module {
   // Applies basic GhOST ordering rules to two memory instruction classes.
   bool CheckMemoryDependency(const Instr *older, const Instr *newer) const;
 
-  // Checks whether a serializing instruction may enter the GhOST pipeline.
-  bool CanDispatchSerializing(uint32_t local_wid, const Packet *packet) const;
+  // Checks whether an instruction may enter before older instructions issue.
+  bool CanDispatchOrderedInstruction(uint32_t local_wid,
+                                     const Packet *packet) const;
 
   // Captures a packet and inserts it into the IsB with its dependencies.
   bool InsertIntoIssueBuffer(Packet *packet, uint32_t local_wid,
