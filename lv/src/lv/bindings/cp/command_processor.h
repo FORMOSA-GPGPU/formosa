@@ -51,6 +51,11 @@ class TLM_MemIF : public instr_memory_if,
 
   tlm_utils::simple_initiator_socket<TLM_MemIF> mem_port_;
 
+ protected:
+  // An internal extension point for adapters caching standard DMI grants.
+  // The original AT-only adapter has no cached pointer to invalidate.
+  virtual void InvalidateDirectMemPtr(sc_dt::uint64, sc_dt::uint64) {}
+
  private:
   inline void setup_trans(tlm::tlm_generic_payload &trans,
                           tlm::tlm_command command, uint64_t addr, uint64_t len,

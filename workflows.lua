@@ -315,6 +315,7 @@ local config = {
         "tests/cp/system.lua",
         "tests/cp/cores.lua",
         "tests/cp/platform.lua",
+        "tests/cp/memory_policy.lua",
         "tests/cp/README.md",
         "tests/cp/runtime_test.lua",
         "tests/cp/runtime/**",
@@ -334,6 +335,7 @@ local config = {
         "lv.executable",
         "lv.lua",
         "lv.bindings.dbg",
+        "lv.bindings.nic",
         "lv.bindings.simple",
         "lv.bindings.systemc",
         "lv.bindings.workload",
@@ -344,6 +346,10 @@ local config = {
         "tests/cp/cores/simtix/scalar_core.lua",
       },
       depends = { "tests.cp.common" },
+    },
+    ["tests.cp.fast_iss"] = {
+      paths = { "tests/cp/cores/cp/fast_iss.lua" },
+      depends = { "tests.cp.common", "lv.bindings.cp" },
     },
     ["tests.cp.command_processor"] = {
       paths = {
@@ -617,6 +623,7 @@ local config = {
       depends = {
         "lv.tests.unit",
         "tests.cp.command_processor",
+        "tests.cp.fast_iss",
         "tests.plic",
         "tests.ipc",
         "tests.pfreader",
@@ -635,6 +642,8 @@ local config = {
         "lv/cp/**",
         "scalar-riscv-test*/cp.command_processor",
         "cp-*/cp.command_processor",
+        "scalar-riscv-test*/cp.fast_iss",
+        "cp-*/cp.fast_iss",
         "pfreader-test/*",
         "ipc-test/*",
         "ipc-synchronous-test/*",

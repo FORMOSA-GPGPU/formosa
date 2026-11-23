@@ -8,6 +8,12 @@ local addr = require("ilha.addr_map")
 local SystemConfig = {
   dram_config = require("lv.util").runfile("configs/dram/apccas2026-lpddr4.json"),
   clock_period_ns = addr.clock_period_ns,
+  -- CP implementation policy belongs to this platform, not the generic runner.
+  cp = {
+    instruction_cost_cycles = 0.59746,
+    quantum_cycles = 16,
+    local_memory_latency_cycles = 0.59746,
+  },
   num_sm = 1,
   threads_per_warp = 4,
   warps_per_core = 16,
@@ -143,6 +149,17 @@ function SystemConfig:shared_cache_param()
 end
 
 function SystemConfig:validate()
+  for _, field in ipairs({ "instruction_cost_cycles", "quantum_cycles" }) do
+    local value = self.cp[field]
+    assert(
+      type(value) == "number" and value > 0 and value < math.huge,
+      "system.cp." .. field .. " must be positive"
+    )
+  end
+  assert(
+    self.cp.local_memory_latency_cycles >= 0 and self.cp.local_memory_latency_cycles < math.huge,
+    "system.cp.local_memory_latency_cycles must be nonnegative"
+  )
   assert(
     self.num_sm >= 1
       and self.num_sm <= addr.sm_mmio_aperture / addr.sm_mmio_stride

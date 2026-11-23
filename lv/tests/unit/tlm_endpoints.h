@@ -146,9 +146,12 @@ class Initiator : public sc_module {
   using TargetSocket = Socket::base_target_socket_type;
 
   Socket socket{"socket"};
+  /** @brief Observe target-initiated DMI invalidation, if needed by a test. */
+  std::function<void(sc_dt::uint64, sc_dt::uint64)> on_invalidate;
 
   explicit Initiator(const sc_module_name &name) : sc_module(name) {
     socket.register_nb_transport_bw(this, &Initiator::Backward);
+    socket.register_invalidate_direct_mem_ptr(this, &Initiator::Invalidate);
   }
 
   /** @brief Send BEGIN_REQ; @p delay holds the returned delay afterwards. */
@@ -183,6 +186,11 @@ class Initiator : public sc_module {
 
   bool RequestDmi(Payload &trans) {
     tlm::tlm_dmi dmi;
+    return RequestDmi(trans, dmi);
+  }
+
+  /** @brief Request DMI; @p dmi holds the target's descriptor afterwards. */
+  bool RequestDmi(Payload &trans, tlm::tlm_dmi &dmi) {
     return socket->get_direct_mem_ptr(trans, dmi);
   }
 
@@ -197,6 +205,10 @@ class Initiator : public sc_module {
   const std::vector<std::string> &violations() const { return violations_; }
 
  private:
+  void Invalidate(sc_dt::uint64 start, sc_dt::uint64 end) {
+    if (on_invalidate) on_invalidate(start, end);
+  }
+
   tlm::tlm_sync_enum Backward(Payload &trans, tlm::tlm_phase &phase,
                               sc_time &delay) {
     if (phase != tlm::BEGIN_RESP) {

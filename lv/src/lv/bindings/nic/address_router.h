@@ -89,11 +89,8 @@ class AddressRouter : public sc_module {
   void StartResponse(int master);
   void Blocking(int master, Payload &trans, sc_time &delay);
   unsigned int Debug(int master, Payload &trans);
-  bool Dmi(int, Payload &trans, tlm::tlm_dmi &) {
-    trans.set_dmi_allowed(false);
-    return false;
-  }
-  void Invalidate(int, sc_dt::uint64, sc_dt::uint64) {}
+  bool Dmi(int master, Payload &trans, tlm::tlm_dmi &dmi);
+  void Invalidate(int target, sc_dt::uint64 start, sc_dt::uint64 end);
 };
 
 }  // namespace nic::detail

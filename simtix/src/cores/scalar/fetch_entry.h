@@ -46,6 +46,7 @@ class FetchEntry {
     ext_.entry = this;
     payload_.set_command(tlm::TLM_READ_COMMAND);
     payload_.set_data_length(sizeof(iword_));
+    payload_.set_streaming_width(sizeof(iword_));
     payload_.set_data_ptr(reinterpret_cast<unsigned char *>(&iword_));
     payload_.set_byte_enable_ptr(nullptr);
     payload_.set_byte_enable_length(0);

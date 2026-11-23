@@ -28,10 +28,10 @@ local platform = require("cp.platform")
 ---@field private _period sc.time
 ---@field private _clock sc.clock
 ---@field private _reset_n sc.signal
----@field private _ram simple.Memory
+---@field private _ram simple.LtMemory
 ---@field private _log_path string
 ---@field private _uart simple.PrintBuf
----@field private _bus simple.XBar
+---@field private _bus nic.XBar
 ---@field private _loader dbg.MemoryDebugger
 ---@field protected _sc_module sc.Module
 ---@overload fun(name: string, core_module: string): cp.system
@@ -52,27 +52,25 @@ function System.new(_, core_module)
   self._clock = sc.clock("clock", self._period)
   self._reset_n = sc.signal("reset_n")
   self._reset_n:write(false)
-  self._ram = simple.Memory("ram", { size = platform.ram_size, latency = 1, fifo_size = 1 })
+  self._ram = simple.LtMemory("ram", { size = platform.ram_size, latency = self._period })
   self._log_path = os.tmpname()
   self._uart = simple.PrintBuf("uart", 1, self._log_path)
-  self._bus = simple.XBar("bus", ports + 1, {
+  self._bus = nic.XBar("bus", ports + 1, {
     { addr = platform.ram_base, size = platform.ram_size },
     { addr = platform.serial_base, size = 4 },
   })
-  self._bus.clock = self._clock
-  self._bus.mem_side[1].target = self._ram.port
-  self._bus.mem_side[2].target = self._uart.port
-  self._ram.clock = self._clock
+  self._bus.mem_side = self._ram.port
+  self._bus.mem_side = self._uart.port
   self._uart.clock = self._clock
   self._loader = dbg.MemoryDebugger("loader")
-  self._loader.target = self._bus.core_side[ports + 1].port
+  self._loader.target = self._bus.core_side
   self.core.clock = self._clock
   self.core.reset_n = self._reset_n
   if ports == 1 then
-    self.core.mem_target = self._bus.core_side[1].port
+    self.core.mem_target = self._bus.core_side
   else
-    self.core.imem_target = self._bus.core_side[1].port
-    self.core.dmem_target = self._bus.core_side[2].port
+    self.core.imem_target = self._bus.core_side
+    self.core.dmem_target = self._bus.core_side
   end
   if self.core.has_ext_int then
     self.ext_int = sc.signal("ext_int")
@@ -84,7 +82,13 @@ end
 
 ---@param elf workload.ELF
 ---@return boolean
-function System:load_elf(elf) return self._loader:load_elf(elf) end
+function System:load_elf(elf)
+  -- Multi-socket debug callbacks are connected during elaboration. Initialize
+  -- the owned RAM before any CPU process starts, with PT_LOAD physical
+  -- addresses and BSS zeroing. CPU test images use identity-linked addresses.
+  self._ram:load_elf(elf)
+  return true
+end
 
 ---@param addr integer
 ---@param bytes integer[]

@@ -58,6 +58,7 @@ AddressRouter::Payload *CopyManagedRequest(AddressRouter::Payload &original,
     copy->set_byte_enable_length(0);
     copy->set_streaming_width(copy->get_data_length());
   }
+  copy->set_dmi_allowed(false);
   copy->set_address(address);
   copy->set_auto_extension(state);
   return copy;
@@ -229,6 +230,7 @@ void AddressRouter::Process(Payload &trans, const tlm::tlm_phase &phase) {
     sc_time delay = SC_ZERO_TIME;
     from[state.master]->nb_transport_bw(trans, end, delay);
     if (state.target < 0) {
+      trans.set_dmi_allowed(false);
       trans.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
       QueueResponse(trans);
     } else {
@@ -298,7 +300,6 @@ void AddressRouter::QueueResponse(Payload &trans) {
     CopyResponse(trans, *state.downstream);
     state.downstream = nullptr;
   }
-  trans.set_dmi_allowed(false);
   responses_[state.master].push_back(&trans);
   StartResponse(state.master);
 }
@@ -321,6 +322,7 @@ void AddressRouter::StartResponse(int master) {
 }
 
 void AddressRouter::Blocking(int, Payload &trans, sc_time &delay) {
+  trans.set_dmi_allowed(false);
   const auto *region = Route(trans);
   if (!region) {
     trans.set_response_status(tlm::TLM_ADDRESS_ERROR_RESPONSE);
@@ -332,7 +334,6 @@ void AddressRouter::Blocking(int, Payload &trans, sc_time &delay) {
     to[region->target]->b_transport(*copy, delay);
     CopyResponse(trans, *copy);
   }
-  trans.set_dmi_allowed(false);
 }
 
 unsigned int AddressRouter::Debug(int, Payload &trans) {
@@ -347,8 +348,65 @@ unsigned int AddressRouter::Debug(int, Payload &trans) {
   auto *copy = CopyManagedRequest(trans, address, true);
   const auto result = to[region->target]->transport_dbg(*copy);
   CopyResponse(trans, *copy, false);
-  trans.set_dmi_allowed(false);
   return result;
+}
+
+bool AddressRouter::Dmi(int, Payload &trans, tlm::tlm_dmi &dmi) {
+  // A DMI query describes an address, not a transfer. Its data length may be 0.
+  const auto address = trans.get_address();
+  const Region *region = nullptr;
+  for (const auto &candidate : regions_) {
+    if (address >= candidate.map.addr &&
+        address - candidate.map.addr < candidate.map.size) {
+      region = &candidate;
+      break;
+    }
+  }
+  trans.set_dmi_allowed(false);
+  if (!region) return false;
+  const auto offset = region->map.subtract_start_addr ? region->map.addr : 0;
+  const auto first = region->map.addr - offset;
+  const auto last = first + region->map.size - 1;
+  trans.set_address(address - offset);
+  const bool granted = to[region->target]->get_direct_mem_ptr(trans, dmi);
+  trans.set_address(address);
+  const auto start = std::max<uint64_t>(first, dmi.get_start_address());
+  const auto finish = std::min<uint64_t>(last, dmi.get_end_address());
+  if (start > finish || address - offset < start || address - offset > finish) {
+    trans.set_dmi_allowed(false);
+    return false;
+  }
+  if (granted) {
+    if (!dmi.get_dmi_ptr()) {
+      trans.set_dmi_allowed(false);
+      return false;
+    }
+    // The pointer denotes the first byte of the grant, which clipping can move.
+    dmi.set_dmi_ptr(dmi.get_dmi_ptr() + start - dmi.get_start_address());
+  }
+  dmi.set_start_address(start + offset);
+  dmi.set_end_address(finish + offset);
+  trans.set_dmi_allowed(granted);
+  return granted;
+}
+
+void AddressRouter::Invalidate(int target, sc_dt::uint64 start,
+                               sc_dt::uint64 end) {
+  if (start > end) return;
+  for (const auto &region : regions_) {
+    if (region.target != target) continue;
+    const auto offset = region.map.subtract_start_addr ? region.map.addr : 0;
+    const auto first = region.map.addr - offset;
+    const auto last = first + region.map.size - 1;
+    const auto clipped_start = std::max<uint64_t>(first, start);
+    const auto clipped_end = std::min<uint64_t>(last, end);
+    if (clipped_start > clipped_end) continue;
+    // Grants are not tracked per master: conservatively notify every master.
+    for (unsigned master = 0; master < from.size(); ++master) {
+      from[master]->invalidate_direct_mem_ptr(clipped_start + offset,
+                                              clipped_end + offset);
+    }
+  }
 }
 
 }  // namespace nic::detail

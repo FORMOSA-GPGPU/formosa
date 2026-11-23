@@ -122,7 +122,8 @@ class Target : public sc_module {
     }
     trans.get_data_ptr()[0] = static_cast<unsigned char>(mode_ + 1);
     trans.set_response_status(tlm::TLM_OK_RESPONSE);
-    trans.set_dmi_allowed(true);
+    // This protocol-only target does not implement DMI.
+    trans.set_dmi_allowed(false);
   }
   void Blocking(Payload &trans, sc_time &delay) {
     Fill(trans);
@@ -385,7 +386,7 @@ void CheckSynchronous(Master &master) {
   }
   tlm::tlm_dmi dmi;
   Check(!master.socket->get_direct_mem_ptr(trans, dmi),
-        "DMI should be disabled");
+        "target without a DMI callback granted access");
 
   trans.set_address(UINT64_MAX);
   Check(master.socket->transport_dbg(trans) == 1 && byte == 5 &&
@@ -522,6 +523,7 @@ class DebugComparison : public sc_module {
     return trans.get_data_length();
   }
 };
+
 }  // namespace
 
 int sc_main(int argc, char **argv) {

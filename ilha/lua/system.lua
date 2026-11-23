@@ -24,17 +24,17 @@
 ---@field protected _clock sc.clock
 ---@field protected _rst_n sc.signal
 ---@field protected _gnd sc.signal
----@field protected _cp cp.CommandProcessor
+---@field protected _cp cp.FastISS
 ---@field protected _clint simple.Clint
 ---@field protected _timer_irq sc.signal
 ---@field protected _msip_irq sc.signal
----@field protected _cp_rom simple.Memory
+---@field protected _cp_rom simple.LtMemory
 ---@field protected _cp_printbuf simple.PrintBuf
 ---@field protected _cp_exit_code_register simple.ExitCodeRegister
 ---@field protected _cp_pfreader simple.PerfettoReader
 ---@field protected _system_info simple.ConstantTable
----@field protected _cp_tcm simple.Memory
----@field protected _fab_cp simple.XBar
+---@field protected _cp_tcm simple.LtMemory
+---@field protected _fab_cp nic.XBar
 ---@field protected _fab_nexus simple.XBar
 ---@field protected _sm ilha.system.sm[]
 ---@field protected _sm_printbuf simple.PrintBuf[]
@@ -129,12 +129,17 @@ function System.new(name, config, opts)
   )
 
   -- CP subsys
-  self._cp = cp.CommandProcessor("cp", 0, {
-    rsp_enable = false,
-    rsp_port = 9982,
+  self._cp = cp.FastISS("cp", 0, {
+    instruction_cost = system.cp.instruction_cost_cycles * self._period,
+    quantum = system.cp.quantum_cycles * self._period,
+    local_regions = {
+      { addr = 0, size = rom_size },
+      { addr = cp_tcm_base, size = cp_tcm_size },
+    },
   })
+  local cp_memory_latency = system.cp.local_memory_latency_cycles * self._period
   self._clint = simple.Clint("clint", 1)
-  self._cp_rom = simple.Memory("cp_rom", { size = rom_size })
+  self._cp_rom = simple.LtMemory("cp_rom", { size = rom_size, latency = cp_memory_latency })
   self._cp_printbuf = simple.PrintBuf("cp_printbuf", 1)
   self._cp_exit_code_register = simple.ExitCodeRegister("cp_exit_code_register")
 
@@ -177,10 +182,10 @@ function System.new(name, config, opts)
   assert(#pfreader_tracks <= max_pfreader_tracks)
 
   self._cp_pfreader = simple.PerfettoReader("cp_pfreader", pfreader_tracks)
-  self._cp_tcm = simple.Memory("cp_tcm", { size = cp_tcm_size })
+  self._cp_tcm = simple.LtMemory("cp_tcm", { size = cp_tcm_size, latency = cp_memory_latency })
 
   -- fab_cp: CP-private regions, then one catch-all to the nexus.
-  self._fab_cp = simple.XBar("fab_cp", 1, {
+  self._fab_cp = nic.XBar("fab_cp", 1, {
     { addr = 0x0, size = rom_size }, -- ROM payload
     { addr = cp_printbuf_base, size = 0x8 }, -- printbuf
     { addr = cp_exit_base, size = 0x8 }, -- exit code register
@@ -319,23 +324,20 @@ function System.new(name, config, opts)
   self._cp.timer_int(self._timer_irq)
   self._cp.sw_int(self._msip_irq)
   self._cp.ext_int(self._gnd)
-  self._cp.target = self._fab_cp.core_side[1].port
+  self._cp.target = self._fab_cp.core_side
 
-  self._fab_cp.mem_side[1].target = self._cp_rom.port
-  self._fab_cp.mem_side[2].target = self._cp_printbuf.port
-  self._fab_cp.mem_side[3].target = self._cp_exit_code_register.port
-  self._fab_cp.mem_side[4].target = self._cp_pfreader.slave_port
-  self._fab_cp.mem_side[5].target = self._host_dma.slave_port
-  self._fab_cp.mem_side[6].target = self._device_dma.slave_port
-  self._fab_cp.mem_side[7].target = self._cp_tcm.port
-  self._fab_cp.mem_side[8].target = self._fab_nexus.core_side[1].port
+  self._fab_cp.mem_side = self._cp_rom.port
+  self._fab_cp.mem_side = self._cp_printbuf.port
+  self._fab_cp.mem_side = self._cp_exit_code_register.port
+  self._fab_cp.mem_side = self._cp_pfreader.slave_port
+  self._fab_cp.mem_side = self._host_dma.slave_port
+  self._fab_cp.mem_side = self._device_dma.slave_port
+  self._fab_cp.mem_side = self._cp_tcm.port
+  self._fab_cp.mem_side = self._fab_nexus.core_side[1].port
 
   self._cp.clock = self._clock
   self._clint.clock = self._clock
-  self._cp_rom.clock = self._clock
   self._cp_printbuf.clock = self._clock
-  self._cp_tcm.clock = self._clock
-  self._fab_cp.clock = self._clock
 
   -- sm subsys connections fab_nexus
   local nexus_mem_side = self._fab_nexus.mem_side
@@ -394,6 +396,7 @@ function System.new(name, config, opts)
   self._l2cache.clock = self._clock
 
   self.stats = stats.Group("System")
+  self.stats:add_sub_group(self._cp.stats)
   for _, sm in ipairs(self._sm) do
     self.stats:add_sub_group(sm.stats)
   end

@@ -72,6 +72,8 @@ void CommandProcessor::read_timer_interrupt() {
 
 TLM_MemIF::TLM_MemIF(const sc_module_name &name) : sc_module(name) {
   mem_port_.register_nb_transport_bw(this, &TLM_MemIF::nb_transport_bw);
+  mem_port_.register_invalidate_direct_mem_ptr(
+      this, &TLM_MemIF::InvalidateDirectMemPtr);
   for (auto &c : byte_enable_) {
     c = TLM_BYTE_ENABLED;
   }

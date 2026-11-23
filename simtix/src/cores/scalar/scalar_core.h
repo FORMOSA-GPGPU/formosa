@@ -106,6 +106,7 @@ class ScalarCore : public sc_module {
     dmem_trans_.set_command(command);
     dmem_trans_.set_address(p->addr_buf);
     dmem_trans_.set_data_length(len);
+    dmem_trans_.set_streaming_width(len);
     dmem_trans_.set_data_ptr(reinterpret_cast<unsigned char *>(&p->data_buf));
     dmem_trans_.set_byte_enable_length(0);
     dmem_trans_.set_byte_enable_ptr(nullptr);

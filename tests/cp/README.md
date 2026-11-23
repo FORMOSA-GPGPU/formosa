@@ -39,6 +39,16 @@ layout (code at zero, completion at `0x7ffc`, results at `0x8000`) is part of th
 program: the AUIPC golden depends on instruction addresses. Supply a matching
 golden file when using a custom ELF.
 
+The platform uses `nic.XBar` and `simple.LtMemory`. Before simulation it loads
+PT_LOAD **physical** addresses directly into its owned RAM and zeros BSS; CPU
+test images are identity-linked (virtual address equals physical address).
+Custom images must follow the same bare-metal mapping. This intentionally uses
+the memory loader rather than pre-elaboration debug transport: multi-socket
+debug callbacks are connected only at elaboration. Runtime observations use the
+debugger through the crossbar. `cp.memory_policy` excludes externally observed
+mailboxes and interrupt probes from FastISS private run-ahead, even though RAM
+can grant a larger DMI range.
+
 ## How it works
 
 - `cores/`: modules with the shared [cp.core interface](system.lua), wrapped
