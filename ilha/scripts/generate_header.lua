@@ -74,6 +74,11 @@ function main(output_file, source_dir, module_name)
     { "FSA_CLINT_MTIME_OFFSET", "LV_CLINT_MTIME_OFFSET" },
     { "FSA_CLINT_MTIME_BASE", "(FSA_CLINT_BASE + FSA_CLINT_MTIME_OFFSET)" },
     { "FSA_CLINT_MTIMECMP_BASE", "(FSA_CLINT_BASE + FSA_CLINT_MTIMECMP_OFFSET)" },
+    -- Default system clock in Hz, rounded as SystemInfo rounds its timebase.
+    {
+      "FSA_SYSTEM_FREQUENCY",
+      decimal(math.floor(1e9 / get("clock_period_ns") + 0.5), "ull"),
+    },
     { "FSA_MMIO_BASE", hex(get("fsa_mmio_base")) },
     { "FSA_MMIO_SIZE", hex(get("mmio_size")) },
     { "FSA_HOST_BAR_BASE", hex(get("host_bar_base")) },

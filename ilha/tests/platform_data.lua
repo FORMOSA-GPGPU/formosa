@@ -15,6 +15,8 @@ function main(header_path, linker_path)
   assert(header:match("#define%s+FSA_CP_ROM_BASE%s+0x12345000ull"))
   assert(header:match("#define%s+FSA_CP_ROM_SIZE%s+0x2345ull"))
   assert(header:match("#define%s+FSA_SYSTEM_INFO_ABI_VERSION%s+77ull"))
+  -- 1e9 / 1.5 rounds up to ...667, as SystemInfo reports it; truncation fails.
+  assert(header:match("#define%s+FSA_SYSTEM_FREQUENCY%s+666666667ull"))
 
   local linker = read(linker_path)
   assert(linker:match("ROM %(RX%): ORIGIN = 0x12345000, LENGTH = 0x2345"))

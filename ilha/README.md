@@ -226,6 +226,11 @@ Xmake places the generated files in the target's autogen directory and supplies
 that include path through its dependency. Changing an experimental configuration
 does not change the fixed address-map ABI.
 
+The address map also holds the default `clock_period_ns`, which `ilha.config`
+uses. Firmware's FreeRTOS tick is built from the generated
+`FSA_SYSTEM_FREQUENCY`, so a run that overrides `system.clock_period_ns`
+changes the tick length; SystemInfo still reports that run's timebase.
+
 Runtime capabilities come from the same settings that construct the hardware:
 
 ```text

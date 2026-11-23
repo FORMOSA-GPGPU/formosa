@@ -27,6 +27,8 @@ local AddressMap = {
   -- CLINT (SiFive layout inside 64 KiB window; on fab_agent)
   clint_base = 0x00050000,
   clint_size = 0x00010000,
+  -- Default system clock.
+  clock_period_ns = 2.5,
 
   -- Host/Agent MMIO aperture (scratch SRAM; HAL fsa_mmio_base)
   fsa_mmio_base = 0x00060000,

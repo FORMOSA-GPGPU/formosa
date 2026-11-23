@@ -10,5 +10,6 @@ function xmake_address_map()
     cp_tcm_base = 0xABC000,
     cp_tcm_size = 0x3456,
     system_info_version = 77,
+    clock_period_ns = 1.5,
   }
 end

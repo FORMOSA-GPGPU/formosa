@@ -7,7 +7,7 @@ local addr = require("ilha.addr_map")
 ---@class ilha.system_config
 local SystemConfig = {
   dram_config = require("lv.util").runfile("configs/dram/apccas2026-lpddr4.json"),
-  clock_period_ns = 2.5,
+  clock_period_ns = addr.clock_period_ns,
   num_sm = 1,
   threads_per_warp = 4,
   warps_per_core = 16,
