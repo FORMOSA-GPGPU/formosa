@@ -80,12 +80,10 @@ local function add_aggregate_stats(group, banks)
     totals[name] = group:add_integer_formula(name, description, total)
   end
 
-  -- Weight by cache-routed requests; idle banks and bypass traffic do not
-  -- dilute the rate. An entirely idle cache retains the native NaN result.
   group:add_real_formula(
     "hit_rate",
-    "The percentage of cache-routed requests hit in the cache",
-    totals.total_hits * 100 / totals.total_cacheable_requests
+    "The percentage of requests looked up in the tag array that hit in the cache",
+    totals.total_hits * 100 / (totals.total_hits + totals.total_misses)
   )
 end
 

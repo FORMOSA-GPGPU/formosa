@@ -148,11 +148,12 @@ local function assert_aggregate()
     expected[name] = bank_sum
   end
   local rate = metric(toml, "cache.hit_rate")
-  if expected.total_cacheable_requests == 0 then
+  local lookups = expected.total_hits + expected.total_misses
+  if lookups == 0 then
     assert(rate ~= rate, "empty denominator must retain NaN")
   else
-    local expected_rate = expected.total_hits * 100 / expected.total_cacheable_requests
-    assert(math.abs(rate - expected_rate) < 1e-10, "hit rate must use summed cacheable requests")
+    local expected_rate = expected.total_hits * 100 / lookups
+    assert(math.abs(rate - expected_rate) < 1e-10, "hit rate must use summed lookups")
   end
   return expected, toml
 end
@@ -182,5 +183,23 @@ end
 read_line(0x40, ZERO, "hit after stats reset")
 totals = assert_aggregate()
 assert(totals.total_reads > 0, "fixture must produce traffic after reset")
+
+-- Four misses fill bank 2's MSHR entries; the fifth waits, accepted but not
+-- looked up, until a refill frees one. The hit rate excludes it.
+target = concurrent:completed_count() + 5
+for line = 2, 6 do
+  concurrent:add_payload({ addr = line * 0x100 + 0x80, size = 4 })
+end
+sc.start(10 * period)
+totals = assert_aggregate()
+assert(
+  totals.total_hits > 0
+    and totals.total_cacheable_requests > totals.total_hits + totals.total_misses,
+  "fixture must hold an accepted request before its lookup"
+)
+test_utils.wait_until_completed(concurrent, target, 1024, period, "queued misses")
+for i = 1, 5 do
+  test_utils.assert_bytes_equal(concurrent:get_read_data(), ZERO, "queued miss " .. i)
+end
 
 print("Pass!")

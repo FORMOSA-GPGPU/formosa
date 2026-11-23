@@ -238,6 +238,30 @@ class CacheModuleBasicTestRunner : public CacheModuleTestRunnerBase {
            "total requests include all cache routing classes");
     Expect(stats.hit_rate == 50.0,
            "hit rate is reported as the legacy percentage");
+
+    // Fill both MSHR entries, then leave an accepted read queued before its
+    // tag lookup. The hit rate counts only looked-up requests.
+    read_hit_bench_.core_.SendRead(0x10, 4);
+    Expect(read_hit_bench_.WaitForMemoryRequests(request_count + 1),
+           "first MSHR-filling read miss reaches memory");
+    read_hit_bench_.core_.SendRead(0x20, 4);
+    Expect(read_hit_bench_.WaitForMemoryRequests(request_count + 2),
+           "second MSHR-filling read miss reaches memory");
+    read_hit_bench_.core_.SendRead(0x30, 4);
+    for (size_t i = 0; i < 6; ++i) {
+      read_hit_bench_.AdvanceCycle();
+    }
+    Expect(read_hit_bench_.memory_.request_count() == request_count + 2,
+           "read behind full MSHR entries does not reach memory");
+    Expect(view.Queues().core_req == 1,
+           "read behind full MSHR entries waits in the core request queue");
+    const auto queued_stats = view.Statistics();
+    Expect(queued_stats.total_cacheable_requests == 5,
+           "queued read is counted as an accepted cacheable request");
+    Expect(queued_stats.total_hits == 1 && queued_stats.total_misses == 3,
+           "queued read is not counted as a hit or miss");
+    Expect(queued_stats.hit_rate == 25.0,
+           "hit rate excludes accepted requests not yet looked up");
   }
 
   void TestMshrSecondaryMissReplay() {

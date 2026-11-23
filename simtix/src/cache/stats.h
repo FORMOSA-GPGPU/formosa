@@ -43,9 +43,10 @@ struct Stats : lv::stats::Group {
         LV_STAT(total_evictions, "Total number of cache lines evicted"),
         LV_STAT(total_requests, "Total number of requests"),
         LV_STAT(hit_rate,
-                "The percentage of cache-routed requests hit in the cache") {
+                "The percentage of requests looked up in the tag array that "
+                "hit in the cache") {
     total_requests = total_cacheable_requests + total_non_cacheable_requests;
-    hit_rate = (total_hits * 100.0) / total_cacheable_requests;
+    hit_rate = (total_hits * 100.0) / (total_hits + total_misses);
   }
 };
 
