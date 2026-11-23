@@ -71,6 +71,7 @@ class FetchEntry {
     inflight_ = false;
     if (packet_) {
       packet_->iword = iword_;
+      packet_->fetch_fault = payload_.is_response_error();
     }
   }
 

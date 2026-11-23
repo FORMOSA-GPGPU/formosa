@@ -36,7 +36,7 @@ class LtMemory : public sc_module {
   size_t size() const { return memory_.size(); }
   LuaBytes read_bytes(uint64_t addr, size_t size) const;
   void write_bytes(uint64_t addr, const LuaBytes &data);
-  void load_elf(ELFIO::elfio &elf);
+  void load_elf(ELFIO::elfio &elf, uint64_t base = 0);
 
  private:
   tlm_utils::simple_target_socket<LtMemory> socket_;
@@ -149,13 +149,14 @@ void LtMemory::write_bytes(uint64_t addr, const LuaBytes &data) {
   std::copy(data.value().begin(), data.value().end(), memory_.begin() + addr);
 }
 
-void LtMemory::load_elf(ELFIO::elfio &elf) {
+void LtMemory::load_elf(ELFIO::elfio &elf, uint64_t base) {
   for (const auto &segment : elf.segments) {
     if (segment->get_type() != ELFIO::PT_LOAD) continue;
-    const auto addr = segment->get_physical_address();
+    const auto paddr = segment->get_physical_address();
+    const auto addr = paddr - base;
     const auto filesz = segment->get_file_size();
     const auto memsz = segment->get_memory_size();
-    if (filesz > memsz || !InBounds(addr, memsz)) {
+    if (paddr < base || filesz > memsz || !InBounds(addr, memsz)) {
       throw std::out_of_range("LtMemory PT_LOAD physical address/size");
     }
     if (filesz) std::memcpy(memory_.data() + addr, segment->get_data(), filesz);
@@ -177,7 +178,15 @@ LV_BINDING(simple, LtMemory)
             lv::doc("Read memory bytes"))
     .method("write_bytes", &LtMemory::write_bytes, lv::params("addr", "data"),
             lv::doc("Write memory bytes"))
-    .method("load_elf", &LtMemory::load_elf, lv::params("elf"),
-            lv::doc("Load PT_LOAD physical segments and zero BSS"));
+    .method(
+        "load_elf",
+        [](LtMemory &self, ELFIO::elfio &elf) {
+          self.load_elf(elf);
+        },
+        lv::params("elf"),
+        lv::doc("Load PT_LOAD physical segments and zero BSS"))
+    .method("load_elf", &LtMemory::load_elf, lv::params("elf", "base"),
+            lv::doc("Load PT_LOAD physical segments relative to base and zero "
+                    "BSS"));
 
 }  // namespace simple

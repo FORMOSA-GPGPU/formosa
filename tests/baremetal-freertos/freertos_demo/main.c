@@ -1,7 +1,6 @@
 #include <FreeRTOS.h>
 #include <task.h>
-
-#include "console.h"
+#include <tinyprintf.h>
 
 #define STACK_SIZE 512
 
@@ -10,12 +9,12 @@ extern void freertos_risc_v_trap_handler(void);
 void vTask(void *pvParameters) {
   const char *taskName = (const char *)pvParameters;
   while (1) {
-    tfp_printf("Hello from %s!\n", taskName);
+    tfp_printf("Hello from %s at tick %u!\n", taskName,
+               (unsigned)xTaskGetTickCount());
   }
 }
 
 int main(void) {
-  demo_console_init();
   __asm__ volatile("csrw mtvec, %0" : : "r"(freertos_risc_v_trap_handler));
 
   BaseType_t xReturned;

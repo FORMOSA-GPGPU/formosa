@@ -1,7 +1,6 @@
-#include "console.h"
+#include <tinyprintf.h>
 
 int main(void) {
-  demo_console_init();
-  tfp_printf("Hello, bare-metal command-processor!\n");
+  tfp_printf("Hello, bare-metal CPU!\n");
   return 0;
 }

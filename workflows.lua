@@ -341,6 +341,15 @@ local config = {
         "lv.bindings.workload",
       },
     },
+    ["tests.baremetal-freertos"] = {
+      paths = {
+        "tests/baremetal-freertos/**",
+        "fw/tinyprintf/**",
+        "third-party/FreeRTOS-Kernel",
+        "third-party/FreeRTOS-Kernel/**",
+      },
+      depends = { "tests.cp.common" },
+    },
     ["tests.simtix.scalar_core"] = {
       paths = {
         "tests/cp/cores/simtix/scalar_core.lua",
@@ -530,6 +539,7 @@ local config = {
     },
     ["simtix.scalar_core"] = {
       depends = {
+        "tests.baremetal-freertos",
         "simtix.scalar_core",
         "tests.simtix.scalar_core",
         "lv.executable",
@@ -542,6 +552,8 @@ local config = {
         "scalar-riscv-test*/simtix.scalar_core",
         "cp-*/simtix.scalar_core",
         "lv/cp/**",
+        "baremetal-demo/simtix.scalar_core",
+        "freertos-demo/simtix.scalar_core",
       },
     },
     ["fw.unit"] = {
@@ -621,6 +633,7 @@ local config = {
     },
     ["lv.bindings"] = {
       depends = {
+        "tests.baremetal-freertos",
         "lv.tests.unit",
         "tests.cp.command_processor",
         "tests.cp.fast_iss",
@@ -640,6 +653,8 @@ local config = {
         "lv-axi-test/**",
         "lv-axi-rejection-test/**",
         "lv/cp/**",
+        "baremetal-demo/cp.command_processor",
+        "freertos-demo/cp.command_processor",
         "scalar-riscv-test*/cp.command_processor",
         "cp-*/cp.command_processor",
         "scalar-riscv-test*/cp.fast_iss",

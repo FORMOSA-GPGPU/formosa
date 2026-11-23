@@ -315,7 +315,7 @@ struct Illegal : Def<Matches<0, 0>> {
 using DefaultInstructionSet =
     decltype(std::tuple_cat(FOREACH_INSTR_DEFAULT(AS_TUPLE) std::tuple<>{}));
 // This selects decoding, not privilege checks or hart-state execution. Those
-// remain the consumer's responsibility; an unhandled instruction is illegal.
+// remain the consumer's responsibility, including handling execution requests.
 using PrivilegedInstructions =
     decltype(std::tuple_cat(FOREACH_INSTR_PRIVILEGED(AS_TUPLE) std::tuple<>{}));
 #undef AS_TUPLE

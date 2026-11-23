@@ -22,7 +22,7 @@ function tests(target, script, opt)
     if opt.accepts(core.adapter) then
       target:add("tests", core.name, {
         runargs = table.join(
-          { path.join(os.projectdir(), "tests/cp", script), "--core", core.name },
+          { path.absolute(script, path.join(os.projectdir(), "tests/cp")), "--core", core.name },
           opt.args or {}
         ),
         run_timeout = opt.timeout or 30000,

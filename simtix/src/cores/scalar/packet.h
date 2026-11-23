@@ -19,6 +19,7 @@ struct Packet {
   uint32_t iword;
   Instr instr;
   bool decoded = false;
+  bool fetch_fault = false;
 
   int64_t rs1_data;
   int64_t rs2_data;
@@ -56,6 +57,7 @@ class PacketPool {
     p->iword = 0;
     p->instr.Reset();
     p->decoded = false;
+    p->fetch_fault = false;
     free_list_.push_back(p);
   }
 

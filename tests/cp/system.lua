@@ -2,7 +2,6 @@
 -- SPDX-License-Identifier: Apache-2.0
 
 require("cp.cores")
-local platform = require("cp.platform")
 
 -- Memory ports are writable target-socket properties, like SM.target.
 -- A core has either mem_target (one port), or imem_target and dmem_target (two).
@@ -11,6 +10,8 @@ local platform = require("cp.platform")
 ---@field isa string
 ---@field num_mem_ports 1|2
 ---@field has_ext_int boolean
+---@field has_sw_int boolean
+---@field has_timer_int boolean
 ---@field has_reset boolean Whether reset_n prevents execution during the reset interval.
 ---@field clock sc.clock
 ---@field reset_n sc.signal Active-low reset input; adapters without reset support ignore it.
@@ -18,49 +19,68 @@ local platform = require("cp.platform")
 ---@field imem_target? sc.Socket Instruction target; only for num_mem_ports == 2.
 ---@field dmem_target? sc.Socket Data target; only for num_mem_ports == 2.
 ---@field ext_int? sc.BoolIn External interrupt port; only when has_ext_int.
+---@field sw_int? sc.BoolIn Software interrupt port; only when has_sw_int.
+---@field timer_int? sc.BoolIn Timer interrupt port; only when has_timer_int.
 ---@field boot fun(self: cp.core, entry: integer)
 ---@field protected _sc_module sc.Module
 ---@alias cp.core_ctor fun(name: string): cp.core
 
+--- Standard single-hart RISC-V board: RAM, UART, and an optional CLINT.
+--- Address layout belongs to the program suite; adapters own core differences.
 ---@class cp.system
 ---@field core cp.core
 ---@field ext_int? sc.signal Signal driven by interrupt tests.
+---@field sw_int? sc.signal
+---@field timer_int? sc.signal
+---@field private _clint? simple.Clint
 ---@field private _period sc.time
 ---@field private _clock sc.clock
 ---@field private _reset_n sc.signal
+---@field private _reset_cycles integer
 ---@field private _ram simple.LtMemory
+---@field private _ram_base integer
 ---@field private _log_path string
 ---@field private _uart simple.PrintBuf
 ---@field private _bus nic.XBar
 ---@field private _loader dbg.MemoryDebugger
 ---@field protected _sc_module sc.Module
----@overload fun(name: string, core_module: string): cp.system
+---@overload fun(name: string, core_module: string, platform?: table): cp.system
 local System = {}
 System.__index = System
 
 ---@param _ string Module name, consumed by lv.sc_module.wrap.
 ---@param core_module string A directly require-able CPU adapter module.
+---@param platform? table RAM/UART addresses, clock period, and optional clint_base. Defaults to cp.platform.
 ---@return cp.system
-function System.new(_, core_module)
+function System.new(_, core_module, platform)
+  platform = platform or require("cp.platform")
   local self = setmetatable({}, System --[[@as table]])
   ---@type cp.core_ctor
   local Core = require(core_module)
   self.core = Core("core")
   local ports = self.core.num_mem_ports
   assert(ports == 1 or ports == 2, "expected one or two memory ports")
-  self._period = sc.time(10, sc.time_unit.NS)
+  self._period = sc.time(platform.clock_ns or 10, sc.time_unit.NS)
   self._clock = sc.clock("clock", self._period)
-  self._reset_n = sc.signal("reset_n")
-  self._reset_n:write(false)
+  self._reset_n = sc.signal("reset_n", false)
+  self._reset_cycles = platform.reset_cycles or 5
+  self._ram_base = platform.ram_base
   self._ram = simple.LtMemory("ram", { size = platform.ram_size, latency = self._period })
   self._log_path = os.tmpname()
   self._uart = simple.PrintBuf("uart", 1, self._log_path)
-  self._bus = nic.XBar("bus", ports + 1, {
+  local mapping = {
     { addr = platform.ram_base, size = platform.ram_size },
     { addr = platform.serial_base, size = 4 },
-  })
+  }
+  if platform.clint_base then
+    self._clint = simple.Clint("clint", 1)
+    self._clint.clock = self._clock
+    mapping[#mapping + 1] = { addr = platform.clint_base, size = 0xc000 }
+  end
+  self._bus = nic.XBar("bus", ports + 1, mapping)
   self._bus.mem_side = self._ram.port
   self._bus.mem_side = self._uart.port
+  if self._clint then self._bus.mem_side = self._clint.port end
   self._uart.clock = self._clock
   self._loader = dbg.MemoryDebugger("loader")
   self._loader.target = self._bus.core_side
@@ -72,10 +92,15 @@ function System.new(_, core_module)
     self.core.imem_target = self._bus.core_side
     self.core.dmem_target = self._bus.core_side
   end
-  if self.core.has_ext_int then
-    self.ext_int = sc.signal("ext_int")
-    self.ext_int:write(false)
-    self.core.ext_int(self.ext_int)
+  for _, name in ipairs({ "ext_int", "sw_int", "timer_int" }) do
+    if self.core["has_" .. name] or (self._clint and name ~= "ext_int") then
+      self[name] = sc.signal(name, false)
+      if self.core["has_" .. name] then self.core[name](self[name]) end
+    end
+  end
+  if self._clint then
+    self._clint.msip_irq[1](self.sw_int)
+    self._clint.timer_irq[1](self.timer_int)
   end
   return self
 end
@@ -85,8 +110,8 @@ end
 function System:load_elf(elf)
   -- Multi-socket debug callbacks are connected during elaboration. Initialize
   -- the owned RAM before any CPU process starts, with PT_LOAD physical
-  -- addresses and BSS zeroing. CPU test images use identity-linked addresses.
-  self._ram:load_elf(elf)
+  -- addresses relative to RAM and BSS zeroing. CPU images are identity-linked.
+  self._ram:load_elf(elf, self._ram_base)
   return true
 end
 
@@ -106,7 +131,7 @@ function System:boot(entry)
   entry = assert(tonumber(entry), "invalid entry address")
   self._reset_n:write(false)
   self.core:boot(entry)
-  if self.core.has_reset then self:step(platform.reset_cycles) end
+  if self.core.has_reset then self:step(self._reset_cycles) end
   self._reset_n:write(true)
 end
 

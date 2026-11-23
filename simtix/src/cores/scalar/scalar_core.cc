@@ -21,6 +21,157 @@
 
 namespace simtix::scalar {
 
+namespace {
+
+// Select this hart's integer, CSR, and machine-control instructions.
+#define AS_TUPLE(NAME, ...) std::tuple<NAME>{},
+using ScalarInstructionSet = InstructionSet<
+    decltype(std::tuple_cat(
+        FOREACH_INSTR_NTL(AS_TUPLE) FOREACH_INSTR_OP(AS_TUPLE)
+            FOREACH_INSTR_OP_IMM(AS_TUPLE) FOREACH_INSTR_OP32(AS_TUPLE)
+                FOREACH_INSTR_OP_IMM32(AS_TUPLE) FOREACH_INSTR_BRANCH(AS_TUPLE)
+                    FOREACH_INSTR_LUI(AS_TUPLE) FOREACH_INSTR_AUIPC(AS_TUPLE)
+                        FOREACH_INSTR_JAL(AS_TUPLE) FOREACH_INSTR_JALR(AS_TUPLE)
+                            FOREACH_INSTR_LOAD(AS_TUPLE) FOREACH_INSTR_STORE(
+                                AS_TUPLE) FOREACH_INSTR_FENCE(AS_TUPLE)
+                                FOREACH_INSTR_SYSTEM(AS_TUPLE) std::tuple<>{})),
+    PrivilegedInstructions, std::tuple<EBREAK, FENCE_I>>;
+#undef AS_TUPLE
+
+constexpr uint64_t kMachineInterrupts = MIP_MEIP | MIP_MSIP | MIP_MTIP;
+
+}  // namespace
+
+void ScalarCore::before_end_of_elaboration() {
+  // Unconnected interrupt inputs remain inactive.
+  for (auto *port : {&ext_int, &sw_int, &timer_int}) {
+    if (port->bind_count() == 0) port->bind(inactive_interrupt_);
+  }
+}
+
+uint64_t ScalarCore::PendingInterrupts() const {
+  return (ext_int.read() ? MIP_MEIP : 0) | (sw_int.read() ? MIP_MSIP : 0) |
+         (timer_int.read() ? MIP_MTIP : 0);
+}
+
+bool ScalarCore::ReadCsr(uint32_t addr, uint64_t &value) const {
+  switch (addr) {
+    case CSR_MSTATUS:
+      value = mstatus_;
+      break;
+    case CSR_MISA:
+      value = (2ULL << 62) | (1 << ('I' - 'A')) | (1 << ('M' - 'A'));
+      break;
+    case CSR_MIE:
+      value = mie_;
+      break;
+    case CSR_MTVEC:
+      value = mtvec_;
+      break;
+    case CSR_MSCRATCH:
+      value = mscratch_;
+      break;
+    case CSR_MEPC:
+      value = mepc_;
+      break;
+    case CSR_MCAUSE:
+      value = mcause_;
+      break;
+    case CSR_MTVAL:
+      value = mtval_;
+      break;
+    case CSR_MIP:
+      value = PendingInterrupts();
+      break;
+    case CSR_MVENDORID:
+    case CSR_MARCHID:
+    case CSR_MIMPID:
+    case CSR_MHARTID:
+      value = 0;
+      break;
+    default:
+      return false;
+  }
+  return true;
+}
+
+void ScalarCore::WriteCsr(uint32_t addr, uint64_t value) {
+  switch (addr) {
+    case CSR_MSTATUS:
+      mstatus_ = (value & (MSTATUS_MIE | MSTATUS_MPIE)) | MSTATUS_MPP;
+      break;
+    case CSR_MIE:
+      mie_ = value & kMachineInterrupts;
+      break;
+    case CSR_MTVEC:
+      // Support direct and vectored modes; reserved modes select direct.
+      mtvec_ = (value & ~3ULL) | ((value & 3) == 1 ? 1 : 0);
+      break;
+    case CSR_MSCRATCH:
+      mscratch_ = value;
+      break;
+    case CSR_MEPC:
+      mepc_ = value & ~3ULL;
+      break;
+    case CSR_MCAUSE:
+      mcause_ = value;
+      break;
+    case CSR_MTVAL:
+      mtval_ = value;
+      break;
+    // MISA is fixed; pending interrupt bits are owned by their input lines.
+    default:
+      break;
+  }
+}
+
+bool ScalarCore::ExecuteCsr(Packet *packet) {
+  const auto &instr = packet->instr;
+  const auto op = GetCsrOp(packet->flag);
+  const bool write =
+      op == ExecFlag::CSRRW ||
+      (instr.rs1() == Instr::kNullReg ? instr.uimm() != 0 : instr.rs1() != 0);
+  uint64_t old;
+  if (!ReadCsr(packet->csr_buf, old) ||
+      (write && (packet->csr_buf >> 10) == 3)) {
+    return false;
+  }
+  if (write) {
+    uint64_t value = packet->data_buf;
+    if (op == ExecFlag::CSRRS) value = old | value;
+    if (op == ExecFlag::CSRRC) value = old & ~value;
+    WriteCsr(packet->csr_buf, value);
+  }
+  packet->data_buf = old;
+  packet->flag = ExecFlag::RD_DATA;
+  return true;
+}
+
+void ScalarCore::Discard(Packet *&packet) {
+  if (!packet) return;
+  WITH_TRACER(Flush(packet));
+  packet_pool_.Release(packet);
+  packet = nullptr;
+}
+
+void ScalarCore::Redirect(uint64_t pc) {
+  pc_ = pc;
+  flush_ = true;
+  ++imem_epoch_;
+  InvalidateOutstandingFetches();
+}
+
+void ScalarCore::EnterTrap(uint64_t cause, uint64_t epc, uint64_t tval,
+                           bool interrupt) {
+  mepc_ = epc & ~3ULL;
+  mcause_ = cause | (interrupt ? 1ULL << 63 : 0);
+  mtval_ = tval;
+  mstatus_ = MSTATUS_MPP | ((mstatus_ & MSTATUS_MIE) ? MSTATUS_MPIE : 0);
+  const uint64_t vector =
+      (mtvec_ & ~3ULL) + (interrupt && (mtvec_ & 3) == 1 ? 4 * cause : 0);
+  Redirect(vector);
+}
+
 void ScalarCore::enable_konata_trace(const std::string &path) {
   // Caveat: FileTracer's Quill sink is cached by path for the process lifetime.
   // Disabling then re-enabling with the SAME path appends to the existing
@@ -58,7 +209,7 @@ void ScalarCore::UpdatePipelineRegisters() {
     packet_w_ = nullptr;
   }
 
-  if (packet_m_ && !dmem_busy_) {
+  if (packet_m_ && !dmem_busy_ && !stall_) {
     packet_w_ = packet_m_;
     packet_m_ = nullptr;
     WITH_TRACER(StartStage(packet_w_, 0, "W"));
@@ -77,9 +228,7 @@ void ScalarCore::UpdatePipelineRegisters() {
 
   if (packet_d_) {
     if (flush_) {
-      WITH_TRACER(Flush(packet_d_));
-      packet_pool_.Release(packet_d_);
-      packet_d_ = nullptr;
+      Discard(packet_d_);
     } else if (!stall_) {
       packet_e_ = packet_d_;
       packet_d_ = nullptr;
@@ -89,9 +238,7 @@ void ScalarCore::UpdatePipelineRegisters() {
 
   if (packet_f_) {
     if (flush_) {
-      WITH_TRACER(Flush(packet_f_));
-      packet_pool_.Release(packet_f_);
-      packet_f_ = nullptr;
+      Discard(packet_f_);
     } else if (!stall_) {
       packet_d_ = packet_f_;
       packet_f_ = nullptr;
@@ -122,6 +269,14 @@ void ScalarCore::Memory() {
     tlm::tlm_generic_payload *resp;
     if (dmem_port_.resp_port->nb_read(resp)) {
       dmem_busy_ = false;
+      if (resp->is_response_error()) {
+        EnterTrap(HasFlag(flag, ExecFlag::LOAD) ? CAUSE_LOAD_ACCESS
+                                                : CAUSE_STORE_ACCESS,
+                  packet_m_->pc, packet_m_->addr_buf);
+        Discard(packet_m_);
+        Discard(packet_e_);
+        return;
+      }
       if (HasFlag(flag, ExecFlag::LOAD)) {
         SignExtension(packet_m_, GetMemSize(flag), IsSigned(flag));
       }
@@ -135,7 +290,8 @@ void ScalarCore::Memory() {
                    HasFlag(flag, ExecFlag::LOAD) ? tlm::TLM_READ_COMMAND
                                                  : tlm::TLM_WRITE_COMMAND,
                    GetMemSize(flag));
-    dmem_busy_ = dmem_port_.req_port->nb_write(&dmem_trans_) ? true : false;
+    dmem_busy_ = dmem_port_.req_port->nb_write(&dmem_trans_);
+    stall_ = !dmem_busy_;
   }
 }
 
@@ -144,53 +300,45 @@ void ScalarCore::Execute() {
     return;
   }
 
-  const auto has_matching_destination = [](const auto *packet, uint8_t reg_id) {
-    return packet != nullptr && packet->instr.rd() != Instr::kNullReg &&
-           packet->instr.rd() == reg_id;
-  };
-
-  const auto get_source_op = [&](uint8_t reg_id, int64_t *data_buf) {
-    if (data_buf == nullptr || reg_id == Instr::kNullReg || reg_id == 0) {
-      return;
-    }
-
-    // Forward from the writeback stage.
-    if (has_matching_destination(packet_w_, reg_id)) {
-      *data_buf = packet_w_->data_buf;
-    }
-
-    // Forward from the memory stage.
-    if (!has_matching_destination(packet_m_, reg_id)) {
-      return;
-    }
-
-    if (HasFlag(packet_m_->flag, ExecFlag::RD_DATA)) {
-      *data_buf = packet_m_->data_buf;
-      return;
-    }
-
-    if (!HasFlag(packet_m_->flag, ExecFlag::LOAD)) {
-      return;
-    }
-
-    if (dmem_busy_) {
-      stall_ = true;
-      return;
-    }
-
-    *data_buf = packet_m_->data_buf;
-  };
-
-  get_source_op(packet_e_->instr.rs1(), &packet_e_->rs1_data);
-  get_source_op(packet_e_->instr.rs2(), &packet_e_->rs2_data);
-  get_source_op(packet_e_->instr.rs3(), &packet_e_->rs3_data);
-
-  // A load-use stall leaves at least one source operand unresolved. In
-  // particular, a JALR must not redirect fetch using that stale value.
-  if (stall_) {
+  // Execute each instruction once, after the older memory operation has
+  // completed. This also gives CSR writes and traps a precise boundary.
+  if (stall_ || dmem_busy_) {
+    stall_ = true;
     return;
   }
 
+  const uint64_t pending = PendingInterrupts() & mie_;
+  if ((mstatus_ & MSTATUS_MIE) && pending) {
+    const uint64_t cause = pending & MIP_MEIP   ? IRQ_M_EXT
+                           : pending & MIP_MSIP ? IRQ_M_SOFT
+                                                : IRQ_M_TIMER;
+    EnterTrap(cause, packet_e_->pc, 0, true);
+    Discard(packet_e_);
+    return;
+  }
+
+  if ((packet_e_->pc & 3) || packet_e_->fetch_fault) {
+    EnterTrap((packet_e_->pc & 3) ? CAUSE_MISALIGNED_FETCH : CAUSE_FETCH_ACCESS,
+              packet_e_->pc, packet_e_->pc);
+    Discard(packet_e_);
+    return;
+  }
+
+  const auto read_operand = [&](uint8_t reg_id) -> int64_t {
+    if (reg_id == Instr::kNullReg || reg_id == 0) return 0;
+    // Writeback has committed already; the completed memory stage is the
+    // only older instruction whose destination still needs forwarding.
+    if (packet_m_ && packet_m_->instr.rd() == reg_id &&
+        HasFlag(packet_m_->flag, ExecFlag::RD_DATA | ExecFlag::LOAD)) {
+      return packet_m_->data_buf;
+    }
+    return regfile_[reg_id];
+  };
+  packet_e_->rs1_data = read_operand(packet_e_->instr.rs1());
+  packet_e_->rs2_data = read_operand(packet_e_->instr.rs2());
+  packet_e_->rs3_data = read_operand(packet_e_->instr.rs3());
+
+  const auto &instr = packet_e_->instr;
   ExecContext ctx = {
       .pc = packet_e_->pc,
       .tmask = dummy_tmask_,
@@ -203,15 +351,44 @@ void ScalarCore::Execute() {
       .mem = {.addr = &packet_e_->addr_buf, .data = &packet_e_->data_buf},
       .csr = {.addr = &packet_e_->csr_buf, .data = &packet_e_->data_buf},
   };
-  packet_e_->flag = simtix::Execute(&ctx, packet_e_->instr);
+  packet_e_->flag = simtix::Execute(&ctx, instr);
+
+  if (HasFlag(packet_e_->flag, ExecFlag::MRET)) {
+    mstatus_ = MSTATUS_MPP | MSTATUS_MPIE |
+               ((mstatus_ & MSTATUS_MPIE) ? MSTATUS_MIE : 0);
+    Redirect(mepc_);
+    return;
+  }
+  // WFI retires without suspending this hart. The older data access has
+  // drained, so FENCE needs no further action; FENCE.I also discards prefetched
+  // code.
+  if (HasFlag(packet_e_->flag,
+              ExecFlag::WFI | ExecFlag::FENCE | ExecFlag::FENCE_I)) {
+    if (HasFlag(packet_e_->flag, ExecFlag::FENCE_I))
+      Redirect(packet_e_->pc + 4);
+    return;
+  }
+
+  if (HasFlag(packet_e_->flag, ExecFlag::CSR)) {
+    const bool executed = ExecuteCsr(packet_e_);
+    if (!executed) packet_e_->flag = ExecFlag::ILLEGAL;
+  }
+
+  if (HasException(packet_e_->flag)) {
+    const auto exception = GetException(packet_e_->flag);
+    const uint64_t tval = exception == ExecFlag::ILLEGAL  ? packet_e_->iword
+                          : exception == ExecFlag::ECALL  ? 0
+                          : exception == ExecFlag::EBREAK ? packet_e_->pc
+                                                          : packet_e_->addr_buf;
+    EnterTrap(DecodeExceptionCause(packet_e_->flag), packet_e_->pc, tval);
+    Discard(packet_e_);
+    return;
+  }
 
   if (HasFlag(packet_e_->flag, ExecFlag::NEXT_PC)) {
     uint64_t target_pc = packet_e_->addr_buf;
     if (target_pc != packet_e_->pc + 4) {
-      pc_ = target_pc;
-      flush_ = true;
-      ++imem_epoch_;
-      InvalidateOutstandingFetches();
+      Redirect(target_pc);
     }
   }
 }
@@ -240,26 +417,12 @@ void ScalarCore::Decode() {
   }
 
   if (!packet_d_->decoded) {
-    packet_d_->instr = simtix::Decode(packet_d_->iword);
+    packet_d_->instr = simtix::Decode<ScalarInstructionSet>(packet_d_->iword);
     packet_d_->decoded = true;
     WITH_TRACER(AddLabel(
         packet_d_,
         fmt::format("{:#x} {}", packet_d_->pc, Disassemble(packet_d_->instr))));
   }
-
-  auto get_source_op = [&](uint8_t reg_id, int64_t &data_buf) {
-    if (reg_id == Instr::kNullReg || reg_id == 0) {
-      data_buf = 0;
-      return;
-    }
-
-    // No hazard, read from regfile
-    data_buf = regfile_[reg_id];
-  };
-
-  get_source_op(packet_d_->instr.rs1(), packet_d_->rs1_data);
-  get_source_op(packet_d_->instr.rs2(), packet_d_->rs2_data);
-  get_source_op(packet_d_->instr.rs3(), packet_d_->rs3_data);
 }
 
 void ScalarCore::CollectFetchResponses() {
@@ -346,6 +509,12 @@ LV_BINDING(simtix, ScalarCore)
               lv::doc("Instruction memory target"))
     .property("dmem", &ScalarCore::set_dmem, lv::doc("Data memory target"))
     .property("pc", &ScalarCore::set_pc, lv::doc("Program counter"))
+    .property("ext_int", &ScalarCore::ext_int,
+              lv::doc("Machine external interrupt input"))
+    .property("sw_int", &ScalarCore::sw_int,
+              lv::doc("Machine software interrupt input"))
+    .property("timer_int", &ScalarCore::timer_int,
+              lv::doc("Machine timer interrupt input"))
     .method("enable_konata_trace", &ScalarCore::enable_konata_trace,
             lv::params("path"), lv::doc("Enable Konata trace output"))
     .method("disable_konata_trace", &ScalarCore::disable_konata_trace,

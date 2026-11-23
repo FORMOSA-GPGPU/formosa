@@ -20,6 +20,9 @@ cpu.mem_target = bus.core_side[1].port
 local external_irq = sc.signal("external_irq", true)
 plic.irq[1](external_irq)
 cpu.ext_int(external_irq)
+local gnd = sc.signal("gnd", false)
+cpu.sw_int(gnd)
+cpu.timer_int(gnd)
 bus.mem_side[1].target = ram.port
 bus.mem_side[2].target = plic.port
 local debugger = dbg.MemoryDebugger("debugger")

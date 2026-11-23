@@ -55,23 +55,11 @@ target("baremetal.common", function()
   add_includedirs("common", "$(projectdir)/fw/tinyprintf", { public = true })
 end)
 
-target("baremetal.freertos", function()
-  set_kind("static")
-  add_rules("baremetal.riscv")
-  add_rules("freertos.kernel", { configdir = "freertos_demo", portdir = "portable" })
-  add_includedirs("include", { public = true })
-  add_deps("lv.device", { public = true })
+target("baremetal-freertos.lua", function()
+  set_kind("phony")
+  add_rules("lv.lua", { namespaces = { ["baremetal-freertos"] = "." } })
 end)
 
-for _, name in ipairs({ "baremetal", "freertos" }) do
-  target(name .. "-demo", function()
-    set_kind("binary")
-    set_default(false)
-    set_filename(name .. "_demo.elf")
-    add_rules("baremetal.riscv", "linker.link_scripts")
-    add_files(name .. "_demo/*.c", "common/linker.ld")
-    add_deps("baremetal.common")
-    add_syslinks("c")
-    if name == "freertos" then add_deps("baremetal.freertos") end
-  end)
-end
+target("lv", function() add_deps("baremetal-freertos.lua") end)
+
+includes("baremetal_demo/xmake.lua", "freertos_demo/xmake.lua")

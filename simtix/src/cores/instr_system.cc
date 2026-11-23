@@ -63,26 +63,19 @@ ExecFlag FENCE::Execute(ExecContext *, const Instr &) {
   return ExecFlag::FENCE;
 }
 
-// Shared execution has no hart trap/privilege state or instruction-fetch
-// synchronization. Consumers must handle these effects before calling it.
-// Reject unhandled instructions instead of silently treating them as no-ops.
-// TODO: Define the ExecContext/ExecFlag execution-request contract and
-// core-side trap return, wait, breakpoint and fetch synchronization handling
-// before enabling these instructions for OS execution.
-ExecFlag MRET::Execute(ExecContext *, const Instr &) {
-  return ExecFlag::ILLEGAL;
-}
+// The core applies these requests to its privilege and instruction-fetch state.
+// Consumers must handle the requests before selecting these instruction
+// classes.
+ExecFlag MRET::Execute(ExecContext *, const Instr &) { return ExecFlag::MRET; }
 
-ExecFlag WFI::Execute(ExecContext *, const Instr &) {
-  return ExecFlag::ILLEGAL;
-}
+ExecFlag WFI::Execute(ExecContext *, const Instr &) { return ExecFlag::WFI; }
 
 ExecFlag EBREAK::Execute(ExecContext *, const Instr &) {
-  return ExecFlag::ILLEGAL;
+  return ExecFlag::EBREAK;
 }
 
 ExecFlag FENCE_I::Execute(ExecContext *, const Instr &) {
-  return ExecFlag::ILLEGAL;
+  return ExecFlag::FENCE_I;
 }
 
 }  // namespace simtix

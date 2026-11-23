@@ -40,8 +40,8 @@ program: the AUIPC golden depends on instruction addresses. Supply a matching
 golden file when using a custom ELF.
 
 The platform uses `nic.XBar` and `simple.LtMemory`. Before simulation it loads
-PT_LOAD **physical** addresses directly into its owned RAM and zeros BSS; CPU
-test images are identity-linked (virtual address equals physical address).
+PT_LOAD **physical** addresses relative to `ram_base` into its owned RAM and zeros
+BSS; CPU test images are identity-linked (virtual address equals physical address).
 Custom images must follow the same bare-metal mapping. This intentionally uses
 the memory loader rather than pre-elaboration debug transport: multi-socket
 debug callbacks are connected only at elaboration. Runtime observations use the
@@ -54,7 +54,7 @@ can grant a larger DMI range.
 - `cores/`: modules with the shared [cp.core interface](system.lua), wrapped
   with `lv.sc_module`. They expose capabilities, ports, and `boot(entry)`.
 - `platform.lua`: the test platform's memory layout and reset duration in cycles.
-- `system.lua`: builds memory and UART, wires the core, and runs an ELF.
+- `system.lua`: builds memory, UART, and an optional CLINT, wires the core, and runs an ELF.
 - Each program directory owns its sources, runner, result checks, and checker tests.
   Programs select compatible cores by capability; `interrupt/` requires `has_ext_int`.
 - `runtime/`: the bare-metal C runtime library, with startup, platform linking,
@@ -64,14 +64,23 @@ can grant a larger DMI range.
   `benchmark/` supplies only their measurement mailbox, linker fragment, and checker.
 - `runtime_test.lua` checks the shared execution lifecycle using synthetic programs.
 
+The [bare-metal and FreeRTOS suite](../baremetal-freertos/README.md) shares these
+core adapters and `system:run`. To use another board layout, pass a third argument
+to `require("cp.system")(name, core_module, platform)` with `ram_base`, `ram_size`,
+and `serial_base`. Optional fields are `clock_ns` (default 10), `reset_cycles`
+(default 5), and `clint_base`. Without a layout, the system uses `cp.platform`.
+
 ## Add a core
 
 1. Copy [a core adapter](cores/simtix/scalar_core.lua) into `cores/<namespace>/<name>.lua` and
-   wrap its native lv model. Set `isa`, `num_mem_ports`, `has_ext_int`, and `has_reset`.
+   wrap its native lv model. Set `isa`, `num_mem_ports`, `has_ext_int`, `has_sw_int`,
+   `has_timer_int`, and `has_reset`.
 2. Implement `clock`, `boot(entry)`, and either `mem_target` or
    `imem_target`/`dmem_target`. These port properties accept memory targets.
-   Expose `ext_int` as an `sc.BoolIn` port when supported; the system owns
-   its signal and connects it with `core.ext_int(signal)`.
+   Expose supported `ext_int`, `sw_int`, and `timer_int` inputs as `sc.BoolIn` ports;
+   the system owns their signals and connects them with `core.ext_int(signal)`,
+   for example. Boards using adapters directly must also bind unused supported
+   interrupt inputs to a retained signal held low.
    Accept `reset_n` as an active-low reset signal, or ignore it if the model has
    no reset input (`has_reset = false`). The system owns the signal. For cores
    with `has_reset = true`, it holds reset low for `platform.reset_cycles` clock

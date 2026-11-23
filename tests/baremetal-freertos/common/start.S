@@ -47,6 +47,9 @@ _start:
     li t0, 0x8          # MIE bit in mstatus (bit 3)
     csrs mstatus, t0    # Set MIE bit to globally enable interrupts
 
+    # Initialize the board console before application code.
+    call demo_console_init
+
     # Call main function
     call main
 

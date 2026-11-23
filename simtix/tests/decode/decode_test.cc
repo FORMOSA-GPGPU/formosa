@@ -328,7 +328,7 @@ TEST_CASE(
   REQUIRE(mret.is_trap_return());
   REQUIRE(mret.is_cti());
   REQUIRE_FALSE(mret.is_jump());
-  REQUIRE(Execute(nullptr, mret) == ExecFlag::ILLEGAL);
+  REQUIRE(Execute(nullptr, mret) == ExecFlag::MRET);
 
   const Instr csr =
       Decode<TestInstructionSet>(MATCH_CSRRS | (CSR_MSTATUS << 20) | (5 << 7));
@@ -340,18 +340,21 @@ TEST_CASE(
   const Instr ebreak = Decode<TestInstructionSet>(MATCH_EBREAK);
   REQUIRE(ebreak.is<EBREAK>());
   REQUIRE(Disassemble(ebreak) == "ebreak");
-  REQUIRE(Execute(nullptr, ebreak) == ExecFlag::ILLEGAL);
+  const auto breakpoint = Execute(nullptr, ebreak);
+  REQUIRE(breakpoint == ExecFlag::EBREAK);
+  REQUIRE(HasException(breakpoint));
+  REQUIRE(DecodeExceptionCause(breakpoint) == CAUSE_BREAKPOINT);
   const Instr wfi = Decode<TestInstructionSet>(MATCH_WFI);
   REQUIRE(wfi.is<WFI>());
   REQUIRE(Disassemble(wfi) == "wfi");
-  REQUIRE(Execute(nullptr, wfi) == ExecFlag::ILLEGAL);
+  REQUIRE(Execute(nullptr, wfi) == ExecFlag::WFI);
 
   const Instr fence = Decode<TestInstructionSet>(MATCH_FENCE_I);
   REQUIRE(fence.is<FENCE_I>());
   REQUIRE(fence.is_fetch_fence());
   REQUIRE_FALSE(fence.is_cti());
   REQUIRE(Disassemble(fence) == "fence.i");
-  REQUIRE(Execute(nullptr, fence) == ExecFlag::ILLEGAL);
+  REQUIRE(Execute(nullptr, fence) == ExecFlag::FENCE_I);
   REQUIRE(Decode<TestInstructionSet>(MATCH_FENCE).is<FENCE>());
 }
 

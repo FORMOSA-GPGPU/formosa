@@ -100,6 +100,7 @@ local without_reset_booted = false
 System.boot({
   _period = period,
   _reset_n = reset_n,
+  _reset_cycles = require("cp.platform").reset_cycles,
   step = System.step,
   core = {
     has_reset = false,
@@ -115,6 +116,7 @@ assert(sc.time_stamp() == start, "boot advanced a core without reset support")
 System.boot({
   _period = period,
   _reset_n = reset_n,
+  _reset_cycles = require("cp.platform").reset_cycles,
   step = System.step,
   core = {
     has_reset = true,

@@ -26,6 +26,9 @@ namespace simtix::scalar {
 class ScalarCore : public sc_module {
  public:
   sc_in<bool> SC_NAMED(clock);
+  sc_in<bool> SC_NAMED(ext_int);
+  sc_in<bool> SC_NAMED(sw_int);
+  sc_in<bool> SC_NAMED(timer_int);
 
   ScalarCore(const sc_module_name &name)
       : packet_pool_(10),
@@ -65,6 +68,16 @@ class ScalarCore : public sc_module {
 
  private:
   static constexpr uint32_t kNumFetchEntries = 4;
+
+  void before_end_of_elaboration() override;
+  uint64_t PendingInterrupts() const;
+  bool ReadCsr(uint32_t addr, uint64_t &value) const;
+  void WriteCsr(uint32_t addr, uint64_t value);
+  bool ExecuteCsr(Packet *packet);
+  void EnterTrap(uint64_t cause, uint64_t epc, uint64_t tval,
+                 bool interrupt = false);
+  void Redirect(uint64_t pc);
+  void Discard(Packet *&packet);
 
   void Fetch();
   void CollectFetchResponses();
@@ -116,6 +129,18 @@ class ScalarCore : public sc_module {
   PacketPool packet_pool_;
   uint64_t pc_ = 0;
   std::array<int64_t, 32> regfile_ = {0};
+
+  // This core implements RV64 machine mode only. MPP is consequently fixed
+  // to M, and only the machine interrupt enable stack is writable.
+  uint64_t mstatus_ = MSTATUS_MPP;
+  uint64_t mie_ = 0;
+  uint64_t mtvec_ = 0;
+  uint64_t mscratch_ = 0;
+  uint64_t mepc_ = 0;
+  uint64_t mcause_ = 0;
+  uint64_t mtval_ = 0;
+
+  sc_signal<bool> SC_NAMED(inactive_interrupt_, false);
 
   lv::TlmSource imem_port_;
   lv::TlmSource dmem_port_;

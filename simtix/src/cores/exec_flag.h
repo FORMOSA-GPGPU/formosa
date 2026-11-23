@@ -42,10 +42,16 @@ enum class ExecFlag : uint32_t {
   LOAD_ADDR_MISALIGNED = 1 << 12,
   STORE_ADDR_MISALIGNED = 1 << 13,
   FENCE = 1 << 14,
-  _EXCEPTION_MASK = 0b11111 << 9,
+  EBREAK = 1 << 15,
+  _EXCEPTION_MASK = (0b11111 << 9) | (1 << 15),
+
+  // Hart control requests; the core owns privilege and fetch state.
+  MRET = 1u << 29,
+  WFI = 1u << 30,
+  FENCE_I = 1u << 31,
 
   // =========================================================
-  // --- [High Bits] (Modifiers) ---
+  // --- Modifiers (bits 16-28) ---
   // =========================================================
 
   // --- Memory Modifiers (Bit 16-18) ---
@@ -118,6 +124,8 @@ inline uint64_t DecodeExceptionCause(ExecFlag f) {
   switch (GetException(f)) {
     case ExecFlag::ECALL:
       return CAUSE_MACHINE_ECALL;
+    case ExecFlag::EBREAK:
+      return CAUSE_BREAKPOINT;
     case ExecFlag::ILLEGAL:
       return CAUSE_ILLEGAL_INSTRUCTION;
     case ExecFlag::INSTR_ADDR_MISALIGNED:

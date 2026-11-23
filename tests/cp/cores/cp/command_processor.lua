@@ -3,20 +3,24 @@
 
 ---@class cp.command_processor : cp.core
 ---@field private _native cp.CommandProcessor
----@field private _gnd sc.signal
 ---@field private _sc_module sc.Module
 ---@overload fun(name: string): cp.command_processor
-local CommandProcessor =
-  { isa = "rv64im", num_mem_ports = 1, has_ext_int = true, has_reset = false }
-
--- Build tools inspect the same cp.core fields without loading runtime methods.
+local CommandProcessor = {
+  isa = "rv64im",
+  num_mem_ports = 1,
+  has_ext_int = true,
+  has_sw_int = true,
+  has_timer_int = true,
+  has_reset = false,
+}
+-- Build tools read capabilities without constructing a native model.
 if xmake then
   function main() return CommandProcessor end
   return
 end
 
 function CommandProcessor:__index(key)
-  if key == "ext_int" then return self._native.ext_int end
+  if key == "ext_int" or key == "sw_int" or key == "timer_int" then return self._native[key] end
   return CommandProcessor[key]
 end
 
@@ -31,10 +35,6 @@ function CommandProcessor.new(_)
     rsp_port = 0,
     rsp_trace = false,
   })
-  self._gnd = sc.signal("gnd")
-  self._gnd:write(false)
-  self._native.sw_int(self._gnd)
-  self._native.timer_int(self._gnd)
   return self
 end
 
@@ -46,8 +46,8 @@ function CommandProcessor:__newindex(key, value)
     self._native.clock = value
   elseif key == "mem_target" then
     self._native.target = value
-  elseif key == "ext_int" then
-    error("ext_int is a port; use ext_int(signal)")
+  elseif key == "ext_int" or key == "sw_int" or key == "timer_int" then
+    error(key .. " is a port; use " .. key .. "(signal)")
   elseif key == "reset_n" then
     -- This model has no reset input.
     return
