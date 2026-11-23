@@ -577,6 +577,42 @@ void AtomicCore::ExecuteCsrOp(uint32_t wid, ExecFlag op) {
         case CSR_XLANES:
           old_val = num_lanes_;
           break;
+        case CSR_XSGSIZE:
+          old_val = xsgsize_[wid];
+          xsgsize_[wid] = apply_op(old_val);
+          break;
+        case CSR_XLOCALID_X:
+        case CSR_XLOCALID_Y:
+        case CSR_XLOCALID_Z: {
+          uint32_t idx = (wid * num_lanes_ + i) * 3 + csr_buf_ - CSR_XLOCALID_X;
+          old_val = ptlocalid_[idx];
+          ptlocalid_[idx] = apply_op(old_val);
+          break;
+        }
+        case CSR_XGROUPID_X:
+        case CSR_XGROUPID_Y:
+        case CSR_XGROUPID_Z: {
+          uint32_t idx = wid * 3 + csr_buf_ - CSR_XGROUPID_X;
+          old_val = xgroupid_[idx];
+          xgroupid_[idx] = apply_op(old_val);
+          break;
+        }
+        case CSR_XLOCALSIZE_X:
+        case CSR_XLOCALSIZE_Y:
+        case CSR_XLOCALSIZE_Z: {
+          uint32_t idx = wid * 3 + csr_buf_ - CSR_XLOCALSIZE_X;
+          old_val = xlocalsize_[idx];
+          xlocalsize_[idx] = apply_op(old_val);
+          break;
+        }
+        case CSR_XGLOBALOFFSET_X:
+        case CSR_XGLOBALOFFSET_Y:
+        case CSR_XGLOBALOFFSET_Z: {
+          uint32_t idx = wid * 3 + csr_buf_ - CSR_XGLOBALOFFSET_X;
+          old_val = xglobaloffset_[idx];
+          xglobaloffset_[idx] = apply_op(old_val);
+          break;
+        }
         default:
           LV_FATAL("Unsupported CSR address: {:#x}", csr_buf_);
           break;

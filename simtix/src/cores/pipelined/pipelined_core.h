@@ -220,12 +220,17 @@ class PipelinedCore : public BaseCore,
   std::vector<uint8_t> &ptpri() override { return ptpri_; }
   std::vector<uint8_t> &ptfrm() override { return ptfrm_; }
   std::vector<uint8_t> &ptfflags() override { return ptfflags_; }
+  std::vector<uint64_t> &ptlocalid() override { return ptlocalid_; }
   std::vector<uint32_t> &cwid() override { return cwid_; }
   std::vector<uint64_t> &mepc() override { return mepc_; }
   std::vector<uint64_t> &mcause() override { return mcause_; }
   std::vector<uint64_t> &mtval() override { return mtval_; }
   std::vector<uint64_t> &mscratch() override { return mscratch_; }
   std::vector<uint64_t> &minstret() override { return minstret_; }
+  std::vector<uint64_t> &xsgsize() override { return xsgsize_; }
+  std::vector<uint64_t> &xgroupid() override { return xgroupid_; }
+  std::vector<uint64_t> &xlocalsize() override { return xlocalsize_; }
+  std::vector<uint64_t> &xglobaloffset() override { return xglobaloffset_; }
   uint64_t mcycle() const override { return BaseCore::mcycle(); }
 
   pipelined::Stats stats_;

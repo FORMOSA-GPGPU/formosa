@@ -208,6 +208,7 @@ for _, name in ipairs({
   "oclprintf",
   "spirv_smoke",
   "subgroup_info",
+  "workitem_ids",
 }) do
   program("smoke-" .. name, "smoke/" .. name)
 end

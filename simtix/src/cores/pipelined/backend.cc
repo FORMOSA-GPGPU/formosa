@@ -588,6 +588,43 @@ void Backend::ExecuteCsrOp(Packet *packet) {
         case CSR_XLANES:
           old_val = num_lanes_;
           break;
+        case CSR_XSGSIZE:
+          old_val = core_->xsgsize()[wid];
+          core_->xsgsize()[wid] = apply_op(old_val);
+          break;
+        case CSR_XLOCALID_X:
+        case CSR_XLOCALID_Y:
+        case CSR_XLOCALID_Z: {
+          uint32_t idx =
+              (wid * num_lanes_ + i) * 3 + packet->csr_buf - CSR_XLOCALID_X;
+          old_val = core_->ptlocalid()[idx];
+          core_->ptlocalid()[idx] = apply_op(old_val);
+          break;
+        }
+        case CSR_XGROUPID_X:
+        case CSR_XGROUPID_Y:
+        case CSR_XGROUPID_Z: {
+          uint32_t idx = wid * 3 + packet->csr_buf - CSR_XGROUPID_X;
+          old_val = core_->xgroupid()[idx];
+          core_->xgroupid()[idx] = apply_op(old_val);
+          break;
+        }
+        case CSR_XLOCALSIZE_X:
+        case CSR_XLOCALSIZE_Y:
+        case CSR_XLOCALSIZE_Z: {
+          uint32_t idx = wid * 3 + packet->csr_buf - CSR_XLOCALSIZE_X;
+          old_val = core_->xlocalsize()[idx];
+          core_->xlocalsize()[idx] = apply_op(old_val);
+          break;
+        }
+        case CSR_XGLOBALOFFSET_X:
+        case CSR_XGLOBALOFFSET_Y:
+        case CSR_XGLOBALOFFSET_Z: {
+          uint32_t idx = wid * 3 + packet->csr_buf - CSR_XGLOBALOFFSET_X;
+          old_val = core_->xglobaloffset()[idx];
+          core_->xglobaloffset()[idx] = apply_op(old_val);
+          break;
+        }
         default:
           LV_FATAL("Unsupported CSR address: {:#x}", packet->csr_buf);
           break;

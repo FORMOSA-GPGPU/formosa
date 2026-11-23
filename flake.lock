@@ -21,16 +21,16 @@
     "formosa-llvm-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1794965372,
-        "narHash": "sha256-jru1Z9BeAdZFn6dyxP9mZNfSJQ1i2jnql77Sh6lE4hw=",
+        "lastModified": 1795069752,
+        "narHash": "sha256-HtNjaTSR/nPoFD7l2UVrdOdfMS0iUr/M28baX2Xh620=",
         "ref": "refs/heads/formosa/main",
-        "rev": "d05b4aabd8ac6bfb7ee65dc226b0c9b8fbf2aaeb",
+        "rev": "f5837fa686b00a2dc4c8cdf79b900b39189e8fdb",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-llvm.git"
       },
       "original": {
-        "rev": "d05b4aabd8ac6bfb7ee65dc226b0c9b8fbf2aaeb",
+        "rev": "f5837fa686b00a2dc4c8cdf79b900b39189e8fdb",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-llvm.git"
@@ -57,17 +57,17 @@
     "formosa-pocl-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1793591730,
-        "narHash": "sha256-+Ni8iEMoCVM6vRL8yt/iApHMJhKUtnjbX8iVlmIBINE=",
+        "lastModified": 1795087054,
+        "narHash": "sha256-7929El41ZN2pxRuQuYQcAGE/RPKLIGVXCkIAYDcH+v4=",
         "ref": "refs/heads/formosa/main",
-        "rev": "5ce003aebe8f0db5aad6fdc400f5d7f910a0b598",
+        "rev": "acd3acd8ddebc7fe91aaf3735bb45f63b8b7ad10",
         "shallow": true,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-pocl.git"
       },
       "original": {
-        "rev": "5ce003aebe8f0db5aad6fdc400f5d7f910a0b598",
+        "rev": "acd3acd8ddebc7fe91aaf3735bb45f63b8b7ad10",
         "shallow": true,
         "submodules": true,
         "type": "git",

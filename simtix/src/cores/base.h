@@ -37,12 +37,17 @@ class BaseCore : public sc_module,
         ptpri_(num_threads_),
         ptfrm_(num_threads_, 0),
         ptfflags_(num_threads_, 0),
+        ptlocalid_(num_threads_ * 3, 0),
         cwid_(num_warps_),
         mepc_(num_warps_),
         mcause_(num_warps_),
         mtval_(num_warps_),
         mscratch_(num_warps_),
         minstret_(num_warps_),
+        xsgsize_(num_warps_),
+        xgroupid_(num_warps_ * 3),
+        xlocalsize_(num_warps_ * 3),
+        xglobaloffset_(num_warps_ * 3),
         barrier_pc_(num_warps_) {
     SC_METHOD(McycleIncrement);
     sensitive << clock.pos();
@@ -319,6 +324,7 @@ class BaseCore : public sc_module,
   std::vector<uint8_t> ptpri_;
   std::vector<uint8_t> ptfrm_;
   std::vector<uint8_t> ptfflags_;
+  std::vector<uint64_t> ptlocalid_;  // x, y and z of each thread
 
   // Per-warp CSRs
   std::vector<uint32_t> cwid_;
@@ -327,6 +333,11 @@ class BaseCore : public sc_module,
   std::vector<uint64_t> mtval_;
   std::vector<uint64_t> mscratch_;
   std::vector<uint64_t> minstret_;
+  std::vector<uint64_t> xsgsize_;
+  // x, y and z of each warp
+  std::vector<uint64_t> xgroupid_;
+  std::vector<uint64_t> xlocalsize_;
+  std::vector<uint64_t> xglobaloffset_;
 
   // Per-warp PC of the latest barrier arrival, reported through WarpCtrl
   std::vector<uint64_t> barrier_pc_;

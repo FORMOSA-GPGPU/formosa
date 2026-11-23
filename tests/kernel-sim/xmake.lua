@@ -38,6 +38,7 @@ for _, name in ipairs({
   "vecmul",
   "voronoi",
   "trap",
+  "workitem-csr",
 }) do
   target("kernel-sim-" .. name, function()
     add_rules("kernel-sim.elf", "lv.test", "linker.link_scripts")

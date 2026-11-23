@@ -55,12 +55,17 @@ class ToBackendIntf : public ToArbitratorIntf {
   virtual std::vector<uint8_t> &ptpri() = 0;
   virtual std::vector<uint8_t> &ptfrm() = 0;
   virtual std::vector<uint8_t> &ptfflags() = 0;
+  virtual std::vector<uint64_t> &ptlocalid() = 0;
   virtual std::vector<uint32_t> &cwid() = 0;
   virtual std::vector<uint64_t> &mepc() = 0;
   virtual std::vector<uint64_t> &mcause() = 0;
   virtual std::vector<uint64_t> &mtval() = 0;
   virtual std::vector<uint64_t> &mscratch() = 0;
   virtual std::vector<uint64_t> &minstret() = 0;
+  virtual std::vector<uint64_t> &xsgsize() = 0;
+  virtual std::vector<uint64_t> &xgroupid() = 0;
+  virtual std::vector<uint64_t> &xlocalsize() = 0;
+  virtual std::vector<uint64_t> &xglobaloffset() = 0;
   virtual uint64_t mcycle() const = 0;
 };
 
