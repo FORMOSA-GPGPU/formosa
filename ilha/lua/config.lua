@@ -35,7 +35,8 @@ local SystemConfig = {
     dma = true,
     -- Each flush or invalidate an SM's cache controllers perform.
     cache_operations = true,
-    -- Each work group's stay in a resident slot of an SM.
+    -- Each work group's stay in a resident slot of an SM, and each run of time
+    -- in which an SM's core has an active warp.
     wg_slots = true,
   },
 }

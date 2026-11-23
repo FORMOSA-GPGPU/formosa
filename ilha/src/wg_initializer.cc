@@ -75,6 +75,7 @@ WGInitializer::WGInitializer(const sc_module_name &name, const Param &param)
       release_cwm_(static_cast<int>(kWarpsPerCore)),
       pending_termination_mask_(false, static_cast<int>(kWarpsPerCore)),
       pf_packets_(),
+      active_track_(LV_NEW_MODULE_TRACK("Active")),
       on_wg_dispatch_(param.on_wg_dispatch),
       on_wg_retire_(param.on_wg_retire) {
   // Initialize the hardware info CSR
@@ -94,6 +95,7 @@ WGInitializer::WGInitializer(const sc_module_name &name, const Param &param)
     pf_packets_.push_back(LV_NEW_MODULE_TRACK(track_name));
     pf_packets_[i].set_enabled(param.pftrace);
   }
+  active_track_.set_enabled(param.pftrace);
 }
 
 WGInitializer::~WGInitializer() = default;
@@ -113,6 +115,18 @@ void WGInitializer::TraceWGSlotActiveBegin(int slot_idx) {
                  LV_TRACE_ARG("info_ptr", info.info_ptr),
                  LV_TRACE_ARG("group_size", info.group_size),
                  LV_TRACE_ARG("warp_count", info.warp_count));
+}
+
+void WGInitializer::TraceActive() {
+  if (!active_track_.enabled()) return;
+  const bool active = core_->active_mask() != 0;
+  if (active == active_slice_open_) return;
+  if (active) {
+    LV_TRACE_BEGIN(active_track_, "WGInitializer", "active");
+  } else {
+    LV_TRACE_END(active_track_);
+  }
+  active_slice_open_ = active;
 }
 
 void WGInitializer::TraceWGSlotInstant(int slot_idx, std::string_view name) {
@@ -212,6 +226,7 @@ void WGInitializer::StateChangeThread() {
          core_->barrier_mask_changed_event() |
          core_->exception_mask_changed_event() |
          dispatch_fifo_.data_written_event() | warp_cmd_->ok_to_put());
+    TraceActive();
     // Keep changes made while ProcessThread waits for dequeue capacity, and
     // retry refused commands once the core can accept them.
     process_pending_ = true;

@@ -182,6 +182,10 @@ class WGInitializer : public sc_module {
   std::vector<int> wg_scratch_;
   std::vector<std::pair<int, WGDequeueInfo>> retire_infos_scratch_;
   std::vector<lv::trace::Track> pf_packets_;
+  // When the core has an active warp; a slice left open when the simulation
+  // stops stays open.
+  lv::trace::Track active_track_;
+  bool active_slice_open_ = false;
   sc_event enqueue_event_, dequeue_event_;
   sc_event process_event_;
   bool process_pending_ = false;
@@ -202,6 +206,7 @@ class WGInitializer : public sc_module {
   // Whether the core accepted, and so applied, the command.
   bool TryWarpCtrlCommand(const WarpCtrlCommand &cmd);
   void TraceWGSlotActiveBegin(int slot_idx);
+  void TraceActive();
   void TraceWGSlotInstant(int slot_idx, std::string_view name);
 };
 

@@ -169,7 +169,8 @@ on the command: dispatching a kernel and retiring its last work-group, or, for
 a memory copy, waiting for earlier kernels and cache commands, the cache
 maintenance and the DMA transfer. The time a command waits in the ring shows as
 the gap after its `Submissions` instant; the host noticing the completion is
-not traced. The WG slot tracks show when work-groups run on each SM.
+not traced. The WG slot tracks show when work-groups run on each SM, and its
+Active track when its core has an active warp.
 
 A command slice is named by the `label` the host passed in
 `FsaKernelLaunchInfo` or `FsaMemoryCopyInfo`, such as the kernel name, or else
@@ -191,6 +192,14 @@ default:
 | `host_dma/Transfer`, `device_dma/Transfer` | `trace.dma` | `dma.DMA` | DMA transfer; an empty transfer, an invalid descriptor and a bus error are instants |
 | `…CacheController/Operations` | `trace.cache_operations` | `ilha.CacheController` | Flush or invalidate on one cache, including those a memory copy issues internally |
 | `…wg_init/WG slot N` | `trace.wg_slots` | `ilha.WGInitializer` | Work group resident in that slot of one SM, from dispatch to completion |
+| `…wg_init/Active` | `trace.wg_slots` | `ilha.WGInitializer` | Run of time in which the SM's core has an active warp; a warp waiting at a barrier or handling an ecall or exception is not active |
+
+An Active slice is timed when the core's active mask changes, as the
+work-group initializer sees it. The pipelined core counts `active_cycles` on
+rising clock edges, and whether a change made at an edge precedes that count
+depends on delta-cycle order, so each end of a slice may be one cycle off the
+counted cycles: the slices add up to `active_cycles` within two cycles per
+slice, plus the truncation of timestamps to whole ns.
 
 Module-level Perfetto switches use `pftrace` (default: false). For example,
 `dma.DMA("dma", { pftrace = true })` traces transfers. `simtix.BankedCache` passes
