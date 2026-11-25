@@ -33,7 +33,9 @@ MshrCore::MshrEntry::MshrEntry(size_t index, size_t max_sub_entries)
     : state(State::kInvalid),
       index(index),
       line_address(0),
-      max_sub_entries_(max_sub_entries) {}
+      max_sub_entries_(max_sub_entries) {
+  sub_entries.reserve(max_sub_entries_);
+}
 
 void MshrCore::MshrEntry::Reset() {
   assert(!victim_reservation.has_value());
@@ -47,6 +49,7 @@ MshrCore::MshrCore(const Param &p) : config_(p) {
   for (size_t i = 0; i < config_.mshr_entries; ++i) {
     mshr_entries_.emplace_back(i, config_.mshr_subentries);
   }
+  ready_to_replay_.reserve(config_.mshr_entries);
 }
 
 MshrCore::~MshrCore() = default;
@@ -210,7 +213,7 @@ bool MshrCore::StartNextReplayEntry() {
   // Set next entry to replaying state
 
   const size_t index = ready_to_replay_.front();
-  ready_to_replay_.pop_front();
+  ready_to_replay_.erase(ready_to_replay_.begin());
 
   MshrEntry &entry = mshr_entries_[index];
   assert(entry.state == MshrEntry::State::kReadyToReplay);
@@ -230,7 +233,7 @@ Packet *MshrCore::PopReplayPacket() {
   assert(entry.state == MshrEntry::State::kReplaying);
 
   Packet *packet = entry.sub_entries.front();
-  entry.sub_entries.pop_front();
+  entry.sub_entries.erase(entry.sub_entries.begin());
   assert(packet != nullptr);
   packet->type = PacketType::kReplay;
 

@@ -282,7 +282,7 @@ class CacheModuleTester {
     const WriteBuffer &write_buffer = dut_.write_buffer_;
     return WriteBufferSnapshot{
         .pending_entries = write_buffer.pending_entries_.size(),
-        .inflight_entries = write_buffer.inflight_map_.size(),
+        .inflight_entries = write_buffer.inflight_entries_.size(),
         .capacity = write_buffer.config_.write_buffer_entries,
     };
   }

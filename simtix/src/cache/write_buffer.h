@@ -8,11 +8,9 @@
 
 #include <systemc.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_fifo_ifs.h>
-#include <tlm_core/tlm_2/tlm_generic_payload/tlm_gp.h>
 
 #include <cstddef>
-#include <deque>
-#include <unordered_map>
+#include <vector>
 
 #include "cache/packet.h"
 #include "cache/param.h"
@@ -51,9 +49,9 @@ class WriteBuffer : public sc_core::sc_module {
 
   // Queue to store pending payloads that have been accepted but not yet sent
   // out as memory requests. This ensures in-order issue of memory requests.
-  std::deque<Packet *> pending_entries_;
+  std::vector<Packet *> pending_entries_;
 
-  std::unordered_map<tlm::tlm_generic_payload *, Packet *> inflight_map_;
+  std::vector<Packet *> inflight_entries_;
 };
 
 }  // namespace simtix::cache

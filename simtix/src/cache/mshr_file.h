@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <deque>
 #include <optional>
+#include <vector>
 
 #include "cache/packet.h"
 #include "cache/param.h"
@@ -151,7 +152,8 @@ class MshrCore {
     size_t index = 0;
     uint64_t line_address = 0;
     uint64_t generation = 0;
-    std::deque<Packet *> sub_entries;
+    // ProbeMiss caps merges at mshr_subentries.
+    std::vector<Packet *> sub_entries;
     std::optional<VictimReservation> victim_reservation;
 
     MshrEntry(size_t index, size_t max_sub_entries);
@@ -191,8 +193,8 @@ class MshrCore {
   // to have replay packets ready.
   std::optional<size_t> replaying_mshr_index_;
   // MSHR-entries that have received refill notifications in arrival order,
-  // waiting to start replay.
-  std::deque<size_t> ready_to_replay_;
+  // waiting to start replay. Each entry waits here at most once.
+  std::vector<size_t> ready_to_replay_;
 };
 
 class MshrFile : public sc_core::sc_module {

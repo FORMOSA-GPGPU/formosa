@@ -119,6 +119,8 @@ class TagArray {
   const Param config_;
   const size_t num_sets_;
   std::mt19937_64 random_engine_;
+  // Scratch for SelectVictim; holds no state between calls.
+  std::vector<size_t> candidate_ways_;
 
   // Storage layout: [sets][ways].
   std::vector<TagEntry> tag_array_;

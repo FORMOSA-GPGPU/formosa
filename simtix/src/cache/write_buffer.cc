@@ -4,8 +4,7 @@
 
 #include "cache/write_buffer.h"
 
-#include <tlm_core/tlm_2/tlm_generic_payload/tlm_gp.h>
-
+#include <algorithm>
 #include <cassert>
 
 #include "cache/packet_lifecycle_intf.h"
@@ -15,6 +14,8 @@ namespace simtix::cache {
 WriteBuffer::WriteBuffer(sc_module_name name, const Param &param,
                          PacketLifecycleIntf &packet_lifecycle)
     : sc_module(name), config_(param), packet_lifecycle_(packet_lifecycle) {
+  pending_entries_.reserve(config_.write_buffer_entries);
+  inflight_entries_.reserve(config_.write_buffer_entries);
   SC_METHOD(Tick);
   sensitive << clock.pos();
   dont_initialize();
@@ -28,7 +29,9 @@ size_t WriteBuffer::PendingEntryCount() const {
   return pending_entries_.size();
 }
 
-size_t WriteBuffer::InflightEntryCount() const { return inflight_map_.size(); }
+size_t WriteBuffer::InflightEntryCount() const {
+  return inflight_entries_.size();
+}
 
 void WriteBuffer::Tick() {
   ProcessMemResp();
@@ -60,14 +63,11 @@ void WriteBuffer::ProcessMemReq() {
   }
 
   Packet *packet = pending_entries_.front();
-  pending_entries_.pop_front();
-
-  tlm::tlm_generic_payload *gp = packet->GetTlmGp();
+  pending_entries_.erase(pending_entries_.begin());
 
   bool success = mem_req_out->nb_put(packet);
   assert(success);
-  auto [_, inserted] = inflight_map_.emplace(gp, packet);
-  assert(inserted);
+  inflight_entries_.push_back(packet);
 }
 
 void WriteBuffer::ProcessMemResp() {
@@ -81,16 +81,14 @@ void WriteBuffer::ProcessMemResp() {
   assert(packet != nullptr);
   assert(packet->type == PacketType::kMemWriteResp);
 
-  tlm::tlm_generic_payload *gp = packet->GetTlmGp();
-
-  auto it = inflight_map_.find(gp);
-  assert(it != inflight_map_.end());
-  Packet *inflight_packet = it->second;
-  assert(packet == inflight_packet);
-  inflight_map_.erase(it);
+  // Write responses may return out of order.
+  auto it =
+      std::find(inflight_entries_.begin(), inflight_entries_.end(), packet);
+  assert(it != inflight_entries_.end());
+  inflight_entries_.erase(it);
 
   // Free the completed memory request packet.
-  packet_lifecycle_.ReleasePacket(inflight_packet);
+  packet_lifecycle_.ReleasePacket(packet);
 }
 
 bool WriteBuffer::HasFreeEntry() const {
@@ -98,11 +96,11 @@ bool WriteBuffer::HasFreeEntry() const {
 }
 
 size_t WriteBuffer::Occupancy() const {
-  return pending_entries_.size() + inflight_map_.size();
+  return pending_entries_.size() + inflight_entries_.size();
 }
 
 void WriteBuffer::CheckInvariants() const {
-  assert(inflight_map_.size() <= config_.write_buffer_entries);
+  assert(inflight_entries_.size() <= config_.write_buffer_entries);
   assert(Occupancy() <= config_.write_buffer_entries);
 }
 

@@ -76,6 +76,7 @@ TagArray::TagArray(const Param &p)
   }
   // initialize the tag array
   tag_array_.resize(num_sets_ * config_.ways);
+  candidate_ways_.reserve(config_.ways);
 }
 
 TagArray::AccessStatus TagArray::Process(Packet *packet) {
@@ -308,20 +309,19 @@ std::optional<TagArray::TagLookupResult> TagArray::FindInvalidEntry(
 std::optional<TagArray::TagLookupResult> TagArray::SelectVictim(TagEntry *set) {
   switch (config_.replacement_policy) {
     case ReplacementPolicy::kRandom: {
-      std::vector<size_t> candidate_ways;
-      candidate_ways.reserve(config_.ways);
+      candidate_ways_.clear();
       for (size_t way = 0; way < config_.ways; ++way) {
         assert(set[way].valid &&
                "All entries should be valid when selecting victim");
         if (set[way].CanBeEvicted()) {
-          candidate_ways.push_back(way);
+          candidate_ways_.push_back(way);
         }
       }
-      if (candidate_ways.empty()) {
+      if (candidate_ways_.empty()) {
         return std::nullopt;
       }
-      std::uniform_int_distribution<size_t> dist(0, candidate_ways.size() - 1);
-      const size_t way = candidate_ways[dist(random_engine_)];
+      std::uniform_int_distribution<size_t> dist(0, candidate_ways_.size() - 1);
+      const size_t way = candidate_ways_[dist(random_engine_)];
       return TagLookupResult{way, &set[way]};
     }
     case ReplacementPolicy::kLRU:

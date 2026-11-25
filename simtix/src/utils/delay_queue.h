@@ -9,7 +9,7 @@
 #include <systemc.h>
 #include <tlm_core/tlm_1/tlm_req_rsp/tlm_1_interfaces/tlm_core_ifs.h>
 
-#include <queue>
+#include <vector>
 
 #include "liblv/output.h"
 
@@ -31,6 +31,8 @@ class DelayQueue : public sc_module {
         glb_cnt_(0),
         latency_(latency),
         ticks_per_output_(ticks_per_output),
+        // Guards the division; the checks below run after initialization.
+        capacity_(ticks_per_output == 0 ? 0 : latency / ticks_per_output),
         in_cnt_(0),
         out_cnt_(0) {
     if (latency_ < 1 || ticks_per_output_ < 1) {
@@ -42,6 +44,7 @@ class DelayQueue : public sc_module {
     if (latency_ % ticks_per_output_ != 0) {
       LV_FATAL("latency must be a multiple of ticks_per_output.");
     }
+    queue_.reserve(capacity_);
     SC_METHOD(Tick);
     sensitive << clock.pos();
   }
@@ -53,7 +56,7 @@ class DelayQueue : public sc_module {
       if (!queue_.empty() && resp_q_->nb_can_put() &&
           glb_cnt_ >= queue_.front().expected_output_time) {
         resp_q_->nb_put(queue_.front().data);
-        queue_.pop();
+        queue_.erase(queue_.begin());
         out_cnt_ = 0;
       }
     } else {
@@ -62,11 +65,10 @@ class DelayQueue : public sc_module {
 
     // Input
     if (in_cnt_ == ticks_per_output_ - 1) {
-      if (req_q_->nb_can_get() &&
-          queue_.size() < ((latency_ / ticks_per_output_))) {
+      if (req_q_->nb_can_get() && queue_.size() < capacity_) {
         T data;
         req_q_->nb_get(data);
-        queue_.push({data, glb_cnt_ + latency_});
+        queue_.push_back({data, glb_cnt_ + latency_});
         in_cnt_ = 0;
       }
     } else {
@@ -80,10 +82,11 @@ class DelayQueue : public sc_module {
     T data;
     uint64_t expected_output_time;
   };
-  std::queue<QueueItem> queue_;
+  std::vector<QueueItem> queue_;
   uint64_t latency_;
   uint64_t glb_cnt_;
   uint64_t ticks_per_output_;
+  const uint64_t capacity_;
   uint64_t in_cnt_;
   uint64_t out_cnt_;
 };
