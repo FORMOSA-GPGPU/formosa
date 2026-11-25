@@ -13,6 +13,8 @@ local tester = simtix.FrontendTester("tester", {
   num_lanes = 4,
 }, {
   num_subcores = 1,
+  fetch_width = 4,
+  decode_width = 1,
 })
 
 local period = sc.time(10, sc.time_unit.NS)
@@ -55,3 +57,27 @@ assert(
   string.format("the restarted warp received 0x%x instead of 0x%x", packet.wpc, entry)
 )
 print("Pass: a restarted warp fetches its entry again")
+
+local function counter(name)
+  local record = tester.stats:dump_toml():match("%[tester%." .. name .. "%]([^%[]*)")
+  return tonumber(assert(record):match("val = (%d+)"))
+end
+
+-- Warp 1 missed the first word. It must refetch while the tail is broadcasting.
+local before = counter("fetch_requests")
+tester:deactivate(0)
+tester:activate(1)
+tester:restart(1, entry)
+sc.start(period)
+assert(counter("fetch_requests") == before + 1, "the old group blocked a refetch of its first word")
+
+-- The old group's next word must leave the replacement request in the filter.
+local filtered = counter("num_fetches_filtered")
+tester:deactivate(1)
+tester:activate(0)
+tester:restart(0, entry)
+sc.start(period)
+assert(
+  counter("num_fetches_filtered") == filtered + 1,
+  "the old group's tail erased the replacement request"
+)

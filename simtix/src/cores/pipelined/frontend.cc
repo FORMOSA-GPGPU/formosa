@@ -120,12 +120,10 @@ void Frontend::Broadcast() {
     decode_q_.get();
     core_->stats()->instr_filled++;
 
-    // Retire one word from the in-flight fetch group; erase only when the
-    // whole group has been broadcast so mid-group catch-up warps stay filtered.
-    const uint64_t fg_addr = ToFetchGroupAddress(packet->wpc);
-    auto it = FindFetchFilterEntry(fg_addr);
-    if (it != fetch_filter_.end() && --it->remaining == 0) {
-      fetch_filter_.erase(it);
+    // Once the first word has passed, a later warp may need to refetch it.
+    if (packet->wpc == ToFetchGroupAddress(packet->wpc)) {
+      auto it = FindFetchFilterEntry(packet->wpc);
+      if (it != fetch_filter_.end()) fetch_filter_.erase(it);
     }
 
     for (uint32_t i = 0; i < num_warps_; ++i) {
@@ -305,12 +303,9 @@ void Frontend::TryLinkRedirectTarget(uint32_t wid, Packet *consumer) {
   pending_edge_valid_[wid] = false;
 }
 
-std::vector<Frontend::FetchFilterEntry>::iterator
-Frontend::FindFetchFilterEntry(uint64_t fg_addr) {
-  return std::find_if(fetch_filter_.begin(), fetch_filter_.end(),
-                      [fg_addr](const FetchFilterEntry &e) {
-                        return e.fg_addr == fg_addr;
-                      });
+std::vector<uint64_t>::iterator Frontend::FindFetchFilterEntry(
+    uint64_t fg_addr) {
+  return std::find(fetch_filter_.begin(), fetch_filter_.end(), fg_addr);
 }
 
 void Frontend::GenerateFetchRequest(uint32_t wid, AdmitOrigin origin) {
@@ -322,7 +317,7 @@ void Frontend::GenerateFetchRequest(uint32_t wid, AdmitOrigin origin) {
   }
 
   // Fetch filter missed or IWIS is not enabled
-  fetch_filter_.push_back({fg_addr, fetch_width_});
+  fetch_filter_.push_back(fg_addr);
   update_fetch_pc_.notify(wid, fg_addr);
 
   auto *entry = AllocateFetchEntry(fg_addr);

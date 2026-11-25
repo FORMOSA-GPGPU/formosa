@@ -182,11 +182,6 @@ class Frontend : public sc_module {
 
   void GenerateFetchRequest(uint32_t wid, AdmitOrigin origin);
 
-  struct FetchFilterEntry {
-    uint64_t fg_addr;
-    uint32_t remaining;  // words in this fetch group not yet broadcast
-  };
-
   class IBuffer : public tlm::tlm_fifo<Packet *> {
    public:
     using tlm::tlm_fifo<Packet *>::tlm_fifo;
@@ -211,8 +206,7 @@ class Frontend : public sc_module {
     return fg_end <= next_pc_[wid] + num_unoccupied * 4;
   }
 
-  std::vector<FetchFilterEntry>::iterator FindFetchFilterEntry(
-      uint64_t fg_addr);
+  std::vector<uint64_t>::iterator FindFetchFilterEntry(uint64_t fg_addr);
 
   FetchEntry *AllocateFetchEntry(uint64_t addr) {
     assert(!free_fetch_entries_.empty());
@@ -258,7 +252,7 @@ class Frontend : public sc_module {
   uint32_t prioritized_;
   std::vector<uint64_t> fetch_pc_;
   std::vector<uint64_t> next_pc_;
-  std::vector<FetchFilterEntry> fetch_filter_;
+  std::vector<uint64_t> fetch_filter_;
 
   // This class is used to notify the UpdateFetchPC process with two arguments:
   // wid and fg_addr.
