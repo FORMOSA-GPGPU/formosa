@@ -97,13 +97,6 @@ target("formosa-sdk", function()
         includedir = "include",
       })
     end
-    -- The pinned Mesa finds these libraries by the names they had when each
-    -- HAL linked one backend. Remove the links once it finds formosa-hal.
-    for _, name in ipairs({ "formosa-hal", "formosa-real" }) do
-      local library = path.filename(target:dep(name):targetfile())
-      local link = path.join(target:installdir(), "lib", (library:gsub("%.a$", ".lv.a")))
-      os.ln(library, link, { force = true })
-    end
     local directory = path.join(target:installdir(), "lib/cmake/Formosa")
     os.mkdir(directory)
     for _, name in ipairs({ "FormosaConfig.cmake", "FormosaConfigVersion.cmake" }) do

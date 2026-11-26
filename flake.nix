@@ -20,12 +20,12 @@
     };
     formosa-mesa-src = {
       url =
-        "git+https://github.com/FORMOSA-GPGPU/formosa-mesa.git?rev=2a52779495bd645c780e1f71273e779b6000d2f1&shallow=1";
+        "git+https://github.com/FORMOSA-GPGPU/formosa-mesa.git?rev=a3dc4c344de16e4f7a016030415c343b0bceaaa5&shallow=1";
       flake = false;
     };
     formosa-pocl-src = {
       url =
-        "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=f9273552825c3a528774004df65b7f5f7f24d3c0&shallow=1&submodules=1";
+        "git+https://github.com/FORMOSA-GPGPU/formosa-pocl.git?rev=ad7a17c9e58d88b8093d109cd0e29a1c7967cb83&shallow=1&submodules=1";
       flake = false;
     };
 

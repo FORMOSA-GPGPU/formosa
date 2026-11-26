@@ -39,16 +39,16 @@
     "formosa-mesa-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1794036222,
-        "narHash": "sha256-W7TCMn/57SBUKV+WH64cTCvhaVu9YYqC7YtGTwNwVAg=",
+        "lastModified": 1795671765,
+        "narHash": "sha256-DXgDR3H+FsjoPf9KQ4JDR2nyUJQbjLwFex9jYdXvUNE=",
         "ref": "refs/heads/formosa/main",
-        "rev": "2a52779495bd645c780e1f71273e779b6000d2f1",
+        "rev": "a3dc4c344de16e4f7a016030415c343b0bceaaa5",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-mesa.git"
       },
       "original": {
-        "rev": "2a52779495bd645c780e1f71273e779b6000d2f1",
+        "rev": "a3dc4c344de16e4f7a016030415c343b0bceaaa5",
         "shallow": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-mesa.git"
@@ -57,17 +57,17 @@
     "formosa-pocl-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1795157082,
-        "narHash": "sha256-1YMNyWvRJYYKEVNo2x7S8eYOQmuM29BLjgNDyGUbqo0=",
+        "lastModified": 1795669141,
+        "narHash": "sha256-W63bpKsWMw8E54tJFBoPhgKr0nON1nAiZ+kl6lrg84M=",
         "ref": "refs/heads/formosa/main",
-        "rev": "f9273552825c3a528774004df65b7f5f7f24d3c0",
+        "rev": "ad7a17c9e58d88b8093d109cd0e29a1c7967cb83",
         "shallow": true,
         "submodules": true,
         "type": "git",
         "url": "https://github.com/FORMOSA-GPGPU/formosa-pocl.git"
       },
       "original": {
-        "rev": "f9273552825c3a528774004df65b7f5f7f24d3c0",
+        "rev": "ad7a17c9e58d88b8093d109cd0e29a1c7967cb83",
         "shallow": true,
         "submodules": true,
         "type": "git",

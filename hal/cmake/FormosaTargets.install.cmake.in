@@ -35,10 +35,3 @@ set_target_properties(Formosa::formosa-hal PROPERTIES
 @FORMOSA_HAL_COVERAGE@
   INTERFACE_LINK_LIBRARIES "$<LINK_ONLY:Formosa::formosa-real>;$<LINK_ONLY:Formosa::falloc>;@FORMOSA_CXX_RUNTIME@"
 )
-
-# The pinned PoCL links the HAL by the name it had when each HAL linked one
-# backend. Remove the alias once it links Formosa::formosa-hal.
-add_library(Formosa::formosa-hal.lv INTERFACE IMPORTED)
-set_target_properties(Formosa::formosa-hal.lv PROPERTIES
-  INTERFACE_LINK_LIBRARIES "Formosa::formosa-hal"
-)
