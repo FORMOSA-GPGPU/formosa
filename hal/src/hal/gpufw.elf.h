@@ -3,7 +3,7 @@
 
 #pragma once
 
-// Private declaration for the firmware object embedded in formosa-hal.lv.
+// Private declaration for the firmware object embedded in formosa-hal.
 // This header intentionally lives outside the installed include tree.
 extern unsigned char gpufw_elf[];
 extern unsigned int gpufw_elf_len;

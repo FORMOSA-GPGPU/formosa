@@ -20,6 +20,8 @@ cd "$(dirname "$0")/../.."
 
 DAEMON_SOCKET_DIR=$(mktemp -d "${TMPDIR:-/tmp}/formosa.XXXXXX")
 export AGENT_SOCKET_PATH="${DAEMON_SOCKET_DIR}/agent.sock"
+# The test reaches this daemon over lv, whatever backend the caller names.
+export FORMOSA_REAL=lv
 
 # Start daemon in background
 DAEMON_COMMAND=("${DAEMON_EXEC}" "${DAEMON_LUA}")

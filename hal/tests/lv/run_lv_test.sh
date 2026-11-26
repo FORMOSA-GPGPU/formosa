@@ -15,6 +15,8 @@ TEST_EXEC=${2:?Test executable not provided}
 AGENT_SOCKET_PATH="$(mktemp "${TMPDIR:-/tmp}/formosa_lv_test.XXXXXX.sock")"
 rm -f "${AGENT_SOCKET_PATH}"
 export AGENT_SOCKET_PATH
+# The test reaches this server over lv, whatever backend the caller names.
+export FORMOSA_REAL=lv
 cleanup() {
   kill "${SERVER_PID:-}" 2>/dev/null || true
   wait "${SERVER_PID:-}" 2>/dev/null || true

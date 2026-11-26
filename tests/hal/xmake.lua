@@ -2,11 +2,13 @@
 --
 -- SPDX-License-Identifier: Apache-2.0
 
+-- Each test reaches the device through the REAL backend FORMOSA_REAL names:
+-- the lv daemon by default, or the PCI device in the guest ilha/qemu.lua boots.
 for _, name in ipairs({ "memory-copy", "reboot" }) do
-  target("hal-" .. name .. "-test.lv", function()
+  target("hal-" .. name .. "-test", function()
     set_kind("binary")
     add_files("hal_" .. name:gsub("-", "_") .. "_test.cc")
-    add_deps("formosa-hal.lv", "ilha-platform-data")
+    add_deps("formosa-hal", "ilha-platform-data")
   end)
 end
 
@@ -20,13 +22,7 @@ end)
 
 target("hal-integration-test.lv", function()
   set_kind("phony")
-  add_deps(
-    "lv",
-    "fw.runfiles",
-    "hal-memory-copy-test.lv",
-    "hal-reboot-test.lv",
-    "hal-trace-slice-check"
-  )
+  add_deps("lv", "fw.runfiles", "hal-memory-copy-test", "hal-reboot-test", "hal-trace-slice-check")
   for _, name in ipairs({ "memory-copy", "large-sm-capabilities", "reboot", "trace-invariance" }) do
     -- Coverage plus shared-runner contention can exceed two minutes for the
     -- complete daemon scenario; HAL operations retain their own deadlines.
@@ -34,7 +30,7 @@ target("hal-integration-test.lv", function()
   end
   on_test(function(target, opt)
     local case = path.filename(opt.name)
-    local binary = case == "reboot" and "hal-reboot-test.lv" or "hal-memory-copy-test.lv"
+    local binary = case == "reboot" and "hal-reboot-test" or "hal-memory-copy-test"
     local runner = case == "trace-invariance" and "run_trace_invariance_test.sh"
       or "run_daemon_test.sh"
     local argv = {
@@ -73,28 +69,20 @@ target("hal-integration-test.lv", function()
 end)
 
 if is_plat("linux") then
-  -- The PCI HAL (Linux VFIO) tests, run in the guest booted by ilha/qemu.lua,
-  -- e.g. xmake run ilha-qemu -- build/bin/hal-reboot-test.pci
-  for _, name in ipairs({ "memory-copy", "reboot" }) do
-    target("hal-" .. name .. "-test.pci", function()
-      set_kind("binary")
-      add_files("hal_" .. name:gsub("-", "_") .. "_test.cc")
-      add_deps("formosa-hal.pci", "ilha-platform-data")
-    end)
-  end
-
-  -- The PCI HAL tests in a QEMU guest (ilha/qemu.lua, x86_64 only) against the
-  -- device served over vfio-user; uses KVM when available.
+  -- The same tests on the PCI backend (Linux VFIO) in a QEMU guest
+  -- (ilha/qemu.lua, x86_64 only) against the device served over vfio-user;
+  -- uses KVM when available. By hand:
+  --   xmake run ilha-qemu -- build/bin/hal-reboot-test
   target("hal-integration-test.pci", function()
     set_enabled(is_arch("x86_64"))
     set_kind("phony")
     add_deps("lv", "fw.runfiles")
     for _, name in ipairs({ "memory-copy", "reboot" }) do
-      add_deps("hal-" .. name .. "-test.pci")
+      add_deps("hal-" .. name .. "-test")
       add_tests(name, { run_timeout = 600000 })
     end
     on_test(function(target, opt)
-      local binary = target:dep("hal-" .. path.filename(opt.name) .. "-test.pci")
+      local binary = target:dep("hal-" .. path.filename(opt.name) .. "-test")
       return import("testing").run_with(path.absolute(target:dep("lv"):targetfile()), {
         path.join(os.projectdir(), "ilha/qemu.lua"),
         "--",

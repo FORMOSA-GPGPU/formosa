@@ -57,7 +57,9 @@ local function write_exports(path, variables)
 end
 
 -- The FORMOSA dev shell (and its Docker image) provides the guest and the
--- PoCL its applications use.
+-- PoCL its applications use. A local PoCL override of the host's
+-- OCL_ICD_VENDORS stays on the host; point FORMOSA_QEMU_POCL at a prefix the
+-- guest can see to run another PoCL there.
 local function shell_path(name)
   local value = os.getenv(name)
   assert(value and value ~= "", name .. " is not set; run qemu.lua in the FORMOSA dev shell")
@@ -100,6 +102,7 @@ local program = args.command[1]
 if program and program:find("/", 1, true) then
   assert(visible(program), "the guest cannot see " .. program .. "; build it under " .. source)
 end
+assert(visible(pocl), "the guest cannot see FORMOSA_QEMU_POCL " .. pocl)
 
 -- The run directory, private to this run, holds the vfio-user socket and what
 -- the guest's init reads from /host: `env` to mount the shares, `environ` for
@@ -123,6 +126,8 @@ local environ = stdlib.getenv()
 for _, name in ipairs({ "HOME", "PWD", "OLDPWD", "SHLVL", "_" }) do
   environ[name] = nil
 end
+-- HAL reaches the device on the guest's PCI bus.
+environ.FORMOSA_REAL = "pci"
 environ.FORMOSA_PCI_DEVICE = pci_device
 environ.OCL_ICD_VENDORS = pocl .. "/etc/OpenCL/vendors"
 environ.POCL_DEVICES = "formosa"

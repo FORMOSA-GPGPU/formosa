@@ -44,7 +44,7 @@ formosa_setup_mesa_build() {
     formosa_override_warning SDK "$FORMOSA_INSTALL_PREFIX"
   fi
   export FORMOSA_INSTALL_PREFIX="${FORMOSA_INSTALL_PREFIX:-$FORMOSA_DEFAULT_SDK}"
-  if [[ ! -f $FORMOSA_INSTALL_PREFIX/lib/libformosa-hal.lv.a ]]; then
+  if [[ ! -f $FORMOSA_INSTALL_PREFIX/lib/libformosa-hal.a ]]; then
     log_error "install the Formosa SDK first: $FORMOSA_INSTALL_PREFIX"
     return 1
   fi

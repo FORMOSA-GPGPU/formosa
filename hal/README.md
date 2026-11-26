@@ -22,6 +22,21 @@ The Hardware Abstraction Layer (HAL) and Real Embedded Abstraction Layer (REAL) 
     └── lv/                      Tests for the lv
 ```
 
+## REAL backends
+
+One HAL build carries every REAL backend. `FORMOSA_REAL` names the one HAL
+uses, read once, the first time HAL reaches the device in a process:
+
+| `FORMOSA_REAL` | Device | Settings |
+| --- | --- | --- |
+| `lv` (default) | The lv simulator, over libcomm | `AGENT_SOCKET_PATH` |
+| `pci` (Linux) | The device on a PCI bus, through VFIO | `FORMOSA_PCI_DEVICE` |
+
+`ilha/qemu.lua` sets `FORMOSA_REAL=pci` for the commands it runs in its guest,
+so the same PoCL and test binaries run on either side. The guest uses the PoCL
+in `FORMOSA_QEMU_POCL`, the dev shell's own by default. Test launchers that start
+an lv fixture set `FORMOSA_REAL=lv` themselves.
+
 ## Native build and tests
 
 From the repository root in the development environment:

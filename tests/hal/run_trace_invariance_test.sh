@@ -41,6 +41,8 @@ run() {
   local dir=$1 system_config=$2 label=$3
   mkdir -p "${dir}"
   export AGENT_SOCKET_PATH="${dir}/agent.sock"
+  # The test reaches this daemon over lv, whatever backend the caller names.
+  export FORMOSA_REAL=lv
   (cd "${dir}" && exec "${DAEMON_EXEC}" "${DAEMON_LUA}" --stats "${dir}/stats.toml" \
     --system-config "${system_config}") >"${dir}/daemon.log" 2>&1 &
   DAEMON_PID=$!

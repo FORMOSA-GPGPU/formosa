@@ -99,16 +99,11 @@
           trace_processor = pkgs.callPackage ./tools/trace_processor.nix { };
         };
 
-        # What ilha/qemu.lua boots: the Linux guest, and PoCL linked against
-        # the PCI HAL for applications inside it. The guest is a q35 PC that
-        # runs host-built programs, so only an x86_64 Linux host has one.
+        # The Linux guest ilha/qemu.lua boots. It is a q35 PC that runs
+        # host-built programs, so only an x86_64 Linux host has one.
         qemuPackages = pkgs.lib.optionalAttrs (pkgs.stdenv.hostPlatform.isLinux
           && pkgs.stdenv.hostPlatform.isx86_64) {
             formosa-qemu-guest = pkgs.callPackage ./tools/qemu-guest.nix { };
-            formosa-pocl-pci = softwareStacks.formosa-pocl.overrideAttrs (old: {
-              name = "formosa-pocl-pci";
-              cmakeFlags = old.cmakeFlags ++ [ "-D FORMOSA_PLATFORM=pci" ];
-            });
           };
 
         projectDevShells = rec {
@@ -241,7 +236,9 @@
             "${softwareStacks.formosa-mesa}/share/vulkan/icd.d/formosa_icd.${pkgs.stdenv.hostPlatform.parsed.cpu.name}.json";
         } // pkgs.lib.optionalAttrs (qemuPackages != { }) {
           FORMOSA_QEMU_GUEST = qemuPackages.formosa-qemu-guest;
-          FORMOSA_QEMU_POCL = qemuPackages.formosa-pocl-pci;
+          # The guest's PoCL, apart from OCL_ICD_VENDORS so that a local PoCL
+          # override on the host does not reach the guest.
+          FORMOSA_QEMU_POCL = softwareStacks.formosa-pocl;
         });
 
         # A lightweight identity for preflight lookup.  Evaluating the Docker

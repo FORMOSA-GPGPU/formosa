@@ -21,6 +21,8 @@
 
 #include "common/util.h"
 
+namespace {
+
 struct LvClient {
   struct StoredResponse {
     libcomm::Status status;
@@ -36,9 +38,7 @@ struct LvClient {
   std::unique_ptr<libcomm::Transceiver> transceiver;
 } client;
 
-namespace {
-
-int fsa_real_put(uintptr_t dev_addr, const void *host_ptr, size_t size) {
+int lv_put(uintptr_t dev_addr, const void *host_ptr, size_t size) {
   if (!client.transceiver || !client.transceiver->IsConnectionAlive()) {
     return -1;  // Return error if not connected
   }
@@ -83,9 +83,7 @@ int fsa_real_put(uintptr_t dev_addr, const void *host_ptr, size_t size) {
   return 0;
 }
 
-}  // namespace
-
-static int wait_device_time(uint64_t duration_ns, uint64_t *now_ns) {
+int wait_device_time(uint64_t duration_ns, uint64_t *now_ns) {
   if (!client.transceiver || !client.transceiver->IsConnectionAlive())
     return -1;
   uint32_t id;
@@ -108,9 +106,9 @@ static int wait_device_time(uint64_t duration_ns, uint64_t *now_ns) {
   return status == libcomm::Status::Okay ? 0 : -1;
 }
 
-int fsa_real_time_ns(uint64_t *now_ns) { return wait_device_time(0, now_ns); }
+int lv_time_ns(uint64_t *now_ns) { return wait_device_time(0, now_ns); }
 
-int fsa_real_annotate(uintptr_t dev_addr, const char *text, size_t size) {
+int lv_annotate(uintptr_t dev_addr, const char *text, size_t size) {
   if (!client.transceiver || !client.transceiver->IsConnectionAlive())
     return -1;
   // The Agent attaches the text to the next Put to dev_addr. Both travel in
@@ -123,11 +121,9 @@ int fsa_real_annotate(uintptr_t dev_addr, const char *text, size_t size) {
   return client.transceiver->Send(msg) == 0 ? 0 : -1;
 }
 
-int fsa_real_poll_backoff(uint64_t *now_ns) {
-  return wait_device_time(1000, now_ns);
-}
+int lv_poll_backoff(uint64_t *now_ns) { return wait_device_time(1000, now_ns); }
 
-int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
+int lv_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
   if (!client.transceiver || !client.transceiver->IsConnectionAlive()) {
     return -1;  // Return error if not connected
   }
@@ -175,37 +171,37 @@ int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
   return 0;
 }
 
-int fsa_real_mmio(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr) {
+int lv_mmio(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr) {
   const auto *config = formosa::real::configuration_snapshot();
   if (config == nullptr) return -1;
   if (rd_ptr == nullptr) {
     // Write request
-    return fsa_real_put(config->fsa_mmio_base + offset, &wr_val, 8);
+    return lv_put(config->fsa_mmio_base + offset, &wr_val, 8);
   } else {
     // Read request
-    return fsa_real_get(config->fsa_mmio_base + offset, rd_ptr, 8);
+    return lv_get(config->fsa_mmio_base + offset, rd_ptr, 8);
   }
 }
 
 // The simulator serves device DMA from this process's own address space.
-int fsa_real_dma_map(void *host_ptr, size_t, uint64_t *dma_addr) {
+int lv_dma_map(void *host_ptr, size_t, uint64_t *dma_addr) {
   *dma_addr = reinterpret_cast<uintptr_t>(host_ptr);
   return 0;
 }
-void fsa_real_dma_unmap(uint64_t, size_t) {}
+void lv_dma_unmap(uint64_t, size_t) {}
 
-int fsa_real_cp_reset() {
+int lv_cp_reset() {
   const auto *config = formosa::real::configuration_snapshot();
   if (config == nullptr) return -1;
   /* Assert level-triggered MSIP.  Firmware clears the bit in the ISR
    * (or ROM reset_handler). */
   uint32_t reset = 1;
-  return fsa_real_put(config->clint_base + FSA_CLINT_MSIP_OFFSET, &reset,
-                      sizeof(reset));
+  return lv_put(config->clint_base + FSA_CLINT_MSIP_OFFSET, &reset,
+                sizeof(reset));
 }
 
-int fsa_real_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
-                                size_t size) {
+int lv_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
+                          size_t size) {
   const auto *config = formosa::real::configuration_snapshot();
   if (config == nullptr) return -1;
   uint64_t block_size = config->cache_line_size;
@@ -216,7 +212,7 @@ int fsa_real_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
     uint64_t next_block_addr = (begin_addr / block_size + 1) * block_size;
     uint64_t end_addr =
         std::min(next_block_addr, static_cast<uint64_t>(dev_addr + size));
-    int status = fsa_real_put(
+    int status = lv_put(
         begin_addr,
         reinterpret_cast<const uint8_t *>(host_ptr) + (begin_addr - dev_addr),
         end_addr - begin_addr);
@@ -228,8 +224,7 @@ int fsa_real_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
   return 0;
 }
 
-int fsa_real_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr,
-                                  size_t size) {
+int lv_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr, size_t size) {
   const auto *config = formosa::real::configuration_snapshot();
   if (config == nullptr) return -1;
   uint64_t block_size = config->cache_line_size;
@@ -240,10 +235,10 @@ int fsa_real_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr,
     uint64_t next_block_addr = (begin_addr / block_size + 1) * block_size;
     uint64_t end_addr =
         std::min(next_block_addr, static_cast<uint64_t>(dev_addr + size));
-    int status = fsa_real_get(
-        begin_addr,
-        reinterpret_cast<uint8_t *>(host_ptr) + (begin_addr - dev_addr),
-        end_addr - begin_addr);
+    int status =
+        lv_get(begin_addr,
+               reinterpret_cast<uint8_t *>(host_ptr) + (begin_addr - dev_addr),
+               end_addr - begin_addr);
     if (status != 0) {
       return status;
     }
@@ -252,7 +247,7 @@ int fsa_real_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr,
   return 0;
 }
 
-int fsa_real_probe() {
+int lv_probe() {
   struct timeval timeout;
   timeout.tv_sec = 0;
   timeout.tv_usec = 100000;  // 100ms
@@ -291,7 +286,7 @@ int fsa_real_probe() {
   return err;
 }
 
-int fsa_real_init() {
+int lv_init() {
   int retries = 5;
   while (retries-- > 0) {
     client.transceiver = libcomm::Connect(getenv("AGENT_SOCKET_PATH"), nullptr);
@@ -344,14 +339,14 @@ int fsa_real_init() {
   return 0;
 }
 
-void fsa_real_abort() {
+void lv_abort() {
   client.transceiver.reset();
   std::lock_guard<std::mutex> lk(client.mtx);
   client.response.clear();
   client.msg_id = 0;
 }
 
-void fsa_real_cleanup() {
+void lv_cleanup() {
   if (client.transceiver) {
     libcomm::Msg term_msg = libcomm::Msg::Build(libcomm::Cmd::Terminate).id(0);
     {
@@ -359,5 +354,25 @@ void fsa_real_cleanup() {
       client.transceiver->Send(term_msg);
     }
   }
-  fsa_real_abort();
+  lv_abort();
 }
+
+}  // namespace
+
+const formosa::real::Backend formosa::real::kLvBackend = {
+    .name = "lv",
+    .init = lv_init,
+    .probe = lv_probe,
+    .mmio = lv_mmio,
+    .cp_reset = lv_cp_reset,
+    .copy_to_scratchpad = lv_copy_to_scratchpad,
+    .copy_from_scratchpad = lv_copy_from_scratchpad,
+    .get = lv_get,
+    .dma_map = lv_dma_map,
+    .dma_unmap = lv_dma_unmap,
+    .poll_backoff = lv_poll_backoff,
+    .time_ns = lv_time_ns,
+    .annotate = lv_annotate,
+    .abort = lv_abort,
+    .cleanup = lv_cleanup,
+};

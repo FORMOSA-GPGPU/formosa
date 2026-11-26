@@ -16,27 +16,17 @@ target("falloc", function()
   add_includedirs("include")
 end)
 
-target("formosa-real.lv", function()
+-- Every REAL backend; FORMOSA_REAL picks one per process (src/real/real.cc).
+target("formosa-real", function()
   set_kind("static")
-  add_files("src/real/lv/lv-driver.cc", "src/real/lv/lv-config.cc")
+  add_files("src/real/real.cc", "src/real/config.cc", "src/real/lv/lv-driver.cc")
+  -- The device on a PCI bus (e.g. a QEMU guest), driven from user space
+  -- through Linux VFIO.
+  if is_plat("linux") then add_files("src/real/pci/pci-driver.cc") end
   add_includedirs("src")
   add_deps("libcomm", "falloc", "ilha-platform-data")
   add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
 end)
-
--- The device on a PCI bus (e.g. a QEMU guest), driven from user space through
--- Linux VFIO.
-local backends = is_plat("linux") and { "lv", "pci" } or { "lv" }
-if is_plat("linux") then
-  target("formosa-real.pci", function()
-    set_kind("static")
-    -- SystemInfo parsing is shared with the lv backend.
-    add_files("src/real/pci/pci-driver.cc", "src/real/lv/lv-config.cc")
-    add_includedirs("src")
-    add_deps("hal.protocol", "ilha-platform-data")
-    add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
-  end)
-end
 
 target("gpufw-embedded", function()
   set_kind("object")
@@ -77,31 +67,26 @@ target("gpufw-embedded", function()
   end)
 end)
 
-for _, backend in ipairs(backends) do
-  target("formosa-hal." .. backend, function()
-    set_kind("static")
-    add_files("src/hal/hal.cc")
-    add_includedirs("include", { public = true })
-    add_includedirs("src")
-    add_headerfiles("include/(formosa-hal/**.h)")
-    add_deps("formosa-real." .. backend, "falloc", "ilha-platform-data")
-    add_deps("gpufw-embedded", { inherit = false })
-    after_load(
-      function(target) target:add("includedirs", target:dep("gpufw-embedded"):autogendir()) end
-    )
-    add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
-  end)
-end
+target("formosa-hal", function()
+  set_kind("static")
+  add_files("src/hal/hal.cc")
+  add_includedirs("include", { public = true })
+  add_includedirs("src")
+  add_headerfiles("include/(formosa-hal/**.h)")
+  add_deps("formosa-real", "falloc", "ilha-platform-data")
+  add_deps("gpufw-embedded", { inherit = false })
+  after_load(
+    function(target) target:add("includedirs", target:dep("gpufw-embedded"):autogendir()) end
+  )
+  add_cxxflags("-Wall", "-Wextra", "-Wno-unused-parameter", "-g")
+end)
 
 includes("tests/xmake.lua")
 
 target("formosa-sdk", function()
   set_kind("phony")
   add_rules("workflow.install")
-  for _, backend in ipairs(backends) do
-    add_deps("formosa-hal." .. backend, "formosa-real." .. backend)
-  end
-  add_deps("falloc", "libcomm")
+  add_deps("formosa-hal", "formosa-real", "falloc", "libcomm")
   on_install(function(target)
     import("target.action.install", { alias = "install_target" })
     for _, name in ipairs(table.wrap(target:get("deps"))) do
@@ -111,6 +96,13 @@ target("formosa-sdk", function()
         libdir = "lib",
         includedir = "include",
       })
+    end
+    -- The pinned Mesa finds these libraries by the names they had when each
+    -- HAL linked one backend. Remove the links once it finds formosa-hal.
+    for _, name in ipairs({ "formosa-hal", "formosa-real" }) do
+      local library = path.filename(target:dep(name):targetfile())
+      local link = path.join(target:installdir(), "lib", (library:gsub("%.a$", ".lv.a")))
+      os.ln(library, link, { force = true })
     end
     local directory = path.join(target:installdir(), "lib/cmake/Formosa")
     os.mkdir(directory)
@@ -129,7 +121,7 @@ target("formosa-sdk", function()
     -- C consumers and consumers using a different C++ standard library need
     -- the producer's runtime, including non-system library search paths.
     local runtime = ""
-    local hal = target:dep("formosa-hal.lv")
+    local hal = target:dep("formosa-hal")
     local compiler = hal:compiler("cxx")
     if hal:has_tool("cxx", "gcc", "gxx") then
       local library = hal:is_plat("macosx") and "libstdc++.dylib" or "libstdc++.so"

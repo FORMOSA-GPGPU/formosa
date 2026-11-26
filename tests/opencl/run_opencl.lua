@@ -158,6 +158,8 @@ else
   end
 
   stdlib.setenv("AGENT_SOCKET_PATH", agent_socket_path)
+  -- The program reaches this simulation over lv, whatever backend the caller names.
+  stdlib.setenv("FORMOSA_REAL", "lv")
   print("Running OpenCL program: " .. host_program_with_args)
 
   local exit_code = os.execute(host_program_with_args)

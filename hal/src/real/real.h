@@ -34,6 +34,36 @@ void fsa_real_cleanup();
 
 namespace formosa::real {
 
+// One way of reaching the device. HAL calls fsa_real_*, which forward to the
+// backend FORMOSA_REAL names (lv by default), chosen once per process; each
+// member implements the fsa_real_* function of the same name and must be
+// defined.
+struct Backend {
+  const char *name;
+  int (*init)();
+  int (*probe)();
+  int (*mmio)(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr);
+  int (*cp_reset)();
+  int (*copy_to_scratchpad)(uintptr_t dev_addr, const void *host_ptr,
+                            size_t size);
+  int (*copy_from_scratchpad)(uintptr_t dev_addr, void *host_ptr, size_t size);
+  int (*get)(uintptr_t dev_addr, void *host_ptr, size_t size);
+  int (*dma_map)(void *host_ptr, size_t size, uint64_t *dma_addr);
+  void (*dma_unmap)(uint64_t dma_addr, size_t size);
+  int (*poll_backoff)(uint64_t *now_ns);
+  int (*time_ns)(uint64_t *now_ns);
+  int (*annotate)(uintptr_t dev_addr, const char *text, size_t size);
+  void (*abort)();
+  void (*cleanup)();
+};
+
+// The simulator, served over libcomm at AGENT_SOCKET_PATH.
+extern const Backend kLvBackend;
+#if defined(__linux__)
+// The device on a PCI bus, driven from user space through Linux VFIO.
+extern const Backend kPciBackend;
+#endif
+
 struct ConfigurationSnapshot {
   uint64_t num_cores = 0;
   uint64_t threads_per_warp = 0;

@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 // REAL backend for the device on a PCI bus, driven from user space through
-// VFIO.
+// VFIO. HAL uses it when FORMOSA_REAL=pci.
 //
 // Device access
 //   The device is picked by FORMOSA_PCI_DEVICE (e.g. 0000:01:00.0) and must be
@@ -64,6 +64,8 @@ std::map<uint64_t, uint64_t> mappings;
 // no other buffer; reuse freely once firmware aborts the DMA on a timeout.
 uint64_t next_iova = kIovaBase;
 std::mutex mappings_mtx;
+
+void pci_abort();
 
 // One MMIO load or store of T. The volatile access keeps the compiler from
 // merging, splitting or dropping it.
@@ -126,7 +128,7 @@ std::string group_path(const char *device) {
 
 int fail(const char *what) {
   fprintf(stderr, "VFIO %s: %s\n", what, strerror(errno));
-  fsa_real_abort();
+  pci_abort();
   return -1;
 }
 
@@ -175,9 +177,7 @@ void iommu_unmap(uint64_t start, uint64_t end) {
     fprintf(stderr, "VFIO unmap: %s\n", strerror(errno));
 }
 
-}  // namespace
-
-int fsa_real_probe() {
+int pci_probe() {
   const char *device = pci_device();
   if (device == nullptr || group_path(device).empty()) return -1;
   if (access("/dev/vfio/vfio", R_OK | W_OK) != 0) {
@@ -187,7 +187,7 @@ int fsa_real_probe() {
   return 0;
 }
 
-int fsa_real_init() {
+int pci_init() {
   const char *device = pci_device();
   if (device == nullptr) return -1;
   const std::string group = group_path(device);
@@ -243,17 +243,17 @@ int fsa_real_init() {
   return 0;
 }
 
-int fsa_real_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
+int pci_get(uintptr_t dev_addr, void *host_ptr, size_t size) {
   return access_bar(dev_addr, host_ptr, size, false);
 }
 
-int fsa_real_mmio(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr) {
+int pci_mmio(uint64_t offset, int64_t wr_val, uint64_t *rd_ptr) {
   if (rd_ptr != nullptr)
     return access_bar(FSA_MMIO_BASE + offset, rd_ptr, 8, false);
   return access_bar(FSA_MMIO_BASE + offset, &wr_val, 8, true);
 }
 
-int fsa_real_cp_reset() {
+int pci_cp_reset() {
   /* Assert level-triggered MSIP.  Firmware clears the bit in the ISR
    * (or ROM reset_handler). */
   uint32_t reset = 1;
@@ -261,17 +261,16 @@ int fsa_real_cp_reset() {
                     sizeof(reset), true);
 }
 
-int fsa_real_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
-                                size_t size) {
+int pci_copy_to_scratchpad(uintptr_t dev_addr, const void *host_ptr,
+                           size_t size) {
   return access_bar(dev_addr, const_cast<void *>(host_ptr), size, true);
 }
 
-int fsa_real_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr,
-                                  size_t size) {
+int pci_copy_from_scratchpad(uintptr_t dev_addr, void *host_ptr, size_t size) {
   return access_bar(dev_addr, host_ptr, size, false);
 }
 
-int fsa_real_dma_map(void *host_ptr, size_t size, uint64_t *dma_addr) {
+int pci_dma_map(void *host_ptr, size_t size, uint64_t *dma_addr) {
   const uint64_t addr = reinterpret_cast<uintptr_t>(host_ptr);
   *dma_addr = addr;
   if (size == 0) return 0;
@@ -297,7 +296,7 @@ int fsa_real_dma_map(void *host_ptr, size_t size, uint64_t *dma_addr) {
   return 0;
 }
 
-void fsa_real_dma_unmap(uint64_t dma_addr, size_t size) {
+void pci_dma_unmap(uint64_t dma_addr, size_t size) {
   if (size == 0) return;
   uint64_t start, end;
   page_range(dma_addr, size, &start, &end);
@@ -311,7 +310,7 @@ void fsa_real_dma_unmap(uint64_t dma_addr, size_t size) {
 
 // The device's clock is its timer, so HAL deadlines follow the device however
 // fast it runs.
-int fsa_real_time_ns(uint64_t *now_ns) {
+int pci_time_ns(uint64_t *now_ns) {
   const auto *config = formosa::real::configuration_snapshot();
   uint64_t ticks;
   if (config == nullptr ||
@@ -325,15 +324,15 @@ int fsa_real_time_ns(uint64_t *now_ns) {
 
 // A device on a PCI bus has no channel for annotations, so labels are not
 // sent; HAL submits the command without its label.
-int fsa_real_annotate(uintptr_t, const char *, size_t) { return -1; }
+int pci_annotate(uintptr_t, const char *, size_t) { return -1; }
 
-int fsa_real_poll_backoff(uint64_t *now_ns) {
+int pci_poll_backoff(uint64_t *now_ns) {
   const timespec backoff = {0, 1000};
   nanosleep(&backoff, nullptr);
-  return fsa_real_time_ns(now_ns);
+  return pci_time_ns(now_ns);
 }
 
-void fsa_real_abort() {
+void pci_abort() {
   // Closing the container drops every IOMMU mapping.
   {
     std::lock_guard<std::mutex> lock(mappings_mtx);
@@ -349,4 +348,24 @@ void fsa_real_abort() {
   }
 }
 
-void fsa_real_cleanup() { fsa_real_abort(); }
+void pci_cleanup() { pci_abort(); }
+
+}  // namespace
+
+const formosa::real::Backend formosa::real::kPciBackend = {
+    .name = "pci",
+    .init = pci_init,
+    .probe = pci_probe,
+    .mmio = pci_mmio,
+    .cp_reset = pci_cp_reset,
+    .copy_to_scratchpad = pci_copy_to_scratchpad,
+    .copy_from_scratchpad = pci_copy_from_scratchpad,
+    .get = pci_get,
+    .dma_map = pci_dma_map,
+    .dma_unmap = pci_dma_unmap,
+    .poll_backoff = pci_poll_backoff,
+    .time_ns = pci_time_ns,
+    .annotate = pci_annotate,
+    .abort = pci_abort,
+    .cleanup = pci_cleanup,
+};

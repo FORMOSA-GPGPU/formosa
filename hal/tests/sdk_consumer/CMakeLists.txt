@@ -8,9 +8,9 @@ project(formosa_sdk_consumer LANGUAGES C CXX)
 find_package(Formosa CONFIG REQUIRED)
 
 add_executable(formosa_sdk_consumer consumer.cc)
-target_link_libraries(formosa_sdk_consumer PRIVATE Formosa::formosa-hal.lv)
+target_link_libraries(formosa_sdk_consumer PRIVATE Formosa::formosa-hal)
 
 # Exercise the same C API without a C++ compiler supplying its own runtime.
 configure_file(consumer.cc consumer.c COPYONLY)
 add_executable(formosa_sdk_c_consumer "${CMAKE_CURRENT_BINARY_DIR}/consumer.c")
-target_link_libraries(formosa_sdk_c_consumer PRIVATE Formosa::formosa-hal.lv)
+target_link_libraries(formosa_sdk_c_consumer PRIVATE Formosa::formosa-hal)
